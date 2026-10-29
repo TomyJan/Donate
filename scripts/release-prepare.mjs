@@ -1,0 +1,14 @@
+import { execFileSync } from 'node:child_process';
+import { appendFileSync } from 'node:fs';
+const git = (...args) => execFileSync('git', args, {encoding:'utf8', stdio:['ignore','pipe','pipe']}).trim();
+const version = process.env.RELEASE_VERSION ?? '';
+if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error('Version must be x.y.z');
+const branch = process.env.DEFAULT_BRANCH;
+if (!branch || process.env.GITHUB_REF !== `refs/heads/${branch}`) throw new Error('Release must run on the default branch');
+const sha = process.env.GITHUB_SHA;
+if (!sha || !/^[0-9a-f]{40}$/.test(sha)) throw new Error('Missing immutable source SHA');
+git('fetch','origin',branch,'--tags');
+if (git('rev-parse','HEAD') !== sha || git('rev-parse',`refs/remotes/origin/${branch}`) !== sha) throw new Error('Default branch changed; start a new release run');
+const tag=`v${version}`;
+if (git('tag','--list',tag)) throw new Error(`Tag ${tag} already exists`);
+appendFileSync(process.env.GITHUB_OUTPUT,`sha=${sha}${String.fromCharCode(10)}version=${version}${String.fromCharCode(10)}tag=${tag}${String.fromCharCode(10)}`);

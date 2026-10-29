@@ -1,0 +1,22 @@
+{
+  "name": "donate",
+  "private": true,
+  "packageManager": "pnpm@12.16.1",
+  "engines": {
+    "node": ">=26.13.0",
+    "pnpm": ">=12.16.1"
+  },
+  "scripts": {
+    "dev": "pnpm --filter @donate/web dev",
+    "build": "node scripts/build.mjs",
+    "check": "pnpm --filter @donate/web check",
+    "test": "pnpm --filter @donate/web test",
+    "test:e2e": "pnpm --filter @donate/web test:e2e",
+    "generate": "node scripts/generate.mjs",
+    "check:generated": "node scripts/check-generated.mjs",
+    "test:tooling": "node --test scripts/*.test.mjs"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.13.0"
+  }
+}
