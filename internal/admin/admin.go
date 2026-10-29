@@ -265,10 +265,16 @@ func (s *Service) Execute(ctx context.Context, actor, id string) (Operation, err
 					}
 				case "hide_order", "show_order", "hide_message", "show_message":
 					col := "hidden_order"
+					wasHidden := o.HiddenOrder
 					if action == "hide_message" || action == "show_message" {
 						col = "hidden_message"
+						wasHidden = o.HiddenMessage
 					}
 					hidden := action == "hide_order" || action == "hide_message"
+					if wasHidden == hidden {
+						result = "unchanged"
+						break
+					}
 					_, e = tx.ExecContext(ctx, "UPDATE orders SET "+col+"=?,version=version+1 WHERE id=?", hidden, tid)
 					if e != nil {
 						return e

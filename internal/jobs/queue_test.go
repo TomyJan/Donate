@@ -2,6 +2,7 @@ package jobs
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"github.com/TomyJan/Donate/internal/order"
 	"github.com/TomyJan/Donate/internal/storage"
@@ -11,6 +12,40 @@ import (
 	"testing"
 	"time"
 )
+
+func TestPaymentAndCloseNeverRunConcurrentlyForSameOrder(t *testing.T) {
+	ctx := context.Background()
+	db, e := storage.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer db.Close()
+	id := storage.NewID()
+	now := time.Now()
+	if _, e = db.DB.Exec("INSERT INTO orders(id,merchant_order_no,amount_fen,channel,created_at,expires_at,request_ip) VALUES(?,'coordinated',1,'alipay',?,?,'127.0.0.1')", id[:], now.Unix(), now.Add(time.Minute).Unix()); e != nil {
+		t.Fatal(e)
+	}
+	q := NewQueue(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	for _, kind := range []string{"payment", "close"} {
+		if _, e = q.Enqueue(ctx, kind, id.String(), "manual", "", "request"); e != nil {
+			t.Fatal(e)
+		}
+	}
+	first, e := q.Claim(ctx, []string{"payment", "close"})
+	if e != nil || first.Kind != "close" {
+		t.Fatal(first, e)
+	}
+	if _, e = q.Claim(ctx, []string{"payment", "close"}); !errors.Is(e, sql.ErrNoRows) {
+		t.Fatal("concurrent same-order work accepted", e)
+	}
+	if ok, e := q.Finish(ctx, first, "done", "closed", time.Time{}); e != nil || !ok {
+		t.Fatal(e)
+	}
+	next, e := q.Claim(ctx, []string{"payment", "close"})
+	if e != nil || next.Kind != "payment" {
+		t.Fatal(next, e)
+	}
+}
 
 func TestManualReconcileRejectsInvalidIdempotencyKey(t *testing.T) {
 	q := &Queue{}

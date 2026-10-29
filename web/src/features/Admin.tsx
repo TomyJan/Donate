@@ -747,6 +747,7 @@ function UserDialog({
               [t('status'), t(u.status)],
               [t('role'), t(u.admin ? 'adminRole' : 'member')],
               [t('bindings'), u.bindings.map((v) => v.provider.toUpperCase()).join(' · ')],
+              [t('lastLogin'), dateTime(u.last_login_at)],
             ].map(([label, value]) => (
               <div key={label}>
                 <span>{label}</span>

@@ -133,12 +133,13 @@ func (q *Queue) Claim(ctx context.Context, kinds []string) (Job, error) {
 	for _, k := range kinds {
 		args = append(args, k)
 	}
+	args = append(args, now.Unix())
 	if len(kinds) == 0 {
 		return out, sql.ErrNoRows
 	}
 	holders := strings.TrimSuffix(strings.Repeat("?,", len(kinds)), ",")
 	e := q.Store.Write(ctx, func(tx *sql.Tx) error {
-		j, e := scan(tx.QueryRowContext(ctx, "SELECT "+columns+" FROM jobs WHERE ((status='ready' AND run_at<=?) OR (status='running' AND lease_until<=?)) AND kind IN ("+holders+") ORDER BY CASE kind WHEN 'close' THEN 0 ELSE 1 END,run_at,id LIMIT 1", args...))
+		j, e := scan(tx.QueryRowContext(ctx, "SELECT "+columns+" FROM jobs WHERE ((status='ready' AND run_at<=?) OR (status='running' AND lease_until<=?)) AND kind IN ("+holders+") AND (kind='geo' OR NOT EXISTS(SELECT 1 FROM jobs active WHERE active.order_id=jobs.order_id AND active.kind IN ('payment','close') AND active.status='running' AND active.lease_until>?)) ORDER BY CASE kind WHEN 'close' THEN 0 ELSE 1 END,run_at,id LIMIT 1", args...))
 		if e != nil {
 			return e
 		}

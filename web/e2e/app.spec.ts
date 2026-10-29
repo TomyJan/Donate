@@ -25,6 +25,7 @@ test('guest scope, input, preferences and responsive shared header', async ({ pa
   await page.getByRole('button', { name: '切换外观' }).click();
   await page.getByRole('menuitem', { name: '深色', exact: true }).click();
   await expect(page.locator('.d-app')).toHaveCSS('color-scheme', 'dark');
+  await expect(page.locator('.r-ticket').first()).toHaveCSS('background-color', 'rgb(46, 48, 43)');
   await page.getByRole('button', { name: '切换语言' }).click();
   await page.getByRole('menuitem', { name: 'English', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Donations', exact: true })).toBeVisible();
@@ -59,6 +60,17 @@ test('OIDC signs in, shared account and administration, confirm selected operati
     .first()
     .click();
   await expect(page.getByRole('button', { name: '手动补单', exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog').getByText('用户 ID', { exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog').getByText('支付渠道流水', { exact: true })).toBeVisible();
+  await page.getByRole('dialog').getByRole('button', { name: '导出', exact: true }).click();
+  const exportDialog = page
+    .getByRole('dialog')
+    .filter({ has: page.getByRole('heading', { name: '导出', exact: true }) });
+  await expect(exportDialog).toBeVisible();
+  const downloadPromise = page.waitForEvent('download');
+  await exportDialog.getByRole('button', { name: '确认', exact: true }).click();
+  expect((await downloadPromise).suggestedFilename()).toBe('donate-orders.csv');
+  await expect(exportDialog).toHaveCount(0);
   await page.getByRole('dialog').getByRole('button', { name: '关闭', exact: true }).first().click();
   await page
     .getByRole('navigation', { name: '站点管理', exact: true })
@@ -69,7 +81,14 @@ test('OIDC signs in, shared account and administration, confirm selected operati
     .first()
     .click();
   await expect(page.getByRole('heading', { name: '用户详情' })).toBeVisible();
+  await expect(page.getByRole('dialog').getByText('最近登录', { exact: true })).toBeVisible();
+  await expect(page.getByRole('dialog')).toHaveCSS('opacity', '1');
   await page.screenshot({ path: 'test-results/admin-user.png', fullPage: true });
+  await page.getByRole('dialog').getByRole('button', { name: '关闭', exact: true }).first().click();
+  await page.getByRole('button', { name: '账号信息', exact: true }).click();
+  await page.getByRole('menuitem', { name: '退出登录', exact: true }).click();
+  await expect(page.locator('.d-top').getByRole('button', { name: '登录', exact: true })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: '站点管理', exact: true })).toHaveCount(0);
 });
 test('real payment create, RSA notification and own history through the embedded binary', async ({
   page,

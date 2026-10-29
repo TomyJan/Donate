@@ -80,3 +80,54 @@ func TestPreviewCannotChangeSelectionAndExecuteIsIdempotent(t *testing.T) {
 		t.Fatal(n)
 	}
 }
+
+func TestRepeatedVisibilityActionsDoNotMutateOrder(t *testing.T) {
+	ctx := context.Background()
+	db, err := storage.Open(ctx, filepath.Join(t.TempDir(), "visibility.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	a := auth.New(db, config.Config{}, logger)
+	login, err := a.LoginIdentity(ctx, auth.Identity{Provider: "oidc", Issuer: "i", Subject: "admin"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	orders := order.New(db, logger, "g", "p", "v2")
+	o, err := orders.Create(ctx, order.CreateInput{UserID: login.Session.UserID, AmountFen: 1, Channel: "alipay", Key: "one"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := New(db, orders, config.Config{AdminIDs: map[string]bool{login.Session.UserID: true}}, logger)
+	oid, _ := storage.ParseID(o.ID)
+	for _, tc := range []struct{ action, result string }{
+		{"show_order", "unchanged"}, {"hide_order", "updated"}, {"hide_order", "unchanged"},
+		{"show_order", "updated"}, {"show_order", "unchanged"},
+		{"show_message", "unchanged"}, {"hide_message", "updated"}, {"hide_message", "unchanged"},
+		{"show_message", "updated"}, {"show_message", "unchanged"},
+	} {
+		var before, after int
+		if err = db.DB.QueryRowContext(ctx, "SELECT version FROM orders WHERE id=?", oid).Scan(&before); err != nil {
+			t.Fatal(err)
+		}
+		op, err := s.Preview(ctx, login.Session.UserID, tc.action, []string{o.ID})
+		if err != nil {
+			t.Fatal(err)
+		}
+		op, err = s.Execute(ctx, login.Session.UserID, op.ID)
+		if err != nil || len(op.Items) != 1 || op.Items[0].Result != tc.result {
+			t.Fatalf("%s: %+v, error %v", tc.action, op, err)
+		}
+		if err = db.DB.QueryRowContext(ctx, "SELECT version FROM orders WHERE id=?", oid).Scan(&after); err != nil {
+			t.Fatal(err)
+		}
+		want := before
+		if tc.result == "updated" {
+			want++
+		}
+		if after != want {
+			t.Fatalf("%s: version %d, want %d", tc.action, after, want)
+		}
+	}
+}

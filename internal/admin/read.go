@@ -113,9 +113,9 @@ func orderWhere(f Filter) (string, []any, error) {
 		return "", nil, auth.ErrInvalid
 	}
 	if f.Search != "" {
-		where += " AND (lower(i.nickname) LIKE ? ESCAPE '\\' OR lower(hex(o.id)) LIKE ? ESCAPE '\\' OR o.merchant_order_no LIKE ? ESCAPE '\\')"
+		where += " AND (lower(i.nickname) LIKE ? ESCAPE '\\' OR lower(hex(o.id)) LIKE ? ESCAPE '\\' OR o.merchant_order_no LIKE ? ESCAPE '\\' OR lower(hex(o.user_id)) LIKE ? ESCAPE '\\')"
 		q := strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(strings.ToLower(f.Search))
-		args = append(args, "%"+q+"%", "%"+strings.ReplaceAll(q, "-", "")+"%", "%"+q+"%")
+		args = append(args, "%"+q+"%", "%"+strings.ReplaceAll(q, "-", "")+"%", "%"+q+"%", "%"+strings.ReplaceAll(q, "-", "")+"%")
 	}
 	if f.Status != "" {
 		if f.Status != "paid" && f.Status != "pending" && f.Status != "closed" {
@@ -455,7 +455,7 @@ func (s *Service) Export(ctx context.Context, actor, operation string, w io.Writ
 		return auth.ErrInvalid
 	}
 	cw := csv.NewWriter(w)
-	if e = cw.Write([]string{"ID", "用户 ID", "商户订单号", "金额（分）", "渠道", "状态", "创建时间", "留言", "IP"}); e != nil {
+	if e = cw.Write([]string{"ID", "用户 ID", "商户订单号", "金额（分）", "渠道", "状态", "创建时间", "留言"}); e != nil {
 		return e
 	}
 	for _, item := range op.Items {
@@ -469,7 +469,7 @@ func (s *Service) Export(ctx context.Context, actor, operation string, w io.Writ
 		if e != nil {
 			return e
 		}
-		values := []string{o.ID, o.UserID, o.MerchantOrderNo, strconv.FormatInt(o.AmountFen, 10), o.Channel, o.Status, o.CreatedAt.Format(time.RFC3339), o.Message, o.IP}
+		values := []string{o.ID, o.UserID, o.MerchantOrderNo, strconv.FormatInt(o.AmountFen, 10), o.Channel, o.Status, o.CreatedAt.Format(time.RFC3339), o.Message}
 		for i := range values {
 			values[i] = csvSafe(values[i])
 		}

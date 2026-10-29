@@ -30,51 +30,57 @@
 
 ## 任务 1：可运行服务与存储基础
 
-文件：`go.mod`、`cmd/donate/main.go`、`internal/{config,storage,observability}`、`migrations/`、`scripts/`。
+文件：`go.mod`、`cmd/donate/main.go`、`internal/{config,storage,observability}`、`internal/storage/migrations/`、`scripts/`。
 
-- [ ] 先写临时 SQLite 的迁移 / 约束 / 重启测试与配置错误测试，运行 `go test ./internal/storage ./internal/config` 确认失败。
-- [ ] 实现启动配置、UUID、短事务存储、迁移、日志轮转、实例锁、优雅退出、版本元数据。
-- [ ] 同命令转绿；`go vet ./...`；以 `feat(core): 建立服务与持久化基础` 提交。
+- [x] 临时 SQLite 的迁移 / 约束 / 重启、配置错误、备份保留、损坏拒绝和迁移回滚测试。
+- [x] 启动配置、UUID、短事务存储、迁移、日志轮转、实例锁、优雅退出、版本元数据。
+- [x] `go test ./internal/storage ./internal/config`、`go vet ./...` 通过；实现归入后端提交。
 
 ## 任务 2：认证、绑定与会话
 
-文件：`internal/auth/{session,oauth,qq}.go` 及测试、`internal/user/`、HTTP 认证中间件。
+文件：`internal/auth/` 及测试、`internal/httpapi/` 认证中间件。
 
-- [ ] 先写活动超 30 天仍有效、空闲过期、封禁与续期竞争、流程 state 重放 / 绑定冲突测试，运行确认失败。
-- [ ] 实现 `ResolveSession`、`RenewSession`、`FinishLogin`、`BindIdentity`，Cookie / CSRF、OIDC 发现验签与 QQ 内存头像检查；无生产模拟登录后门。
-- [ ] `go test ./internal/auth ./internal/user` 转绿，身份流程使用可控测试上游；以 `feat(auth): 实现身份绑定和滚动会话` 提交。
+- [x] 活动超 30 天仍有效、空闲过期、封禁 / 退出与续期竞争、state 重放 / 绑定冲突测试。
+- [x] 会话 Resolve / Renew / Logout、QQ / OIDC 登录绑定、Cookie / CSRF、OIDC 发现验签与 QQ 内存头像检查；无生产模拟登录后门。
+- [x] `go test ./internal/auth ./internal/httpapi` 通过；QQ 完整首次登录和 OIDC 浏览器流程使用隔离测试上游。
 
 ## 任务 3：订单、支付与持久化任务
 
 文件：`internal/order/`、`internal/payment/`、`internal/jobs/`、`internal/geo/` 及测试。
 
-- [ ] 先写 `ApplyObservation` 并发幂等、金额 / 签名拒绝、晚到支付、删除竞争、租约过期与手动唤醒测试，确认失败。
-- [ ] 实现 V2 / V1 适配器、受控跳转、通知 / 查单 / 关闭、创建幂等、30 秒扫描和既定退避；属地独立任务与故障转移。
-- [ ] `go test ./internal/order ./internal/payment ./internal/jobs ./internal/geo` 转绿；以 `feat(payment): 实现支付通知与自动手动补单` 提交。
+- [x] 支付观察并发幂等、金额 / 签名拒绝、晚到支付、删除竞争、租约过期与手动唤醒测试；支付 / 关单同订单任务互斥回归。
+- [x] V2 / V1 适配器、受控跳转、通知 / 查单 / 关闭、创建幂等、30 秒扫描和既定退避；属地独立任务与故障转移。
+- [x] `go test ./internal/order ./internal/payment ./internal/jobs ./internal/geo` 通过；验证事务失败不返回成功通知、Retry-After 和跨订单租约拒绝。
 
 ## 任务 4：API 与管理
 
-文件：`api/openapi.yaml`、`internal/httpapi/`、`internal/admin/`、生成 DTO / 数据查询及测试。
+文件：`api/openapi.json`、`cmd/contractgen/`、`internal/httpapi/`、`internal/admin/`、`internal/storage/dbgen/` 及测试。
 
-- [ ] 先写越权、业务 200 / 鉴权 40x、游客十条、公开隐私、排序白名单、批量逐项状态 / CSV、审计删除测试，确认失败。
-- [ ] 实现所有语义路由、限制 / 安全头、确认预览及幂等执行、概览 / 用户 / 审计、健康探针；以契约生成共享类型。
-- [ ] `go test ./...` 和生成文件零漂移转绿；以 `feat(api): 提供订单和管理接口` 提交。
+- [x] 越权、业务 200 / 鉴权 40x、游客十条、公开隐私、排序白名单、批量逐项状态 / CSV、审计删除测试。
+- [x] 语义路由、限制 / 安全头、确认预览及幂等执行、概览 / 用户 / 审计、健康探针；实际 Go wire DTO 生成 OpenAPI，再生成 TypeScript；固定查询使用 sqlc。
+- [x] `go test ./...` 和 `pnpm check:generated` 通过；导出不含完整 IP、订单搜索用户 ID、重复隐藏不递增版本均有回归。
 
 ## 任务 5：正式前端与嵌入
 
 文件：`web/src/{app,components,features,lib}`、`web/package.json`、pnpm 锁文件、`internal/webassets/`。
 
-- [ ] 先写金额光标 / 限制、登录状态 / 401、列表权限及补单交互测试，确认失败。
-- [ ] React 组件化迁移定稿 CSS / 布局和动画；共用导航 / 弹窗 / 账号 / 通知 / 日期 / 下拉组件，业务状态全部来自 API。
-- [ ] 首页、管理四页、绑定、QQ 完成授权、深浅色 / 中英文 / 响应式；版本从 Go 注入；构建产物 embed。
-- [ ] pnpm 格式 / lint / 类型 / 测试 / build，实际二进制 Playwright 验证转绿；以 `feat(web): 接入收据册和管理界面` 提交。
+- [x] 金额光标 / 限制、登录状态 / 401、会话 CSRF、头像变化和退出状态测试。
+- [x] React 组件化迁移定稿 CSS / 布局和动画；共用导航 / 弹窗 / 账号 / 通知 / 日期 / 下拉组件，业务状态全部来自 API。
+- [x] 首页、管理四页、绑定、QQ 完成授权、深浅色 / 中英文 / 响应式；版本从 Go 注入；构建产物 embed。
+- [x] pnpm 格式 / lint / 类型 / 单测 / build 通过；真实二进制 Playwright 覆盖游客、登录管理、详情确认导出、退出和 RSA 支付；深色验证实际卡片背景。
 
 ## 任务 6：CI、发版与运行说明
 
 文件：`.github/workflows/{code-check,release}.yml`、依赖更新配置、`.env.example`、`README.md`、`docs/operations.md`。
 
-- [ ] 工作流覆盖 Go 格式 / vet / race / govulncheck、前端完整检查、契约 / 查询生成、SQLite 迁移、实际 embed 二进制 E2E；只使用测试上游。
-- [ ] 同提交发版、版本 / tag / commit 注入、三目标二进制及 SHA-256；不自动部署生产。实现一致性备份和恢复命令，记录部署配置和外部联调条件。
-- [ ] 本机运行可运行的完整检查，记录平台受限项；独立整分支审查并修复关键发现，再以 `ci(release): 完善验证和版本发布` 提交。
+- [x] 工作流覆盖 Go 格式 / vet / race / govulncheck、前端完整检查、契约 / 查询生成、SQLite 迁移、实际 embed 二进制 E2E；只使用测试上游。
+- [x] 同提交发版、版本 / tag / commit 注入、三目标二进制及 SHA-256；不自动部署生产。一致性备份和离线恢复命令、部署配置和外部联调条件均已记录。
+- [x] Windows 全套测试 / vet、WSL Linux 全套 race、关键函数至少 80% 覆盖门禁、前端和浏览器检查通过；完成独立整分支审查和缺陷回归。
+
+## 交付边界
+
+实现按后端、前端、CI / 运维三个签名提交组织，审查修复另行提交。未推送、部署、打 tag 或正式发版，也未导入旧站数据。真实 QQ / OIDC 应用、QQ 头像阈值校准、实际易支付商户与属地服务授权，仍按 [运维说明](operations.md) 在上线前联调；隔离测试不能替代这些验证。
+
+契约生成方向以实际 Go wire DTO 为源，减少隐私响应结构的独立副本；若未来改为设计优先契约，需要迁移生成方向。GitHub 托管工作流的远端运行结果须在配置仓库远端并推送后确认。
 
 实现过程中进度保存在被忽略的本计划账本，最终仓库只保留实际实现、有效测试、运行规范和这份可核对计划。

@@ -1,8 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Copy, ExternalLink, RefreshCw } from 'lucide-react';
+import { Copy, Download, ExternalLink, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { useApp } from '../app/context';
-import { api, dateTime, money, query } from '../lib/api';
+import { api, dateTime, downloadExport, money, query } from '../lib/api';
 import type { Operation, Order } from '../lib/types';
 import { Avatar, Button, Modal } from './ui';
 export async function checkout(id: string) {
@@ -65,13 +65,14 @@ export function OrderDialog({
   };
   const execute = async () => {
     if (!confirmation) return;
-    await api('admin/order/action/execute', { operation_id: confirmation.id });
+    const result = await api<Operation>('admin/order/action/execute', { operation_id: confirmation.id });
+    if (result.action === 'export') await downloadExport(result.id);
     const action = confirmation.action;
     setConfirmation(null);
     notify(t('success'));
     await client.invalidateQueries();
     if (action === 'delete') onClose();
-    else setPollUntil(Date.now() + 60000);
+    else if (action !== 'export') setPollUntil(Date.now() + 60000);
   };
   const fields = o
     ? [
@@ -83,6 +84,8 @@ export function OrderDialog({
         [t('expires'), dateTime(o.expires_at)],
         ...(admin
           ? [
+              [t('userId'), o.user_id || '—'],
+              [t('channelTrade'), o.api_trade_no || '—'],
               [t('ip'), o.ip || '—'],
               [
                 t('region'),
@@ -108,6 +111,12 @@ export function OrderDialog({
                       .join(' · ')
                   : '—',
               ],
+              ...(o.location?.latitude != null && o.location.longitude != null
+                ? [[t('coordinates'), `${o.location.latitude}, ${o.location.longitude}`]]
+                : []),
+              ...(o.location?.accuracy_radius != null
+                ? [[t('accuracy'), `${o.location.accuracy_radius} km`]]
+                : []),
               [t('checked'), dateTime(o.last_checked_at)],
               [t('gateway'), t(o.gateway_status)],
               [t('remote'), t(o.remote_close_status)],
@@ -180,6 +189,10 @@ export function OrderDialog({
                 </Button>
                 {admin ? (
                   <>
+                    <Button disabled={busy} onClick={() => void run(() => preview('export'))}>
+                      <Download />
+                      {t('export')}
+                    </Button>
                     <Button
                       disabled={busy}
                       onClick={() =>

@@ -36,6 +36,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.getItem('donate-language') === 'en' ? 'en' : 'zh-CN',
   );
   const [theme, setAppearance] = useState(() => localStorage.getItem('donate-theme') || 'system');
+  useEffect(() => {
+    document.documentElement.style.colorScheme = theme === 'system' ? 'light dark' : theme;
+  }, [theme]);
   const [loginOpen, setLoginOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
