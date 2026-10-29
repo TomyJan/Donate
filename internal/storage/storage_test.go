@@ -57,3 +57,45 @@ func TestMigrationsAndReopen(t *testing.T) {
 		t.Fatal("missing owner accepted")
 	}
 }
+
+func TestRegressionDatabasePathRetainsURLReservedCharacters(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for _, component := range []string{"store#one", "store%20one", "数据 空格"} {
+		t.Run(component, func(t *testing.T) {
+			path := filepath.Join(component, "donate.db")
+			absolute, e := filepath.Abs(path)
+			if e != nil {
+				t.Fatal(e)
+			}
+			s, e := Open(context.Background(), path)
+			if e != nil {
+				t.Fatal(e)
+			}
+			defer s.Close()
+			var seq int
+			var name, actual string
+			if e = s.DB.QueryRow("PRAGMA database_list").Scan(&seq, &name, &actual); e != nil {
+				t.Fatal(e)
+			}
+			t.Logf("expected=%s actual=%s", path, actual)
+			if filepath.Clean(actual) != filepath.Clean(absolute) {
+				t.Fatal("opened a different database path")
+			}
+			if _, e = s.DB.Exec("INSERT INTO users(id,created_at) VALUES(randomblob(16),0)"); e != nil {
+				t.Fatal(e)
+			}
+			if e = s.Close(); e != nil {
+				t.Fatal(e)
+			}
+			reopened, e := Open(context.Background(), absolute)
+			if e != nil {
+				t.Fatal(e)
+			}
+			defer reopened.Close()
+			var count int
+			if e = reopened.DB.QueryRow("SELECT count(*) FROM users").Scan(&count); e != nil || count != 1 {
+				t.Fatal("database contents did not survive reopening and backup", count, e)
+			}
+		})
+	}
+}

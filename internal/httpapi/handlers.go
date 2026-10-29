@@ -106,6 +106,9 @@ func (s *Server) completeQQ(w http.ResponseWriter, r *http.Request) {
 	}
 	if v.Credentials != nil {
 		s.setCookie(w, s.sessionName(), v.Credentials.Token, v.Credentials.Session.ExpiresAt)
+		// The login transaction revoked the old token. Renew the newly issued session.
+		state(r).Token = v.Credentials.Token
+		state(r).Session = &v.Credentials.Session
 	}
 	s.setCookie(w, s.cookieName("flow"), "", time.Unix(0, 0))
 	s.ok(w, r, map[string]string{"return_to": v.ReturnTo})

@@ -138,6 +138,13 @@ func (r *Runner) Execute(parent context.Context, j Job) {
 		r.geolocate(ctx, j, o)
 		return
 	}
+	if j.Kind == "close" {
+		// Local closure must survive gateway outages and exhausted remote retries.
+		if e = r.persistClose(ctx, j, o, ""); e != nil {
+			r.retry(ctx, j, o, "close_save_failed")
+			return
+		}
+	}
 	if !r.Gateway.Ready() {
 		r.retry(ctx, j, o, "gateway_not_configured")
 		return
@@ -171,6 +178,11 @@ func (r *Runner) Execute(parent context.Context, j Job) {
 		return
 	}
 	if j.Kind == "close" {
+		if o.RemoteCloseStatus == "confirmed" {
+			// This query also verifies payment after an earlier close ACK.
+			r.finish(ctx, j, "done", "remote_closed", time.Time{})
+			return
+		}
 		r.close(ctx, j, o, obs)
 		return
 	}
@@ -240,38 +252,100 @@ func (r *Runner) close(ctx context.Context, j Job, o order.Order, obs order.Obse
 		}
 		confirmed = true
 	}
-	oid, _ := storage.ParseID(o.ID)
-	jid, _ := storage.ParseID(j.ID)
-	now := r.Queue.Now()
 	result := "local_closed_remote_unconfirmed"
 	remote := "unsupported"
 	if confirmed {
 		result = "remote_closed"
 		remote = "confirmed"
 	}
+	if e := r.persistClose(ctx, j, o, remote); e != nil {
+		r.retry(ctx, j, o, "close_save_failed")
+		return
+	}
+	// A close ACK alone cannot rule out a racing payment. Verify once more
+	// while the same lease still owns the order, then leave retries durable.
+	if confirmed {
+		if e := r.pace(ctx); e != nil {
+			r.retry(ctx, j, o, "final_query_wait")
+			return
+		}
+		c, cancel := context.WithTimeout(ctx, 8*time.Second)
+		final, e := r.Gateway.Query(c, o)
+		cancel()
+		r.health(e)
+		if e != nil {
+			r.retry(ctx, j, o, "final_query_failed")
+			return
+		}
+		final.JobID, final.LeaseToken = j.ID, j.LeaseToken
+		final.Source, final.RequestID = j.Source, j.RequestID
+		applied, e := r.Orders.Apply(ctx, final)
+		if errors.Is(e, order.ErrBusy) || errors.Is(e, order.ErrNotFound) {
+			return
+		}
+		if e != nil {
+			r.retry(ctx, j, o, "final_validation_failed")
+			return
+		}
+		if applied.State == "paid" {
+			return // Apply commits the payment and completes all payment/close jobs.
+		}
+	}
+	r.finish(ctx, j, "done", result, time.Time{})
+}
+
+func (r *Runner) persistClose(ctx context.Context, j Job, o order.Order, remote string) error {
+	oid, _ := storage.ParseID(o.ID)
+	jid, _ := storage.ParseID(j.ID)
+	now := r.Queue.Now()
+	followup := storage.NewID()
+	created := false
+	var actor any
+	if j.ActorID != "" {
+		actor, _ = storage.ParseID(j.ActorID)
+	}
 	e := r.Queue.Store.Write(ctx, func(tx *sql.Tx) error {
 		var n int
-		if e := tx.QueryRowContext(ctx, "SELECT count(*) FROM jobs WHERE id=? AND lease_token=? AND status='running' AND lease_until>?", jid, j.LeaseToken, now.Unix()).Scan(&n); e != nil {
+		if e := tx.QueryRowContext(ctx, "SELECT count(*) FROM jobs WHERE id=? AND order_id=? AND kind='close' AND lease_token=? AND status='running' AND lease_until>?", jid, oid, j.LeaseToken, now.Unix()).Scan(&n); e != nil {
 			return e
 		}
 		if n != 1 {
 			return order.ErrBusy
 		}
-		_, e := tx.ExecContext(ctx, "UPDATE orders SET status='closed',close_reason=CASE WHEN close_reason='' THEN 'admin' ELSE close_reason END,closed_at=COALESCE(closed_at,?),remote_close_status=?,remote_closed_at=CASE WHEN ? THEN ? ELSE NULL END,version=version+1 WHERE id=? AND status!='paid'", now.Unix(), remote, confirmed, now.Unix(), oid)
+		res, e := tx.ExecContext(ctx, "UPDATE orders SET status='closed',close_reason=CASE WHEN close_reason='' THEN 'admin' ELSE close_reason END,closed_at=COALESCE(closed_at,?),remote_close_status=CASE WHEN ?='' THEN remote_close_status ELSE ? END,remote_closed_at=CASE WHEN ?='confirmed' THEN COALESCE(remote_closed_at,?) ELSE remote_closed_at END,version=version+1 WHERE id=? AND status!='paid' AND (status!='closed' OR (?<>'' AND remote_close_status<>?))", now.Unix(), remote, remote, remote, now.Unix(), oid, remote, remote)
 		if e != nil {
 			return e
 		}
+		if remote == "" {
+			// Commit the followup with local closure: neither a crash nor a
+			// simultaneous payment/delete may leave a closed order untracked.
+			inserted, e := tx.ExecContext(ctx, "INSERT INTO jobs(id,kind,order_id,run_at,source,actor_id,request_id,created_at,updated_at) SELECT ?,'payment',?,?,'close_followup',?,?,?,? WHERE EXISTS(SELECT 1 FROM orders WHERE id=? AND status!='paid') ON CONFLICT DO NOTHING", followup[:], oid, now.Unix(), actor, j.RequestID, now.Unix(), now.Unix(), oid)
+			if e != nil {
+				return e
+			}
+			count, e := inserted.RowsAffected()
+			if e != nil {
+				return e
+			}
+			created = count == 1
+			if _, e = tx.ExecContext(ctx, "UPDATE jobs SET run_at=?,source='close_followup',actor_id=?,request_id=?,updated_at=? WHERE order_id=? AND kind='payment' AND status='ready' AND EXISTS(SELECT 1 FROM orders WHERE id=? AND status!='paid')", now.Unix(), actor, j.RequestID, now.Unix(), oid, oid); e != nil {
+				return e
+			}
+		}
+		changed, e := res.RowsAffected()
+		if e != nil || changed == 0 {
+			return e
+		}
+		result := "local_closed_remote_unconfirmed"
+		if remote == "confirmed" {
+			result = "remote_closed"
+		}
 		return storage.Audit(ctx, tx, nil, "order.close", "order", oid, result, now.Unix())
 	})
-	if e != nil {
-		r.retry(ctx, j, o, "close_save_failed")
-		return
+	if e == nil && created {
+		r.Queue.Log.Info(fmt.Sprintf("订单 %s 关闭入口时已原子保存补单任务 %s，关闭任务 %s", o.ID, followup.String(), j.ID), "order_id", o.ID, "job_id", followup.String(), "close_job_id", j.ID)
 	}
-	// Native EPay status 0 is unpaid, not proof of remote closure. Only the signed close ACK is stored as confirmation.
-	r.finish(ctx, j, "done", result, time.Time{})
-	if !confirmed {
-		_, _ = r.Queue.Enqueue(ctx, "payment", o.ID, "close_followup", j.ActorID, j.RequestID)
-	}
+	return e
 }
 func (r *Runner) geolocate(ctx context.Context, j Job, o order.Order) {
 	if r.Geo == nil {

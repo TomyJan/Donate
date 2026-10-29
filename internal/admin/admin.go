@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -47,9 +48,6 @@ func (s *Service) check(ctx context.Context, tx *sql.Tx, actor string) error {
 	return nil
 }
 func (s *Service) Ban(ctx context.Context, actor, target string, ban bool) error {
-	if actor == target && ban {
-		return ErrSelfBan
-	}
 	tid, e := storage.ParseID(target)
 	if e != nil {
 		return auth.ErrInvalid
@@ -62,6 +60,9 @@ func (s *Service) Ban(ctx context.Context, actor, target string, ban bool) error
 	e = s.Store.Write(ctx, func(tx *sql.Tx) error {
 		if e := s.check(ctx, tx, actor); e != nil {
 			return e
+		}
+		if ban && bytes.Equal(aid, tid) {
+			return ErrSelfBan
 		}
 		r, e := tx.ExecContext(ctx, "UPDATE users SET status=? WHERE id=?", status, tid)
 		if e != nil {

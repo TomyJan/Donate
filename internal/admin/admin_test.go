@@ -131,3 +131,32 @@ func TestRepeatedVisibilityActionsDoNotMutateOrder(t *testing.T) {
 		}
 	}
 }
+
+func TestRegressionSelfBanRejectsEquivalentUUIDSpelling(t *testing.T) {
+	ctx := context.Background()
+	db, e := storage.Open(ctx, filepath.Join(t.TempDir(), "review.db"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer db.Close()
+	l := slog.New(slog.NewTextHandler(io.Discard, nil))
+	a := auth.New(db, config.Config{}, l)
+	c, e := a.LoginIdentity(ctx, auth.Identity{Provider: "oidc", Issuer: "i", Subject: "self"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	cfg := config.Config{AdminIDs: map[string]bool{c.Session.UserID: true}}
+	s := New(db, order.New(db, l, "g", "p", "v2"), cfg, l)
+	compact := ""
+	for _, v := range c.Session.UserID {
+		if v != '-' {
+			compact += string(v)
+		}
+	}
+	e = s.Ban(ctx, c.Session.UserID, compact, true)
+	_, resolve := a.Resolve(ctx, c.Token)
+	t.Logf("ban_error=%v resolve_error=%v", e, resolve)
+	if !errors.Is(e, ErrSelfBan) || resolve != nil {
+		t.Fatal("equivalent UUID bypassed self-ban protection")
+	}
+}
