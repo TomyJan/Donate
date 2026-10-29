@@ -7,7 +7,6 @@ import {
   ChartNoAxesColumn,
   ChevronDown,
   Download,
-  Ellipsis,
   ListChecks,
   ReceiptText,
   Search,
@@ -19,6 +18,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { useApp } from '../app/context';
+import { AdminTable } from '../components/AdminTable';
 import { ConstrainedInput } from '../components/ConstrainedInput';
 import { DateTimeField, SelectField } from '../components/forms';
 import { OrderDialog } from '../components/OrderDialog';
@@ -128,25 +128,6 @@ export function Admin() {
     if (result.action === 'export') await downloadExport(result.id);
   };
   const rows = list.data?.items ?? [];
-  function th(key: string, label: string) {
-    const active = sort.key === key;
-    return (
-      <th aria-sort={active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : undefined}>
-        <button
-          type="button"
-          className="a-btn a-sort"
-          onClick={() => {
-            setSort({ key, direction: active && sort.direction === 'desc' ? 'asc' : 'desc' });
-            setPage(1);
-          }}
-        >
-          {t(label)}
-          {active ? sort.direction === 'asc' ? <ArrowUp /> : <ArrowDown /> : <ArrowDownUp />}
-        </button>
-      </th>
-    );
-  }
-  const checkbox = (id: string) => selection.has(id);
   const toggle = (id: string) =>
     setSelection((old) => {
       const next = new Set(old);
@@ -227,9 +208,14 @@ export function Admin() {
                 <Menu
                   label={t('batch')}
                   trigger={
-                    <Button className="a-batch-trigger" disabled={busy}>
+                    <Button
+                      className="a-batch-trigger"
+                      aria-label={t('batch')}
+                      title={t('batch')}
+                      disabled={busy}
+                    >
                       <ListChecks />
-                      {t('batch')}
+                      <span className="a-batch-label">{t('batch')}</span>
                       <ChevronDown />
                     </Button>
                   }
@@ -372,119 +358,35 @@ export function Admin() {
             ) : !rows.length ? (
               <Empty />
             ) : (
-              <div className="table-scroll">
-                <table className={`a-table a-${tab}`}>
-                  <thead>
-                    <tr>
-                      {tab === 'orders' && (
-                        <th className="checkbox-col">
-                          <input
-                            className="custom-check"
-                            type="checkbox"
-                            aria-label={t('selected')}
-                            checked={rows.length > 0 && rows.every((r) => checkbox(r.id))}
-                            onChange={() =>
-                              setSelection((old) => {
-                                const next = new Set(old);
-                                if (rows.every((r) => next.has(r.id)))
-                                  for (const r of rows) next.delete(r.id);
-                                else for (const r of rows) if (next.size < 100) next.add(r.id);
-                                return next;
-                              })
-                            }
-                          />
-                        </th>
-                      )}
-                      {th('created_at', 'time')}
-                      {tab === 'orders' ? (
-                        <>
-                          {th('nickname', 'user')}
-                          {th('amount_fen', 'amount')}
-                          {th('channel', 'channel')}
-                          {th('status', 'status')}
-                          {th('hidden_order', 'orderVisible')}
-                          {th('hidden_message', 'messageVisible')}
-                        </>
-                      ) : tab === 'users' ? (
-                        <>
-                          {th('nickname', 'user')}
-                          {th('status', 'status')}
-                          {th('bindings', 'bindings')}
-                          {th('order_count', 'orders')}
-                          {th('paid_fen', 'totalPaid')}
-                          {th('last_login_at', 'lastLogin')}
-                        </>
-                      ) : (
-                        <>
-                          {th('actor', 'actor')}
-                          {th('action', 'action')}
-                          {th('target', 'target')}
-                          {th('result', 'result')}
-                        </>
-                      )}
-                      <th>
-                        <span className="d-sr">{t('details')}</span>
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((row) => (
-                      <tr key={row.id} className={selection.has(row.id) ? 'a-selected' : ''}>
-                        {tab === 'orders' && (
-                          <td>
-                            <input
-                              className="custom-check"
-                              type="checkbox"
-                              aria-label={`${t('selected')} ${row.id}`}
-                              checked={selection.has(row.id)}
-                              onChange={() => toggle(row.id)}
-                            />
-                          </td>
-                        )}
-                        <td>
-                          <time>{dateTime(row.created_at)}</time>
-                          <button
-                            type="button"
-                            className="a-sub text-button"
-                            onClick={() =>
-                              void navigator.clipboard.writeText(row.id).then(() => notify(t('copied')))
-                            }
-                          >
-                            {row.id.slice(0, 8)}
-                          </button>
-                        </td>
-                        {tab === 'orders' ? (
-                          <OrderCells row={row as Order} />
-                        ) : tab === 'users' ? (
-                          <UserCells row={row as User} />
-                        ) : (
-                          <AuditCells
-                            row={row as Audit}
-                            openTarget={(kind, id) => (kind === 'order' ? setOrderID(id) : setUserID(id))}
-                          />
-                        )}
-                        <td>
-                          <Button
-                            className="a-icon d-ghost"
-                            aria-label={`${t(tab === 'users' ? 'userDetail' : 'details')} ${row.id.slice(0, 8)}`}
-                            onClick={() =>
-                              tab === 'orders'
-                                ? setOrderID(row.id)
-                                : tab === 'users'
-                                  ? setUserID(row.id)
-                                  : (row as Audit).target_type === 'order'
-                                    ? setOrderID((row as Audit).target_id)
-                                    : setUserID((row as Audit).target_id)
-                            }
-                          >
-                            <Ellipsis />
-                          </Button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <AdminTable
+                kind={tab}
+                rows={rows}
+                sort={sort}
+                onSort={(next) => {
+                  setSort(next);
+                  setPage(1);
+                }}
+                selection={selection}
+                onToggle={toggle}
+                onToggleAll={() =>
+                  setSelection((old) => {
+                    const next = new Set(old);
+                    if (rows.every((row) => next.has(row.id))) for (const row of rows) next.delete(row.id);
+                    else for (const row of rows) if (next.size < 100) next.add(row.id);
+                    return next;
+                  })
+                }
+                onDetails={(row) =>
+                  tab === 'orders'
+                    ? setOrderID(row.id)
+                    : tab === 'users'
+                      ? setUserID(row.id)
+                      : (row as Audit).target_type === 'order'
+                        ? setOrderID((row as Audit).target_id)
+                        : setUserID((row as Audit).target_id)
+                }
+                onTarget={(kind, id) => (kind === 'order' ? setOrderID(id) : setUserID(id))}
+              />
             )}
             {list.data && <Pagination page={page} size={20} total={list.data.total} onPage={setPage} />}
           </>
@@ -576,52 +478,6 @@ export function Admin() {
     </div>
   );
 }
-function OrderCells({ row: o }: { row: Order }) {
-  const { t } = useApp();
-  return (
-    <>
-      <td>{o.nickname}</td>
-      <td>¥{money(o.amount_fen)}</td>
-      <td>{t(o.channel)}</td>
-      <td>
-        <span className={`a-badge ${o.status === 'paid' ? 'a-paid' : 'a-muted'}`}>{t(o.status)}</span>
-      </td>
-      <td>{t(o.hidden_order ? 'yes' : 'no')}</td>
-      <td>{t(o.hidden_message ? 'yes' : 'no')}</td>
-    </>
-  );
-}
-function UserCells({ row: u }: { row: User }) {
-  const { t } = useApp();
-  return (
-    <>
-      <td>{u.nickname}</td>
-      <td>
-        <span className="a-badge">{t(u.status)}</span>
-      </td>
-      <td>{u.bindings.map((v) => v.provider.toUpperCase()).join(' · ')}</td>
-      <td>{u.order_count}</td>
-      <td>¥{money(u.paid_fen)}</td>
-      <td>{dateTime(u.last_login_at)}</td>
-    </>
-  );
-}
-function AuditCells({ row: a, openTarget }: { row: Audit; openTarget: (kind: string, id: string) => void }) {
-  const { t } = useApp();
-  return (
-    <>
-      <td>{a.actor}</td>
-      <td>{a.action}</td>
-      <td>
-        <button type="button" className="text-button" onClick={() => openTarget(a.target_type, a.target_id)}>
-          {a.target}
-          <small className="a-sub">{a.target_id.slice(0, 8)}</small>
-        </button>
-      </td>
-      <td>{t(a.result)}</td>
-    </>
-  );
-}
 function OverviewPanel({ data }: { data: Overview }) {
   const { t } = useApp();
   return (
@@ -669,7 +525,7 @@ function MetricTable({ title, metrics }: { title: string; metrics: Metric[] }) {
   return (
     <section>
       <h2>{t(title)}</h2>
-      <table className="a-table">
+      <table className="a-table a-summary-table">
         <thead>
           <tr>
             {columns.map(([key, label]) => (

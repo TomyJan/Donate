@@ -4,6 +4,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useApp } from '../app/context';
 import { ConstrainedInput } from '../components/ConstrainedInput';
+import { MessageInput } from '../components/MessageInput';
 import { checkout, OrderDialog } from '../components/OrderDialog';
 import { Avatar, Button, Empty, Menu } from '../components/ui';
 import { acceptAmountEdit, amountFen } from '../lib/amount';
@@ -36,8 +37,7 @@ export function Home() {
     [open, setOpen] = useState(() => innerWidth > 680),
     [height, setHeight] = useState(180);
   const requestKey = useRef(crypto.randomUUID());
-  const textarea = useRef<HTMLTextAreaElement>(null),
-    composer = useRef<HTMLElement>(null),
+  const composer = useRef<HTMLElement>(null),
     book = useRef<HTMLElement>(null),
     receipt = useRef<HTMLElement>(null);
   const reduced = useReducedMotion();
@@ -74,38 +74,6 @@ export function Home() {
     observer.observe(el);
     return () => observer.disconnect();
   }, [current?.id, current?.message, app.lang, mine]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: remeasure when rendered receipt content or textarea changes.
-  useLayoutEffect(() => {
-    const fitMessage = () => {
-      const input = textarea.current,
-        card = composer.current,
-        b = book.current;
-      if (!input || !card || !b) return;
-      const line = parseFloat(getComputedStyle(input).lineHeight);
-      const old = input.offsetHeight;
-      input.style.height = '0px';
-      const wanted = Math.max(line * 2 + 20, input.scrollHeight + line);
-      const base = card.offsetHeight - input.offsetHeight;
-      const cap =
-        innerWidth > 680
-          ? b.getBoundingClientRect().bottom - card.getBoundingClientRect().top - 7
-          : b.offsetHeight;
-      const maximum = Math.max(line * 2 + 20, cap - base);
-      input.style.height = `${old}px`;
-      requestAnimationFrame(() => {
-        input.style.height = `${Math.min(wanted, maximum)}px`;
-        input.style.overflowY = wanted > maximum ? 'auto' : 'hidden';
-      });
-    };
-    fitMessage();
-    const observer = new ResizeObserver(fitMessage);
-    if (book.current) observer.observe(book.current);
-    window.addEventListener('resize', fitMessage);
-    return () => {
-      observer.disconnect();
-      window.removeEventListener('resize', fitMessage);
-    };
-  }, [draft.message, height, open]);
   const pay = async () => {
     if (!profile) {
       app.setLoginOpen(true);
@@ -170,20 +138,13 @@ export function Home() {
           </button>
         ))}
       </div>
-      <div className="r-message-field">
-        <textarea
-          ref={textarea}
-          className="r-message"
-          aria-label={t('message')}
-          placeholder={t('message')}
-          rows={2}
-          value={draft.message}
-          onChange={(e) => {
-            const value = e.target.value;
-            if (Array.from(value).length <= 500) setDraft((v) => ({ ...v, message: value }));
-          }}
-        />
-      </div>
+      <MessageInput
+        value={draft.message}
+        label={t('message')}
+        onValue={(message) => setDraft((v) => ({ ...v, message }))}
+        composer={composer}
+        book={book}
+      />
       <div className="r-pay">
         <Button
           className="r-btn r-primary"
