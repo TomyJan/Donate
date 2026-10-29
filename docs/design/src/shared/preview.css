@@ -1,0 +1,13 @@
+/* Standalone reference canvas; product components are defined in shell.css. */
+:root { color-scheme:light dark; }
+* { box-sizing:border-box; }
+body { margin:0; padding:16px; background:light-dark(#ffffff,#181818); color:light-dark(#1a1c1f,#ffffff); font:400 14px/1.625 system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+h1,h2,h3,h4,h5,h6,p { margin-block:0; }
+h1 { line-height:1.3333333333; }
+h2 { line-height:1.4; }
+h3 { line-height:1.5555555556; }
+h1,h2,h3,h4,h5,h6,b,strong,th { font-weight:600; }
+a { text-decoration:none; font-weight:inherit; }
+button,input,textarea,select { font:inherit; }
+button { margin:0; }
+svg.lucide { display:block; width:var(--icon-size,16px)!important; height:var(--icon-size,16px)!important; flex:none; margin:0!important; stroke-width:1.6; }
