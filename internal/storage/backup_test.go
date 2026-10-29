@@ -7,6 +7,25 @@ import (
 	"testing"
 )
 
+func TestConsistentBackupsRetainSevenSnapshots(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	s, e := Open(ctx, filepath.Join(dir, "test.db"))
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer s.Close()
+	for range 9 {
+		if _, e = s.Backup(ctx, filepath.Join(dir, "snapshots")); e != nil {
+			t.Fatal(e)
+		}
+	}
+	paths, e := filepath.Glob(filepath.Join(dir, "snapshots", "donate-*.db"))
+	if e != nil || len(paths) != 7 {
+		t.Fatal(len(paths), e)
+	}
+}
+
 func TestRestoreValidatesSnapshotAndRevokesCredentials(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "donate.db")

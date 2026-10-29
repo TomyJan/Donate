@@ -11,7 +11,8 @@ internal/webassets/dist/*
 !internal/webassets/dist/.keep
 *.tsbuildinfo
 *.test
-coverage*
+coverage/
+coverage.out
 playwright-report/
 test-results/
 .env

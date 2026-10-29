@@ -1,15 +1,32 @@
 # Donate
 
-[donate.tomys.top](https://donate.tomys.top) 新版打赏站。界面与交互设计已定稿，当前仓库保存最终设计源码、可运行的前后台参考页面和实现规格；Go 业务服务尚未实现。
+[donate.tomys.top](https://donate.tomys.top) 新版打赏站。Go 单实例、SQLite 持久化，React 前端内嵌在同一个二进制中，按版本发布。
 
-新版采用单实例 Go + SQLite，前端构建产物由 `go:embed` 内嵌，按版本统一打包发布。支持 QQ / 自定义 OIDC 登录、账号绑定、易支付支付宝 / 微信、捐赠历史和管理后台。首页采用简洁的收据册布局，适配手机、深浅色及中英文。
+支持 QQ / 自定义 OIDC 登录与绑定、活跃会话续期、彩虹易支付支付宝 / 微信、通知校验和自动 / 手动补单、本人历史、订单 / 用户 / 审计管理、选择导出和物理删除。首页保留收据册设计，适配手机、深浅色和中英文。
 
 - [产品与实现约束](docs/requirements.md)
+- [后端架构与协议](docs/backend-design.md)
+- [部署、配置、备份恢复及发版](docs/operations.md)
+- [生成的 OpenAPI 契约](api/openapi.json)
+- [彩虹易支付接入方案](docs/payment-integration.md)
 - [最终界面、组件和交互规范](docs/design/README.md)
 - [IP 属地数据方案](docs/ip-geolocation.md)
 - [首页 HTML](docs/design/preview/index.html) / [后台 HTML](docs/design/preview/admin.html)
 
-运行最终设计参考页面（Python 3.10+，无需 npm 或 Go）：
+构建正式程序（工具版本见 `.node-version`、`go.mod`、`package.json`）：
+
+```sh
+pnpm install --frozen-lockfile
+pnpm check
+pnpm test
+pnpm build
+```
+
+输出在 `dist/`。参照 `.env.example` 将配置载入进程环境后运行二进制；程序不会自行读取 `.env`。部署只需二进制与持久化数据目录。真实 OAuth 应用和商户凭据由部署提供，上线前仍须完成实际渠道联调及 QQ 头像检查校准；普通测试使用独立上游，没有生产模拟登录或付款入口。旧数据暂未导入。
+
+主要代码在 `cmd/donate`、`internal/`、`web/src`，数据库迁移位于 `internal/storage/migrations`。执行 `pnpm generate` 更新 Go DTO 推导的 OpenAPI、TypeScript 类型与 sqlc 固定查询代码，`pnpm check:generated` 检查漂移；`pnpm test:e2e` 对已构建的真实二进制运行浏览器测试。CI 还检查 Go vet / race、依赖风险和 Linux / Windows 路径行为。
+
+冻结设计参考页面仍可独立运行（Python 3.10+）：
 
 ```sh
 python docs/design/serve.py
@@ -24,6 +41,6 @@ python docs/design/build.py
 python docs/design/build.py --check
 ```
 
-`master` 仅保存新版最终设计；旧站 PHP、运行说明与易支付逻辑参考在独立的 `legacy` 分支。正式前端框架及 Go 库将在实现阶段确定，不将本设计的原生 JavaScript 控制器当作生产业务架构。
+旧站 PHP、运行说明与易支付逻辑参考保留在独立的 `legacy` 分支。`docs/design` 是最终视觉基准，正式业务使用 React 共用组件与 Go 接口。
 
 项目许可证见 [LICENSE](LICENSE)，图标授权见 [第三方资源说明](docs/design/vendor/README.md)。
