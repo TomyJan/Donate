@@ -1,0 +1,3632 @@
+{
+  "components": {
+    "schemas": {
+      "Audit": {
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "actor": {
+            "type": "string"
+          },
+          "actor_id": {
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "target_id": {
+            "type": "string"
+          },
+          "target_type": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "action",
+          "actor",
+          "actor_id",
+          "created_at",
+          "id",
+          "result",
+          "target",
+          "target_id",
+          "target_type"
+        ],
+        "type": "object"
+      },
+      "AuditPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "properties": {
+                "action": {
+                  "type": "string"
+                },
+                "actor": {
+                  "type": "string"
+                },
+                "actor_id": {
+                  "type": "string"
+                },
+                "created_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "result": {
+                  "type": "string"
+                },
+                "target": {
+                  "type": "string"
+                },
+                "target_id": {
+                  "type": "string"
+                },
+                "target_type": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "action",
+                "actor",
+                "actor_id",
+                "created_at",
+                "id",
+                "result",
+                "target",
+                "target_id",
+                "target_type"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "page": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "page_size": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "type": "object"
+      },
+      "Checkout": {
+        "properties": {
+          "fields": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "mode",
+          "url"
+        ],
+        "type": "object"
+      },
+      "CreateOrderInput": {
+        "properties": {
+          "amount_fen": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "amount_fen",
+          "channel",
+          "idempotency_key",
+          "message"
+        ],
+        "type": "object"
+      },
+      "FlowStatus": {
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "return_to": {
+            "type": "string"
+          },
+          "stage": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "return_to",
+          "stage"
+        ],
+        "type": "object"
+      },
+      "IDInput": {
+        "properties": {
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "type": "object"
+      },
+      "Identity": {
+        "properties": {
+          "avatar_url": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "nickname": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "avatar_url",
+          "id",
+          "nickname",
+          "provider"
+        ],
+        "type": "object"
+      },
+      "Location": {
+        "properties": {
+          "accuracy_radius": {
+            "nullable": true,
+            "type": "number"
+          },
+          "asn": {
+            "type": "string"
+          },
+          "city": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          },
+          "district": {
+            "type": "string"
+          },
+          "isp": {
+            "type": "string"
+          },
+          "latitude": {
+            "nullable": true,
+            "type": "number"
+          },
+          "longitude": {
+            "nullable": true,
+            "type": "number"
+          },
+          "province": {
+            "type": "string"
+          },
+          "queried_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "street": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "asn",
+          "city",
+          "country",
+          "district",
+          "isp",
+          "province",
+          "queried_at",
+          "source",
+          "street",
+          "version"
+        ],
+        "type": "object"
+      },
+      "LoginInput": {
+        "properties": {
+          "provider": {
+            "type": "string"
+          },
+          "return_to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "provider",
+          "return_to"
+        ],
+        "type": "object"
+      },
+      "LoginStart": {
+        "properties": {
+          "authorization_url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "authorization_url"
+        ],
+        "type": "object"
+      },
+      "Metric": {
+        "properties": {
+          "count": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "label": {
+            "type": "string"
+          },
+          "paid_fen": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "count",
+          "label",
+          "paid_fen"
+        ],
+        "type": "object"
+      },
+      "Operation": {
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "confirmed": {
+            "type": "boolean"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "items": {
+            "items": {
+              "properties": {
+                "amount_fen": {
+                  "format": "int64",
+                  "type": "integer"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "job_id": {
+                  "type": "string"
+                },
+                "result": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "result"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "action",
+          "confirmed",
+          "expires_at",
+          "id",
+          "items"
+        ],
+        "type": "object"
+      },
+      "OperationInput": {
+        "properties": {
+          "operation_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "operation_id"
+        ],
+        "type": "object"
+      },
+      "Order": {
+        "properties": {
+          "amount_fen": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "api_trade_no": {
+            "type": "string"
+          },
+          "avatar_url": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "close_reason": {
+            "type": "string"
+          },
+          "closed_at": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "gateway_status": {
+            "type": "string"
+          },
+          "hidden_message": {
+            "type": "boolean"
+          },
+          "hidden_order": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "ip": {
+            "type": "string"
+          },
+          "jobs": {
+            "items": {
+              "properties": {
+                "attempts": {
+                  "format": "int64",
+                  "type": "integer"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "result": {
+                  "type": "string"
+                },
+                "run_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "attempts",
+                "id",
+                "kind",
+                "result",
+                "run_at",
+                "status"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "last_checked_at": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "location": {
+            "nullable": true,
+            "properties": {
+              "accuracy_radius": {
+                "nullable": true,
+                "type": "number"
+              },
+              "asn": {
+                "type": "string"
+              },
+              "city": {
+                "type": "string"
+              },
+              "country": {
+                "type": "string"
+              },
+              "district": {
+                "type": "string"
+              },
+              "isp": {
+                "type": "string"
+              },
+              "latitude": {
+                "nullable": true,
+                "type": "number"
+              },
+              "longitude": {
+                "nullable": true,
+                "type": "number"
+              },
+              "province": {
+                "type": "string"
+              },
+              "queried_at": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              },
+              "street": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "asn",
+              "city",
+              "country",
+              "district",
+              "isp",
+              "province",
+              "queried_at",
+              "source",
+              "street",
+              "version"
+            ],
+            "type": "object"
+          },
+          "merchant_order_no": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "nickname": {
+            "type": "string"
+          },
+          "paid_at": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "protocol": {
+            "type": "string"
+          },
+          "remote_close_status": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "trade_no": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "amount_fen",
+          "api_trade_no",
+          "avatar_url",
+          "channel",
+          "close_reason",
+          "created_at",
+          "expires_at",
+          "gateway_status",
+          "hidden_message",
+          "hidden_order",
+          "id",
+          "merchant_order_no",
+          "message",
+          "nickname",
+          "protocol",
+          "remote_close_status",
+          "status",
+          "trade_no",
+          "user_id"
+        ],
+        "type": "object"
+      },
+      "OrderBase": {
+        "properties": {
+          "amount_fen": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "api_trade_no": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "close_reason": {
+            "type": "string"
+          },
+          "closed_at": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "gateway_status": {
+            "type": "string"
+          },
+          "hidden_message": {
+            "type": "boolean"
+          },
+          "hidden_order": {
+            "type": "boolean"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_checked_at": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "merchant_order_no": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "paid_at": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "protocol": {
+            "type": "string"
+          },
+          "remote_close_status": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "trade_no": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "amount_fen",
+          "api_trade_no",
+          "channel",
+          "close_reason",
+          "created_at",
+          "expires_at",
+          "gateway_status",
+          "hidden_message",
+          "hidden_order",
+          "id",
+          "merchant_order_no",
+          "message",
+          "protocol",
+          "remote_close_status",
+          "status",
+          "trade_no",
+          "user_id"
+        ],
+        "type": "object"
+      },
+      "OrderPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "properties": {
+                "amount_fen": {
+                  "format": "int64",
+                  "type": "integer"
+                },
+                "api_trade_no": {
+                  "type": "string"
+                },
+                "avatar_url": {
+                  "type": "string"
+                },
+                "channel": {
+                  "type": "string"
+                },
+                "close_reason": {
+                  "type": "string"
+                },
+                "closed_at": {
+                  "format": "date-time",
+                  "nullable": true,
+                  "type": "string"
+                },
+                "created_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "expires_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "gateway_status": {
+                  "type": "string"
+                },
+                "hidden_message": {
+                  "type": "boolean"
+                },
+                "hidden_order": {
+                  "type": "boolean"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "last_checked_at": {
+                  "format": "date-time",
+                  "nullable": true,
+                  "type": "string"
+                },
+                "merchant_order_no": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "nickname": {
+                  "type": "string"
+                },
+                "paid_at": {
+                  "format": "date-time",
+                  "nullable": true,
+                  "type": "string"
+                },
+                "protocol": {
+                  "type": "string"
+                },
+                "remote_close_status": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "trade_no": {
+                  "type": "string"
+                },
+                "user_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "amount_fen",
+                "api_trade_no",
+                "avatar_url",
+                "channel",
+                "close_reason",
+                "created_at",
+                "expires_at",
+                "gateway_status",
+                "hidden_message",
+                "hidden_order",
+                "id",
+                "merchant_order_no",
+                "message",
+                "nickname",
+                "protocol",
+                "remote_close_status",
+                "status",
+                "trade_no",
+                "user_id"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "page": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "page_size": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "type": "object"
+      },
+      "Overview": {
+        "properties": {
+          "channels": {
+            "items": {
+              "properties": {
+                "count": {
+                  "format": "int64",
+                  "type": "integer"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "paid_fen": {
+                  "format": "int64",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "count",
+                "label",
+                "paid_fen"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "closed": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "daily": {
+            "items": {
+              "properties": {
+                "count": {
+                  "format": "int64",
+                  "type": "integer"
+                },
+                "label": {
+                  "type": "string"
+                },
+                "paid_fen": {
+                  "format": "int64",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "count",
+                "label",
+                "paid_fen"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "paid": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "paid_fen": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "pending": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "channels",
+          "closed",
+          "daily",
+          "paid",
+          "paid_fen",
+          "pending"
+        ],
+        "type": "object"
+      },
+      "PreviewInput": {
+        "properties": {
+          "action": {
+            "type": "string"
+          },
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "action",
+          "ids"
+        ],
+        "type": "object"
+      },
+      "Profile": {
+        "properties": {
+          "admin": {
+            "type": "boolean"
+          },
+          "avatar_url": {
+            "type": "string"
+          },
+          "bindings": {
+            "items": {
+              "properties": {
+                "avatar_url": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "nickname": {
+                  "type": "string"
+                },
+                "provider": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "avatar_url",
+                "id",
+                "nickname",
+                "provider"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "csrf_token": {
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "nickname": {
+            "type": "string"
+          },
+          "provider": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "admin",
+          "avatar_url",
+          "bindings",
+          "csrf_token",
+          "expires_at",
+          "id",
+          "nickname",
+          "provider"
+        ],
+        "type": "object"
+      },
+      "QQInput": {
+        "properties": {
+          "qq_number": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "qq_number"
+        ],
+        "type": "object"
+      },
+      "ReconcileInput": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "idempotency_key": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "idempotency_key"
+        ],
+        "type": "object"
+      },
+      "RecordItem": {
+        "properties": {
+          "amount_fen": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "avatar_url": {
+            "type": "string"
+          },
+          "date": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "nickname": {
+            "type": "string"
+          },
+          "province": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "amount_fen",
+          "avatar_url",
+          "date",
+          "id",
+          "message",
+          "nickname",
+          "province",
+          "status"
+        ],
+        "type": "object"
+      },
+      "Records": {
+        "properties": {
+          "items": {
+            "items": {
+              "properties": {
+                "amount_fen": {
+                  "format": "int64",
+                  "type": "integer"
+                },
+                "avatar_url": {
+                  "type": "string"
+                },
+                "date": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "nickname": {
+                  "type": "string"
+                },
+                "province": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "amount_fen",
+                "avatar_url",
+                "date",
+                "id",
+                "message",
+                "nickname",
+                "province",
+                "status"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "items",
+          "next_cursor"
+        ],
+        "type": "object"
+      },
+      "Site": {
+        "properties": {
+          "csrf_token": {
+            "type": "string"
+          },
+          "logo": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "payment_enabled": {
+            "type": "boolean"
+          },
+          "providers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "version": {
+            "$ref": "#/components/schemas/SiteVersion"
+          }
+        },
+        "required": [
+          "name",
+          "logo",
+          "version",
+          "providers",
+          "payment_enabled",
+          "csrf_token"
+        ],
+        "type": "object"
+      },
+      "SiteVersion": {
+        "properties": {
+          "built_at": {
+            "type": "string"
+          },
+          "commit": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "built_at",
+          "commit",
+          "tag",
+          "version"
+        ],
+        "type": "object"
+      },
+      "User": {
+        "properties": {
+          "admin": {
+            "type": "boolean"
+          },
+          "avatar_url": {
+            "type": "string"
+          },
+          "bindings": {
+            "items": {
+              "properties": {
+                "avatar_url": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "nickname": {
+                  "type": "string"
+                },
+                "provider": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "avatar_url",
+                "id",
+                "nickname",
+                "provider"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "last_login_at": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "nickname": {
+            "type": "string"
+          },
+          "order_count": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "paid_fen": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "admin",
+          "avatar_url",
+          "bindings",
+          "created_at",
+          "id",
+          "nickname",
+          "order_count",
+          "paid_fen",
+          "status"
+        ],
+        "type": "object"
+      },
+      "UserPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "properties": {
+                "admin": {
+                  "type": "boolean"
+                },
+                "avatar_url": {
+                  "type": "string"
+                },
+                "bindings": {
+                  "items": {
+                    "properties": {
+                      "avatar_url": {
+                        "type": "string"
+                      },
+                      "id": {
+                        "type": "string"
+                      },
+                      "nickname": {
+                        "type": "string"
+                      },
+                      "provider": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "avatar_url",
+                      "id",
+                      "nickname",
+                      "provider"
+                    ],
+                    "type": "object"
+                  },
+                  "type": "array"
+                },
+                "created_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "last_login_at": {
+                  "format": "date-time",
+                  "nullable": true,
+                  "type": "string"
+                },
+                "nickname": {
+                  "type": "string"
+                },
+                "order_count": {
+                  "format": "int64",
+                  "type": "integer"
+                },
+                "paid_fen": {
+                  "format": "int64",
+                  "type": "integer"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "admin",
+                "avatar_url",
+                "bindings",
+                "created_at",
+                "id",
+                "nickname",
+                "order_count",
+                "paid_fen",
+                "status"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "page": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "page_size": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "session": {
+        "in": "cookie",
+        "name": "__Host-donate_session",
+        "type": "apiKey"
+      }
+    }
+  },
+  "info": {
+    "description": "Same-origin semantic GET/POST API. Write requests require Origin and X-CSRF-Token. See docs/backend-design.md for permissions and business codes.",
+    "title": "Donate API",
+    "version": "1.0.0"
+  },
+  "openapi": "3.0.3",
+  "paths": {
+    "/api/v1/admin/audit/list": {
+      "get": {
+        "operationId": "admin_audit_list_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "channel",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "visibility",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "direction",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "action",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "user_id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "minimum",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "maximum",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/AuditPage"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "admin/audit/list"
+      }
+    },
+    "/api/v1/admin/operation/detail": {
+      "get": {
+        "operationId": "admin_operation_detail_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Operation"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "admin/operation/detail"
+      }
+    },
+    "/api/v1/admin/order/action/execute": {
+      "post": {
+        "operationId": "admin_order_action_execute_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Operation"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "admin/order/action/execute"
+      }
+    },
+    "/api/v1/admin/order/action/preview": {
+      "post": {
+        "operationId": "admin_order_action_preview_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PreviewInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Operation"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "admin/order/action/preview"
+      }
+    },
+    "/api/v1/admin/order/detail": {
+      "get": {
+        "operationId": "admin_order_detail_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Order"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "admin/order/detail"
+      }
+    },
+    "/api/v1/admin/order/export": {
+      "post": {
+        "operationId": "admin_order_export_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OperationInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              },
+              "text/csv": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "UTF-8 BOM CSV on success; JSON business error otherwise"
+          },
+          "401": {
+            "description": "Unauthenticated"
+          },
+          "403": {
+            "description": "Forbidden or invalid CSRF"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "Export only the confirmed selected-order operation"
+      }
+    },
+    "/api/v1/admin/order/list": {
+      "get": {
+        "operationId": "admin_order_list_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "channel",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "visibility",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "direction",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "action",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "user_id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "minimum",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "maximum",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/OrderPage"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "admin/order/list"
+      }
+    },
+    "/api/v1/admin/order/reconcile": {
+      "post": {
+        "operationId": "admin_order_reconcile_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReconcileInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "properties": {
+                        "job_id": {
+                          "format": "uuid",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "job_id"
+                      ],
+                      "type": "object"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "admin/order/reconcile"
+      }
+    },
+    "/api/v1/admin/overview": {
+      "get": {
+        "operationId": "admin_overview_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Overview"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "admin/overview"
+      }
+    },
+    "/api/v1/admin/user/ban": {
+      "post": {
+        "operationId": "admin_user_ban_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IDInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {},
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "admin/user/ban"
+      }
+    },
+    "/api/v1/admin/user/detail": {
+      "get": {
+        "operationId": "admin_user_detail_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/User"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "admin/user/detail"
+      }
+    },
+    "/api/v1/admin/user/list": {
+      "get": {
+        "operationId": "admin_user_list_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "channel",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "visibility",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "direction",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "action",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "user_id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "minimum",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "maximum",
+            "required": false,
+            "schema": {
+              "minimum": 0,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/UserPage"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "admin/user/list"
+      }
+    },
+    "/api/v1/admin/user/unban": {
+      "post": {
+        "operationId": "admin_user_unban_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IDInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {},
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "admin/user/unban"
+      }
+    },
+    "/api/v1/order/create": {
+      "post": {
+        "operationId": "order_create_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateOrderInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/OrderBase"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "order/create"
+      }
+    },
+    "/api/v1/order/detail": {
+      "get": {
+        "operationId": "order_detail_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Order"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "order/detail"
+      }
+    },
+    "/api/v1/order/list": {
+      "get": {
+        "operationId": "order_list_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "only_mine",
+            "required": false,
+            "schema": {
+              "default": false,
+              "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Records"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "summary": "order/list"
+      }
+    },
+    "/api/v1/order/payment/start": {
+      "post": {
+        "operationId": "order_payment_start_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IDInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Checkout"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "order/payment/start"
+      }
+    },
+    "/api/v1/payment/notify": {
+      "get": {
+        "operationId": "payment_notify_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "pid",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "out_trade_no",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "trade_no",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "api_trade_no",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "money",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "trade_status",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sign",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sign_type",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timestamp",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "success or fail"
+          },
+          "500": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Persistence failed; gateway must retry"
+          }
+        },
+        "summary": "Signed EPay notification; ACK only after commit"
+      },
+      "post": {
+        "operationId": "payment_notify_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "properties": {
+                  "api_trade_no": {
+                    "type": "string"
+                  },
+                  "money": {
+                    "type": "string"
+                  },
+                  "out_trade_no": {
+                    "type": "string"
+                  },
+                  "pid": {
+                    "type": "string"
+                  },
+                  "sign": {
+                    "type": "string"
+                  },
+                  "sign_type": {
+                    "type": "string"
+                  },
+                  "timestamp": {
+                    "type": "string"
+                  },
+                  "trade_no": {
+                    "type": "string"
+                  },
+                  "trade_status": {
+                    "type": "string"
+                  },
+                  "type": {
+                    "type": "string"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "success or fail"
+          },
+          "500": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
+            "description": "Persistence failed"
+          }
+        },
+        "summary": "Signed EPay form notification; no CSRF header"
+      }
+    },
+    "/api/v1/payment/return": {
+      "get": {
+        "operationId": "payment_return_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "pid",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "out_trade_no",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "trade_no",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "api_trade_no",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "type",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "money",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "trade_status",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sign",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sign_type",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "timestamp",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "303": {
+            "description": "Redirect to a fixed same-origin page",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "summary": "Browser return wakes verification; never proves payment"
+      }
+    },
+    "/api/v1/site/info": {
+      "get": {
+        "operationId": "site_info_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Site"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "summary": "site/info"
+      }
+    },
+    "/api/v1/user/identity/bind": {
+      "post": {
+        "operationId": "user_identity_bind_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/LoginStart"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "user/identity/bind"
+      }
+    },
+    "/api/v1/user/login": {
+      "post": {
+        "operationId": "user_login_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/LoginStart"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "summary": "user/login"
+      }
+    },
+    "/api/v1/user/login/qq/complete": {
+      "post": {
+        "operationId": "user_login_qq_complete_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QQInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "properties": {
+                        "return_to": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "return_to"
+                      ],
+                      "type": "object"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "summary": "user/login/qq/complete"
+      }
+    },
+    "/api/v1/user/login/status": {
+      "get": {
+        "operationId": "user_login_status_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/FlowStatus"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "summary": "user/login/status"
+      }
+    },
+    "/api/v1/user/logout": {
+      "post": {
+        "operationId": "user_logout_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {},
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "user/logout"
+      }
+    },
+    "/api/v1/user/oauth/callback/{provider}": {
+      "get": {
+        "operationId": "user_oauth_callback_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "enum": [
+                "qq",
+                "oidc"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "code",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "error",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Invalid callback parameters"
+          },
+          "303": {
+            "description": "Redirect to a fixed same-origin page",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        },
+        "summary": "OAuth callback with browser-bound flow cookie"
+      }
+    },
+    "/api/v1/user/profile": {
+      "get": {
+        "operationId": "user_profile_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/Profile"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "user/profile"
+      }
+    },
+    "/api/v1/user/session/renew": {
+      "post": {
+        "operationId": "user_session_renew_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {},
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "user/session/renew"
+      }
+    },
+    "/health/live": {
+      "get": {
+        "operationId": "health_live",
+        "responses": {
+          "200": {
+            "description": "Healthy JSON envelope"
+          },
+          "503": {
+            "description": "Not ready"
+          }
+        }
+      }
+    },
+    "/health/ready": {
+      "get": {
+        "operationId": "health_ready",
+        "responses": {
+          "200": {
+            "description": "Healthy JSON envelope"
+          },
+          "503": {
+            "description": "Not ready"
+          }
+        }
+      }
+    }
+  }
+}
