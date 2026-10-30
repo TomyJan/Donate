@@ -180,7 +180,7 @@ POST 创建、管理执行与手动补单接受幂等键：绑定调用者、动
 
 ## 6. 属地、日志与审计
 
-IP 取可信连接链，部署只在明确配置 `TRUSTED_PROXY_CIDRS` 时接受转发头，从可信代理向客户端解析，拒绝混淆地址。只保存下单 IP，通知来源不能覆盖它。归一化 IPv4 / IPv6；私网等地址不发往在线服务。
+IP 默认取连接地址；配置 `REAL_IP_HEADER` 后只读取指定请求头，合法的逗号分隔 IP 列表取首项。反代必须覆盖该头并限制源站直连。缺失、重复、格式异常或超长链均回退连接 IP；地址归一化为 IPv4 / IPv6。只保存下单 IP，通知来源不能覆盖它；私网等地址不发往在线服务。
 
 属地使用独立任务和 worker，不阻塞支付，队列、缓存、故障转移按 [IP 属地方案](ip-geolocation.md)。默认先实现既定免密钥在线适配链，同时隔离本地 reader 接口；部署选择本地模式后无需在线发送 IP，数据包和授权另行确定。后台返回实际可用细字段；公开 DTO 最多省级，不能通过传 `fields` 获得后台信息。
 
@@ -212,7 +212,7 @@ ERROR 订单 {order_id} 的通知 {request_id} 金额不符：本地 {expected_f
 
 环境变量按用途分组并在启动一次性验证，文档和 `.env.example` 只给占位值：
 
-- HTTP / 数据：`LISTEN_ADDR`、`PUBLIC_URL`、`DATA_DIR`、`TRUSTED_PROXY_CIDRS`。
+- HTTP / 数据：`LISTEN_ADDR`、`PUBLIC_URL`、`DATA_DIR`、`REAL_IP_HEADER`。
 - 权限 / 认证：`ADMIN_USER_IDS`、短期流程加密密钥、OIDC issuer / client ID / secret、QQ app ID / secret。
 - 支付：固定网关 URL、商户 ID、`EPAY_PROTOCOL=v2|v1`、V2 商户私钥 / 平台公钥或 V1 key、允许的跳转域名与限流值；不能用一个布尔值谎报关单能力。
 - 属地 / 日志：在线或本地模式、本地库路径、可选在线补充、日志等级 / 目录。固定业务规则不堆成环境变量。

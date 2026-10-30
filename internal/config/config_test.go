@@ -26,6 +26,39 @@ func TestLoadDefaultsToWorkingDirectory(t *testing.T) {
 	}
 }
 
+func TestRealIPHeaderConfiguration(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("PUBLIC_URL", "http://127.0.0.1:8080")
+	for _, tc := range []struct {
+		value, want string
+		invalid     bool
+	}{
+		{"", "", false},
+		{"x-real-ip", "X-Real-Ip", false},
+		{"X-Forwarded-For", "X-Forwarded-For", false},
+		{"CF-Connecting-IP", "Cf-Connecting-Ip", false},
+		{"X Real IP", "", true},
+		{"X-Real-IP,X-Forwarded-For", "", true},
+		{"X-Real-IP: value", "", true},
+		{"X-Real-IP\r\nInjected", "", true},
+	} {
+		t.Run(tc.value, func(t *testing.T) {
+			t.Setenv("REAL_IP_HEADER", tc.value)
+			c, err := Load()
+			if tc.invalid {
+				if err == nil || !strings.Contains(err.Error(), "REAL_IP_HEADER") {
+					t.Fatalf("expected a header-name error, got %v", err)
+				}
+				return
+			}
+			if err != nil || c.RealIPHeader != tc.want {
+				t.Fatalf("header = %q, error = %v, want %q", c.RealIPHeader, err, tc.want)
+			}
+		})
+	}
+}
+
 func TestLoadReadsWorkingDirectoryEnvWithoutOverridingProcess(t *testing.T) {
 	t.Chdir(t.TempDir())
 	for _, key := range []string{"APP_ENV", "PUBLIC_URL", "DATA_DIR", "OIDC_NAME"} {

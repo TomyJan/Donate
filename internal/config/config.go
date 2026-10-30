@@ -5,7 +5,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"net/netip"
+	"net/http"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -22,7 +22,7 @@ type Config struct {
 	Listen, PublicURL, DataDir, LogLevel                                   string
 	Secret                                                                 []byte
 	AdminIDs                                                               map[string]bool
-	TrustedProxies                                                         []netip.Prefix
+	RealIPHeader                                                           string
 	OIDCissuer, OIDCclientID, OIDCsecret                                   string
 	OIDCid, OIDCname, OIDCiconURL                                          string
 	QQappID, QQsecret                                                      string
@@ -83,14 +83,12 @@ func Load() (Config, error) {
 			c.AdminIDs[id.String()] = true
 		}
 	}
-	for _, s := range strings.Split(os.Getenv("TRUSTED_PROXY_CIDRS"), ",") {
-		if s = strings.TrimSpace(s); s != "" {
-			p, e := netip.ParsePrefix(s)
-			if e != nil {
-				return c, fmt.Errorf("TRUSTED_PROXY_CIDRS 无效: %w", e)
-			}
-			c.TrustedProxies = append(c.TrustedProxies, p)
+	c.RealIPHeader = os.Getenv("REAL_IP_HEADER")
+	if c.RealIPHeader != "" {
+		if !regexp.MustCompile("^[!#$%&'*+.^_`|~0-9A-Za-z-]+$").MatchString(c.RealIPHeader) {
+			return c, errors.New("REAL_IP_HEADER 必须为单个有效的 HTTP 请求头名称")
 		}
+		c.RealIPHeader = http.CanonicalHeaderKey(c.RealIPHeader)
 	}
 	if s := os.Getenv("APP_SECRET"); s != "" {
 		c.Secret, err = base64.StdEncoding.DecodeString(s)

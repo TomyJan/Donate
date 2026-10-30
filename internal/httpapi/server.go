@@ -305,6 +305,28 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 	})
 }
 func (s *Server) clientIP(r *http.Request) string {
+	if s.Config.RealIPHeader != "" {
+		values := r.Header.Values(s.Config.RealIPHeader)
+		if len(values) == 1 {
+			chain := strings.SplitN(values[0], ",", 33)
+			if len(chain) <= 32 {
+				var first netip.Addr
+				for _, value := range chain {
+					forwarded, err := netip.ParseAddr(strings.TrimSpace(value))
+					if err != nil || forwarded.Zone() != "" {
+						first = netip.Addr{}
+						break
+					}
+					if !first.IsValid() {
+						first = forwarded.Unmap()
+					}
+				}
+				if first.IsValid() {
+					return first.String()
+				}
+			}
+		}
+	}
 	a, e := netip.ParseAddrPort(r.RemoteAddr)
 	var ip netip.Addr
 	if e == nil {
@@ -312,29 +334,6 @@ func (s *Server) clientIP(r *http.Request) string {
 	} else {
 		ip, _ = netip.ParseAddr(r.RemoteAddr)
 		ip = ip.Unmap()
-	}
-	trusted := func(a netip.Addr) bool {
-		for _, p := range s.Config.TrustedProxies {
-			if p.Contains(a) {
-				return true
-			}
-		}
-		return false
-	}
-	if trusted(ip) {
-		chain := strings.Split(r.Header.Get("X-Forwarded-For"), ",")
-		if len(chain) <= 32 {
-			for i := len(chain) - 1; i >= 0; i-- {
-				if !trusted(ip) {
-					break
-				}
-				next, e := netip.ParseAddr(strings.TrimSpace(chain[i]))
-				if e != nil {
-					break
-				}
-				ip = next.Unmap()
-			}
-		}
 	}
 	if !ip.IsValid() {
 		return "0.0.0.0"

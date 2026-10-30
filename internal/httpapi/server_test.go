@@ -163,12 +163,51 @@ func TestAuthenticationBusinessCodesAndStaticBoundary(t *testing.T) {
 		t.Fatal("home route", w.Code, w.Body.String())
 	}
 }
-func TestForwardedIPOnlyThroughTrustedChain(t *testing.T) {
-	s, _, _ := setup(t)
+func TestClientIPUsesOnlyConfiguredHeader(t *testing.T) {
+	for _, tc := range []struct {
+		name, header, value, remote, want string
+	}{
+		{"unconfigured", "", "", "198.51.100.2:1234", "198.51.100.2"},
+		{"custom header", "X-Client-IP", "203.0.113.7", "198.51.100.2:1234", "203.0.113.7"},
+		{"real ip", "X-Real-IP", "203.0.113.8", "198.51.100.2:1234", "203.0.113.8"},
+		{"ipv6", "X-Real-IP", "2001:db8::7", "198.51.100.2:1234", "2001:db8::7"},
+		{"mapped ipv4", "X-Real-IP", "::ffff:203.0.113.7", "198.51.100.2:1234", "203.0.113.7"},
+		{"forwarded chain", "X-Forwarded-For", "203.0.113.7, 192.0.2.3", "198.51.100.2:1234", "203.0.113.7"},
+		{"spaces", "X-Real-IP", " 203.0.113.7 ", "198.51.100.2:1234", "203.0.113.7"},
+		{"missing", "X-Client-IP", "", "198.51.100.2:1234", "198.51.100.2"},
+		{"invalid", "X-Real-IP", "not-an-ip", "198.51.100.2:1234", "198.51.100.2"},
+		{"empty first hop", "X-Forwarded-For", ", 203.0.113.7", "198.51.100.2:1234", "198.51.100.2"},
+		{"invalid chain", "X-Forwarded-For", "203.0.113.7, unknown", "198.51.100.2:1234", "198.51.100.2"},
+		{"overlong chain", "X-Forwarded-For", strings.Repeat("203.0.113.7,", 32) + "192.0.2.3", "198.51.100.2:1234", "198.51.100.2"},
+		{"zone", "X-Real-IP", "fe80::1%eth0", "198.51.100.2:1234", "198.51.100.2"},
+		{"port", "X-Real-IP", "203.0.113.7:1234", "198.51.100.2:1234", "198.51.100.2"},
+		{"remote ipv6", "", "", "[2001:db8::2]:1234", "2001:db8::2"},
+		{"bare remote", "", "", "198.51.100.2", "198.51.100.2"},
+		{"invalid remote", "", "", "invalid", "0.0.0.0"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := &Server{Config: config.Config{RealIPHeader: tc.header}}
+			r := httptest.NewRequest("GET", "/", nil)
+			r.RemoteAddr = tc.remote
+			r.Header.Set("X-Forwarded-For", "1.1.1.1")
+			r.Header.Set("X-Real-IP", "1.1.1.2")
+			if tc.header != "" {
+				r.Header.Set(tc.header, tc.value)
+			}
+			if got := s.clientIP(r); got != tc.want {
+				t.Fatalf("IP = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestClientIPRejectsDuplicateHeaders(t *testing.T) {
+	s := &Server{Config: config.Config{RealIPHeader: "X-Real-IP"}}
 	r := httptest.NewRequest("GET", "/", nil)
 	r.RemoteAddr = "198.51.100.2:1234"
-	r.Header.Set("X-Forwarded-For", "1.1.1.1")
-	if s.clientIP(r) != "198.51.100.2" {
-		t.Fatal("spoofed header accepted")
+	r.Header.Add("X-Real-IP", "203.0.113.7")
+	r.Header.Add("X-Real-IP", "203.0.113.8")
+	if got := s.clientIP(r); got != "198.51.100.2" {
+		t.Fatalf("ambiguous header accepted: %q", got)
 	}
 }

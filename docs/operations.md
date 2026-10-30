@@ -2,14 +2,14 @@
 
 ## 启动
 
-下载二进制，将 `.env.example` 复制为当前目录的 `.env`。填写 `PUBLIC_URL`、`APP_SECRET`，按需配置登录和支付后运行 `./donate`（Windows：`donate.exe`）。
+下载 Linux amd64 二进制，将 `.env.example` 复制为当前目录的 `.env`。填写 `PUBLIC_URL`、`APP_SECRET`，按需配置登录和支付后运行 `./donate`。
 
 `APP_SECRET` 使用 `openssl rand -base64 32` 生成，部署后保持不变。完整配置见 [`.env.example`](../.env.example)。
 
 - 自动读取当前工作目录的 `.env`，进程环境变量优先；修改配置后重启。
 - 默认生成 `donate.db`、`donate.log`、`donate.lock` 和 `backups/`；可用 `DATA_DIR` 修改保存位置，相对路径以工作目录为准。
 - 默认监听 `127.0.0.1:8080`，单实例运行。旧部署更换数据位置前先停服、备份并迁移数据，或继续设置原 `DATA_DIR`。
-- 使用 HTTPS 反代，`PUBLIC_URL` 填对外站点地址；`TRUSTED_PROXY_CIDRS` 只填实际反代来源。API、登录和支付回调不缓存，运行目录不要作为静态站点根目录。
+- 使用 HTTPS 反代，`PUBLIC_URL` 填对外站点地址。`REAL_IP_HEADER` 可填 `X-Real-IP` 等请求头，逗号分隔的 IP 取首项；反代须覆盖该头并限制源站直连。留空使用连接 IP。API、登录和支付回调不缓存，运行目录不要作为静态站点根目录。
 - 首次登录后，从账号信息复制 ID，填入 `ADMIN_USER_IDS` 并重启即可获得管理权限。
 - 健康检查：`GET /health/live`、`GET /health/ready`。
 
