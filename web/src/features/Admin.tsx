@@ -14,11 +14,13 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import { motion, useReducedMotion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useApp } from '../app/context';
 import { AccessState } from '../components/AccessState';
 import { AdminHeading } from '../components/AdminHeading';
+import { AdminLoading } from '../components/AdminLoading';
 import { AdminOrderFilters } from '../components/AdminOrderFilters';
 import { AdminTable } from '../components/AdminTable';
 import { AnimatedHeight } from '../components/AnimatedHeight';
@@ -38,6 +40,7 @@ export function Admin() {
   const app = useApp(),
     { t, profile, report } = app;
   const client = useQueryClient();
+  const reduced = useReducedMotion();
   const operationEpoch = useRef(0);
   const [tab, setTab] = useState<Tab>('overview'),
     [search, setSearch] = useState(''),
@@ -111,6 +114,7 @@ export function Admin() {
     setSelection(new Set());
   }, [search, status, channel, visibility, from, to, minimum, maximum, action, pageSize, userFilter]);
   const navigate = (next: Tab) => {
+    if (next === tab) return;
     closeOperation();
     setTab(next);
     setSearch('');
@@ -168,12 +172,7 @@ export function Admin() {
     ['', t(tab === 'users' ? 'allUsers' : 'allStatus')],
     ...(tab === 'users' ? ['active', 'banned'] : ['paid', 'pending', 'closed']).map((k) => [k, t(k)]),
   ] as [string, string][];
-  if (app.loading)
-    return (
-      <main className="a-main">
-        <Empty text={t('loading')} />
-      </main>
-    );
+  if (app.loading) return <AdminLoading shell />;
   if (!profile?.admin) return <AccessState signedIn={!!profile} onLogin={() => app.setLoginOpen(true)} />;
   return (
     <div className="a-layout">
@@ -188,12 +187,20 @@ export function Admin() {
         ).map(([key, Icon]) => (
           <Button
             key={key}
-            className="a-btn a-ghost"
+            className="a-btn a-ghost a-nav-item"
             aria-current={tab === key ? 'page' : undefined}
             onClick={() => navigate(key)}
           >
+            {tab === key && (
+              <motion.span
+                className="a-tab-indicator"
+                aria-hidden="true"
+                layoutId={reduced ? undefined : 'admin-current-tab'}
+                transition={{ type: 'spring', stiffness: 420, damping: 38 }}
+              />
+            )}
             <Icon />
-            {t(key)}
+            <span className="a-nav-label">{t(key)}</span>
           </Button>
         ))}
         <Link className="d-btn d-ghost a-btn" to="/">
@@ -201,7 +208,7 @@ export function Admin() {
           {t('home')}
         </Link>
       </nav>
-      <main className="a-main">
+      <main key={tab} className="a-main">
         {tab !== 'overview' && (
           <AdminHeading title={t(tab)}>
             {tab === 'orders' && selection.size > 0 && (
@@ -306,7 +313,7 @@ export function Admin() {
               </div>
             )}
             {list.isLoading ? (
-              <Empty text={t('loading')} />
+              <AdminLoading kind="table" />
             ) : list.error ? (
               <Empty text={t('error')} />
             ) : !rows.length ? (
@@ -460,14 +467,16 @@ function OverviewSection({
         </Button>
       </AdminHeading>
       <section className="overview-panel" aria-busy={overview.isFetching}>
-        {overview.isFetching && (
+        {overview.isFetching && displayed && (
           <div className="overview-progress" role="progressbar" aria-label={t('loading')} />
         )}
         <AnimatedHeight>
           {displayed ? (
             <OverviewPanel data={displayed} />
+          ) : overview.error ? (
+            <Empty text={t('unavailable')} />
           ) : (
-            <Empty text={t(overview.error ? 'unavailable' : 'loading')} />
+            <AdminLoading />
           )}
         </AnimatedHeight>
       </section>

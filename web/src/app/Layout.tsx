@@ -2,6 +2,7 @@ import { Check, Languages, LogOut, Monitor, Moon, Settings, Sun, UserRound, X } 
 import { AnimatePresence, motion } from 'motion/react';
 import { Suspense, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router';
+import { AdminLoading } from '../components/AdminLoading';
 import { IdentityBindings } from '../components/IdentityBindings';
 import { BackToTop, ScrollHeader } from '../components/ScrollChrome';
 import type { MenuItem } from '../components/ui';
@@ -121,7 +122,7 @@ export function Layout() {
             )}
           </nav>
         </ScrollHeader>
-        <Suspense fallback={<main className="a-main">{t('loading')}</main>}>
+        <Suspense fallback={<AdminLoading shell />}>
           <Outlet />
         </Suspense>
         <footer className="d-footer" data-component="site-footer">

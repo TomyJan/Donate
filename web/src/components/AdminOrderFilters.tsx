@@ -158,7 +158,7 @@ export function AdminOrderFilters({
             </div>
           ))}
           {(['from', 'to'] as const).map((key) => (
-            <div className="a-field" key={key}>
+            <div className="a-field a-field-date" key={key}>
               <span>{t(key)}</span>
               <DateTimeField
                 value={draft[key]}

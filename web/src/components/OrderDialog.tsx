@@ -5,6 +5,7 @@ import { useApp } from '../app/context';
 import { api, dateTime, downloadExport, money, query } from '../lib/api';
 import type { Operation, Order } from '../lib/types';
 import { ActionConfirm } from './ActionConfirm';
+import { AdminLoading } from './AdminLoading';
 import { CopyButton } from './CopyButton';
 import { Avatar, Button, Modal } from './ui';
 import './OrderDialog.css';
@@ -192,7 +193,7 @@ export function OrderDialog({
   return (
     <Modal open={!!id} onOpenChange={(v) => !v && onClose()} title={t('details')} wide>
       {detail.isLoading ? (
-        <p>{t('loading')}</p>
+        <AdminLoading kind="detail" />
       ) : detail.error ? (
         <p role="alert">
           {t('error')} <Button onClick={() => void detail.refetch()}>{t('retry')}</Button>

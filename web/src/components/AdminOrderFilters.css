@@ -13,12 +13,18 @@
   flex-direction: column;
   gap: 6px;
   flex: 1 1 160px;
-  min-width: 0;
-  max-width: 220px;
+  min-width: min(100%, 160px);
+}
+#donate-admin .a-order-filters .a-field-date {
+  flex-basis: 240px;
+  min-width: min(100%, 240px);
 }
 #donate-admin .a-order-filters .a-field > span {
   font-size: 12px;
   color: var(--d-muted);
+}
+#donate-admin .a-order-filters .a-field-date > .d-btn > span {
+  white-space: nowrap;
 }
 #donate-admin .a-order-filters .a-field > :is(.d-btn, .a-input) {
   width: 100%;
@@ -33,10 +39,10 @@
   gap: 14px;
   flex: 2 1 334px;
   min-width: min(100%, 334px);
-  max-width: 454px;
 }
 #donate-admin .a-order-filters .a-filter-pair .a-field {
   flex-basis: 0;
+  min-width: 0;
 }
 #donate-admin .a-order-filters .a-filter-bottom {
   flex-basis: 100%;

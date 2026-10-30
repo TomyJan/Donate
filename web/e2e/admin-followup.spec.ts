@@ -390,3 +390,104 @@ test('user details show registration, donation amount and binding times with man
   await expect(dialog.locator('.d-bind-time time')).toHaveCount(1);
   await expect(dialog.getByRole('button', { name: '解绑 OIDC', exact: true })).toBeDisabled();
 });
+
+test('admin navigation animates content and selection without resetting the active page', async ({
+  page,
+}) => {
+  await admin(page);
+  await page.evaluate(() => {
+    document.documentElement.dataset.adminEntrance = 'pending';
+    document.addEventListener('animationstart', (event) => {
+      if (!(event.target instanceof HTMLElement) || !event.target.matches('.a-main')) return;
+      const moving = event.target
+        .getAnimations()
+        .some((animation) =>
+          (animation.effect as KeyframeEffect)
+            .getKeyframes()
+            .some((frame) => frame.transform && frame.transform !== 'none'),
+        );
+      document.documentElement.dataset.adminEntrance = moving ? 'moving' : 'static';
+    });
+  });
+  const previous = await page.locator('.a-main').elementHandle();
+  const ordersTab = page.locator('.a-side').getByRole('button', { name: '订单', exact: true });
+  await ordersTab.click();
+  expect(await previous?.evaluate((element) => element.isConnected)).toBe(false);
+  const main = await page.locator('.a-main').elementHandle();
+  await expect(page.locator('html')).toHaveAttribute('data-admin-entrance', 'moving');
+  await expect(ordersTab.locator('.a-tab-indicator')).toBeVisible();
+  const search = page.getByRole('textbox', { name: '昵称 / 订单 ID / 用户 ID', exact: true });
+  await search.fill('保留筛选');
+  await ordersTab.click();
+  await expect(search).toHaveValue('保留筛选');
+  expect(await main?.evaluate((element) => element.isConnected)).toBe(true);
+  await ordersTab.focus();
+  await page.keyboard.press('Tab');
+  await page.keyboard.press('Shift+Tab');
+  await expect(ordersTab).toBeFocused();
+  await expect(ordersTab).toHaveCSS('outline-style', 'solid');
+  const box = await ordersTab.boundingBox();
+  if (!box) throw new Error('Missing navigation button');
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  try {
+    await expect
+      .poll(() => ordersTab.evaluate((button) => new DOMMatrix(getComputedStyle(button).transform).a))
+      .toBeLessThan(0.99);
+  } finally {
+    await page.mouse.up();
+  }
+});
+
+test('reduced motion suppresses admin entrance and navigation movement', async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await admin(page);
+  for (const label of ['订单', '用户', '审计', '概览']) {
+    await page.locator('.a-side').getByRole('button', { name: label, exact: true }).click();
+    await expect(page.locator('.a-main h1')).toHaveText(label);
+    expect(await page.locator('.a-main').evaluate((element) => element.getAnimations().length)).toBe(0);
+  }
+});
+
+test('order and user dialogs keep a responsive skeleton while details are loading', async ({ page }) => {
+  await admin(page);
+  for (const kind of ['order', 'user'] as const) {
+    let release = () => {};
+    const pending = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route(`**/api/v1/admin/${kind}/detail?**`, async (route) => {
+      await pending;
+      await route.fulfill({ json: { code: 'OK', data: kind === 'order' ? orders[0] : users[0] } });
+    });
+    await page
+      .locator('.a-side')
+      .getByRole('button', { name: kind === 'order' ? '订单' : '用户', exact: true })
+      .click();
+    await page
+      .getByRole('button', { name: kind === 'order' ? /^订单详情 / : /^用户详情 / })
+      .first()
+      .click();
+    const dialog = page.getByRole('dialog', {
+      name: kind === 'order' ? '订单详情' : '用户详情',
+      exact: true,
+    });
+    try {
+      const loading = dialog.getByRole('status', { name: '加载中', exact: true });
+      await expect(loading.locator('.admin-loading-detail')).toBeVisible();
+      for (const width of [320, 1280]) {
+        await page.setViewportSize({ width, height: 900 });
+        expect(await dialog.evaluate((element) => element.scrollWidth > element.clientWidth + 1)).toBe(false);
+      }
+      release();
+      await expect(loading).toHaveCount(0);
+      await expect(
+        dialog.getByText(kind === 'order' ? orders[0].nickname : users[0].nickname, { exact: true }),
+      ).toBeVisible();
+    } finally {
+      release();
+    }
+    await dialog.getByRole('button', { name: '关闭', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+  }
+});

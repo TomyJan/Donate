@@ -24,13 +24,8 @@
   background: var(--d-soft);
   color: var(--d-accent);
 }
-.d-app .access-context {
-  margin: 0;
-  color: var(--d-muted);
-  font-size: 12px;
-}
 .d-app .access-card h1 {
-  margin: 8px 0 10px;
+  margin: 0 0 10px;
   font-size: 24px;
   font-weight: 500;
   line-height: 1.35;

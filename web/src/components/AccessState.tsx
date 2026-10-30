@@ -23,7 +23,6 @@ export function AccessState({ signedIn, onLogin }: { signedIn: boolean; onLogin:
         <span className="access-symbol" aria-hidden="true">
           <Icon />
         </span>
-        <p className="access-context">{t('admin')}</p>
         <h1 id={title}>{t(signedIn ? 'forbidden' : 'unauthorized')}</h1>
         <p className="access-hint">{t(signedIn ? 'adminDeniedHint' : 'adminSignInHint')}</p>
         <div className="access-actions">

@@ -55,7 +55,7 @@ async function openOrders(page: Page, lang: 'en' | 'zh-CN' = 'en', theme = 'ligh
 
 for (const lang of ['en', 'zh-CN'] as const)
   for (const theme of ['light', 'dark']) {
-    test(`${lang} ${theme}: maximum and visibility stay aligned with capped fields`, async ({
+    test(`${lang} ${theme}: filters fill each row while maximum and visibility stay aligned`, async ({
       page,
     }, info) => {
       await page.setViewportSize({ width: 1280, height: 900 });
@@ -80,10 +80,18 @@ for (const lang of ['en', 'zh-CN'] as const)
         const max = await maximum.boundingBox(),
           visible = await visibility.boundingBox();
         expect(max?.height).toBe(visible?.height);
-        const fields = await page
-          .locator('.a-filters .a-field')
-          .evaluateAll((elements) => elements.map((element) => element.getBoundingClientRect().width));
-        expect(Math.max(...fields)).toBeLessThanOrEqual(220);
+        const trailingGaps = await page.locator('.a-filters').evaluate((panel) => {
+          const right =
+            panel.getBoundingClientRect().right - Number.parseFloat(getComputedStyle(panel).paddingRight);
+          const rows = new Map<number, number>();
+          for (const field of panel.querySelectorAll('.a-field')) {
+            const box = field.getBoundingClientRect();
+            const y = Math.round(box.top);
+            rows.set(y, Math.max(rows.get(y) ?? 0, box.right));
+          }
+          return [...rows.values()].map((edge) => right - edge);
+        });
+        expect(Math.max(...trailingGaps)).toBeLessThan(2);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
           true,
         );
@@ -155,6 +163,24 @@ test('calendar title controls share the arrow row and preserve Shanghai time thr
   await expect(from).toContainText('2/28/2025 23:47');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.getByRole('button', { name: 'Confirm', exact: true }).click();
+  for (const width of [1920, 1512, 1280, 1080, 900, 768, 680, 640, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(from).toBeVisible();
+    const fit = await from.evaluate((button) => {
+      const text = button.querySelector('span');
+      const field = button.closest('.a-field-date');
+      return {
+        width: field?.getBoundingClientRect().width ?? 0,
+        panelWidth: field?.parentElement?.clientWidth ?? 0,
+        textFits: !!text && text.scrollWidth <= text.clientWidth + 1,
+        singleLine: !!text && text.getBoundingClientRect().height < 30,
+      };
+    });
+    expect(fit.width).toBeGreaterThanOrEqual(Math.min(240, fit.panelWidth - 28));
+    expect(fit.textFits).toBe(true);
+    expect(fit.singleLine).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
   await page.getByRole('button', { name: 'Apply', exact: true }).click();
   await expect.poll(() => requests.at(-1)?.searchParams.get('from')).toBe('2025-02-28T15:47:00.000Z');
 });

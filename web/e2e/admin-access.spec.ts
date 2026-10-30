@@ -41,6 +41,7 @@ test('an expired administrator session shows a responsive sign-in card and can s
   await page.locator('.overview-refresh').click();
   const card = page.locator('.access-card');
   await expect(card.getByRole('heading', { name: '请先登录', exact: true })).toBeVisible();
+  await expect(card.getByText('站点管理', { exact: true })).toHaveCount(0);
   await expect(page.locator('.overview-stats')).toHaveCount(0);
   for (const width of [320, 768, 1280]) {
     await page.setViewportSize({ width, height: 800 });

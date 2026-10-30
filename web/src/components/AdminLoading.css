@@ -1,0 +1,157 @@
+.d-app .admin-loading {
+  min-width: 0;
+}
+.d-app .admin-loading-label {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  color: var(--d-muted);
+  font-size: 13px;
+}
+.d-app .admin-loading-spinner {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  border: 1.5px solid var(--d-line);
+  border-top-color: var(--d-muted);
+  border-radius: 50%;
+  animation: admin-loading-spin 0.9s linear infinite;
+}
+.d-app .admin-loading-preview {
+  animation: admin-loading-pulse 1.8s ease-in-out infinite;
+}
+.d-app .admin-loading-block {
+  display: block;
+  height: 10px;
+  min-width: 0;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--d-muted) 12%, transparent);
+}
+.d-app .admin-loading-caption {
+  width: 58px;
+}
+.d-app .admin-loading-value {
+  width: 72%;
+  max-width: 120px;
+  height: 24px;
+  margin-top: 20px;
+}
+.d-app .admin-loading-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 20px 0 36px;
+  border-block: 1px solid var(--d-line);
+}
+.d-app .admin-loading-stats > div {
+  padding: 24px 16px;
+  border-right: 1px solid var(--d-line);
+}
+.d-app .admin-loading-stats > div:first-child {
+  padding-left: 0;
+}
+.d-app .admin-loading-stats > div:last-child {
+  border-right: 0;
+}
+.d-app .admin-loading-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 32px;
+}
+.d-app .admin-loading-list {
+  min-width: 0;
+}
+.d-app .admin-loading-list > .admin-loading-caption {
+  margin: 0 0 18px;
+}
+.d-app .admin-loading-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 0.6fr);
+  gap: 28px;
+  align-items: center;
+  min-height: 51px;
+  border-bottom: 1px solid var(--d-line);
+}
+.d-app .admin-loading-row:last-child {
+  border-bottom: 0;
+}
+.d-app .admin-loading-row > .admin-loading-block {
+  width: 75%;
+}
+.d-app .admin-loading-row > .admin-loading-block:last-child {
+  justify-self: end;
+  width: 60%;
+}
+.d-app .admin-loading-table .admin-loading-row {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.5fr);
+  min-height: 64px;
+}
+.d-app .admin-loading-nav {
+  min-height: 44px;
+  pointer-events: none;
+}
+.d-app .admin-loading-nav > .admin-loading-block {
+  width: 60px;
+}
+.d-app .admin-loading-detail {
+  padding-bottom: 12px;
+}
+.d-app .admin-loading-detail > .admin-loading-value {
+  width: 140px;
+  margin: 8px 0 28px;
+}
+.d-app .admin-loading-detail-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px 22px;
+}
+.d-app .admin-loading-detail-fields > div {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+@keyframes admin-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes admin-loading-pulse {
+  0%,
+  100% {
+    opacity: 0.65;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (max-width: 1100px) {
+  #donate-admin .admin-loading-side .admin-loading-home {
+    display: none;
+  }
+}
+@media (max-width: 680px) {
+  .d-app .admin-loading-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .d-app .admin-loading-stats > div,
+  .d-app .admin-loading-stats > div:first-child {
+    padding: 20px 16px;
+    border-bottom: 1px solid var(--d-line);
+  }
+  .d-app .admin-loading-stats > div:nth-child(2n) {
+    border-right: 0;
+  }
+  .d-app .admin-loading-stats > div:nth-last-child(-n + 2) {
+    border-bottom: 0;
+  }
+  .d-app .admin-loading-columns {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 28px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .d-app .admin-loading-spinner,
+  .d-app .admin-loading-preview {
+    animation: none;
+  }
+}

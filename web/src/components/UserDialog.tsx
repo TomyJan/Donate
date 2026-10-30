@@ -4,6 +4,7 @@ import { useApp } from '../app/context';
 import { api, dateTime, money, query } from '../lib/api';
 import type { Profile, User } from '../lib/types';
 import { ActionConfirm } from './ActionConfirm';
+import { AdminLoading } from './AdminLoading';
 import { CopyButton } from './CopyButton';
 import { IdentityBindings } from './IdentityBindings';
 import { Avatar, Button, Empty, Modal } from './ui';
@@ -105,8 +106,10 @@ export function UserDialog({
             />
           </div>
         </>
+      ) : user.isLoading ? (
+        <AdminLoading kind="detail" />
       ) : (
-        <Empty text={user.isLoading ? t('loading') : t('not_found')} />
+        <Empty text={t('not_found')} />
       )}
     </Modal>
   );
