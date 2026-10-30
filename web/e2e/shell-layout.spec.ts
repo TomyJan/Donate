@@ -116,6 +116,8 @@ test('a long page keeps the footer after its content as the document scrolls', a
   await page.setViewportSize({ width: 390, height: 720 });
   await page.goto('/terms');
   await expect(page.locator('.legal-paper')).toBeVisible();
+  // Font swaps change line wrapping and scroll anchoring, so settle layout before scrolling.
+  await page.evaluate(() => document.fonts.ready.then(() => undefined));
   const footer = page.locator('.d-footer');
   const initial = await footer.boundingBox();
   expect(initial?.y).toBeGreaterThan(720);
