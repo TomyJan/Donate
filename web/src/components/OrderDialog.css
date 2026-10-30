@@ -16,6 +16,19 @@
   padding: 8px 12px;
   font-size: 12px;
 }
+.d-app .order-detail .detail-message {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.d-app .order-detail .job-list > div > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.d-app .order-detail .job-list time {
+  display: inline-block;
+  margin-left: 5px;
+  white-space: nowrap;
+}
 @media (max-width: 440px) {
   .d-app .order-amount-row {
     gap: 8px;

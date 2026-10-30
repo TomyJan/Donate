@@ -665,11 +665,18 @@ export interface components {
             jobs?: {
                 /** Format: int64 */
                 attempts: number;
+                /**
+                 * Format: date-time
+                 * @description Job creation instant. This is not the timestamp of each manual request when an active job is reused.
+                 */
+                created_at: string;
                 id: string;
                 kind: string;
                 result: string;
                 /** Format: date-time */
                 run_at: string;
+                /** @description The job's current wakeup source, such as automatic, manual or browser_return; automatic jobs must not be presented as manual requests. */
+                source: string;
                 status: string;
             }[];
             /** Format: date-time */
@@ -696,6 +703,17 @@ export interface components {
             /** Format: date-time */
             paid_at?: string | null;
             protocol: string;
+            /** @description Province-level location safe for owner detail. Empty when unavailable; full IP/location remains restricted to the admin detail route. */
+            province: string;
+            /** @description Admin detail only: all persisted distinct manual reconciliation requests, newest first. IDs are stored request UUIDs, not idempotency keys. Several requests may share a job; status/result reflect the currently linked job. Absent from ordinary owner detail and after physical deletion. */
+            reconciliations?: {
+                /** Format: date-time */
+                created_at: string;
+                id: string;
+                job_id: string;
+                result: string;
+                status: string;
+            }[];
             remote_close_status: string;
             status: string;
             trade_no: string;
@@ -825,8 +843,11 @@ export interface components {
             /** Format: date-time */
             date: string;
             id: string;
+            /** @description Whether this record belongs to the effective authenticated session. Always false for guests; no owner user ID is exposed. Public feeds still contain only paid, non-hidden orders. */
+            is_mine: boolean;
             message: string;
             nickname: string;
+            /** @description Stored province-level location only, or an empty string when lookup data is unavailable. */
             province: string;
             status: string;
         };
@@ -838,6 +859,7 @@ export interface components {
                 /** Format: date-time */
                 date: string;
                 id: string;
+                is_mine: boolean;
                 message: string;
                 nickname: string;
                 province: string;

@@ -9,23 +9,23 @@ import {
   Download,
   ListChecks,
   ReceiptText,
+  RefreshCw,
   Search,
-  SlidersHorizontal,
   Users,
   X,
 } from 'lucide-react';
-import { AnimatePresence, motion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useApp } from '../app/context';
+import { AdminOrderFilters } from '../components/AdminOrderFilters';
 import { AdminTable } from '../components/AdminTable';
-import { ConstrainedInput } from '../components/ConstrainedInput';
-import { DateTimeField, SelectField } from '../components/forms';
+import { AnimatedHeight } from '../components/AnimatedHeight';
+import { SelectField } from '../components/forms';
 import { OrderDialog } from '../components/OrderDialog';
 import { type OverviewPeriod, OverviewRange } from '../components/OverviewRange';
 import { UserDialog } from '../components/UserDialog';
 import { Button, Empty, Menu, Modal, Pagination } from '../components/ui';
-import { acceptAmountEdit, amountFen } from '../lib/amount';
+import { amountFen } from '../lib/amount';
 import { api, downloadExport, money, query } from '../lib/api';
 import type { Audit, Metric, Operation, Order, Overview, Page, User } from '../lib/types';
 
@@ -47,7 +47,6 @@ export function Admin() {
     [pageSize, setPageSize] = useState(20),
     [userFilter, setUserFilter] = useState(''),
     [period, setPeriod] = useState<OverviewPeriod>({ range: '30d' }),
-    [advanced, setAdvanced] = useState(false),
     [from, setFrom] = useState(''),
     [to, setTo] = useState(''),
     [minimum, setMinimum] = useState(''),
@@ -80,12 +79,8 @@ export function Admin() {
     queryKey: ['admin-list', tab, filters],
     queryFn: () => api<Page<Order | User | Audit>>(`${endpoint}?${query(filters)}`),
     enabled: !!profile?.admin && tab !== 'overview',
+    placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[1] === tab ? previous : undefined),
     retry: false,
-  });
-  const overview = useQuery({
-    queryKey: ['overview', period],
-    queryFn: () => api<Overview>(`admin/overview?${query(period)}`),
-    enabled: !!profile?.admin && tab === 'overview',
   });
   const op = useQuery({
     queryKey: ['operation', operation?.id],
@@ -123,7 +118,6 @@ export function Admin() {
     setTo('');
     setMinimum('');
     setMaximum('');
-    setAdvanced(false);
     setUserFilter('');
     setPage(1);
     setSelection(new Set());
@@ -262,133 +256,62 @@ export function Admin() {
           </div>
         </div>
         {tab === 'overview' ? (
-          overview.error ? (
-            <Empty text={t('unavailable')} />
-          ) : overview.data ? (
-            <OverviewPanel key={JSON.stringify(period)} data={overview.data} />
-          ) : (
-            <Empty text={t('loading')} />
-          )
+          <OverviewSection period={period} />
         ) : (
           <>
-            {tab === 'orders' && userFilter && (
-              <Button className="d-ghost user-filter" onClick={() => setUserFilter('')}>
-                {t('filteredUser')}
-                <X />
-              </Button>
-            )}
-            <div className="a-tools">
-              {tab !== 'audit' ? (
-                <label className="a-search">
-                  <Search />
-                  <input
-                    aria-label={t(tab === 'users' ? 'userSearch' : 'search')}
-                    placeholder={t(tab === 'users' ? 'userSearch' : 'search')}
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                  />
-                </label>
-              ) : (
-                <SelectField
-                  label={t('action')}
-                  value={action}
-                  onValue={setAction}
-                  options={[
-                    ['', t('allActions')],
-                    ['order.', t('ordersAction')],
-                    ['user.', t('usersAction')],
-                  ]}
-                />
-              )}{' '}
-              {tab !== 'audit' && (
-                <SelectField label={t('status')} value={status} onValue={setStatus} options={statusOptions} />
-              )}{' '}
-              {tab === 'orders' && (
-                <>
+            {tab === 'orders' ? (
+              <AdminOrderFilters
+                search={search}
+                onSearch={setSearch}
+                status={status}
+                onStatus={setStatus}
+                channel={channel}
+                onChannel={setChannel}
+                user={userFilter}
+                onUser={setUserFilter}
+                value={{ from, to, minimum, maximum, visibility }}
+                onApply={(next) => {
+                  setFrom(next.from);
+                  setTo(next.to);
+                  setMinimum(next.minimum);
+                  setMaximum(next.maximum);
+                  setVisibility(next.visibility);
+                }}
+              />
+            ) : (
+              <div className="a-tools">
+                {tab === 'users' ? (
+                  <label className="a-search">
+                    <Search />
+                    <input
+                      aria-label={t('userSearch')}
+                      placeholder={t('userSearch')}
+                      value={search}
+                      onChange={(event) => setSearch(event.target.value)}
+                    />
+                  </label>
+                ) : (
                   <SelectField
-                    label={t('channel')}
-                    value={channel}
-                    onValue={setChannel}
+                    label={t('action')}
+                    value={action}
+                    onValue={setAction}
                     options={[
-                      ['', t('allChannels')],
-                      ['alipay', t('alipay')],
-                      ['wxpay', t('wxpay')],
+                      ['', t('allActions')],
+                      ['order.', t('ordersAction')],
+                      ['user.', t('usersAction')],
                     ]}
                   />
-                  <Button className="a-ghost" aria-expanded={advanced} onClick={() => setAdvanced((v) => !v)}>
-                    <SlidersHorizontal />
-                    {t('filters')}
-                  </Button>
-                </>
-              )}
-            </div>
-            <AnimatePresence initial={false}>
-              {tab === 'orders' && advanced && (
-                <motion.div
-                  className="a-filter-wrap"
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                >
-                  <div className="a-filters">
-                    {[
-                      [from, setFrom, 'from'],
-                      [to, setTo, 'to'],
-                    ].map(([v, set, key]) => (
-                      <div className="a-field" key={key as string}>
-                        <span>{t(key as string)}</span>
-                        <DateTimeField
-                          value={v as string}
-                          onValue={set as (v: string) => void}
-                          label={t(key as string)}
-                        />
-                      </div>
-                    ))}
-                    {[
-                      [minimum, setMinimum, 'minimum'],
-                      [maximum, setMaximum, 'maximum'],
-                    ].map(([v, set, key]) => (
-                      <label className="a-field" key={key as string} htmlFor={`filter-${key}`}>
-                        <span>{t(key as string)}</span>
-                        <ConstrainedInput
-                          id={`filter-${key}`}
-                          className="a-input"
-                          aria-label={t(key as string)}
-                          inputMode="decimal"
-                          value={v as string}
-                          onValue={set as (v: string) => void}
-                          accept={acceptAmountEdit}
-                        />
-                      </label>
-                    ))}
-                    <div className="a-filter-bottom">
-                      <SelectField
-                        label={t('visibility')}
-                        value={visibility}
-                        onValue={setVisibility}
-                        options={['', 'public', 'hidden_order', 'hidden_message'].map((k) => [
-                          k,
-                          t(k || 'allVisibility'),
-                        ])}
-                      />
-                      <Button
-                        className="d-ghost"
-                        onClick={() => {
-                          setFrom('');
-                          setTo('');
-                          setMinimum('');
-                          setMaximum('');
-                          setVisibility('');
-                        }}
-                      >
-                        {t('reset')}
-                      </Button>
-                    </div>
-                    {from && to && new Date(from) >= new Date(to) && <p role="alert">{t('dateRule')}</p>}
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+                )}
+                {tab === 'users' && (
+                  <SelectField
+                    label={t('status')}
+                    value={status}
+                    onValue={setStatus}
+                    options={statusOptions}
+                  />
+                )}
+              </div>
+            )}
             {list.isLoading ? (
               <Empty text={t('loading')} />
             ) : list.error ? (
@@ -445,7 +368,6 @@ export function Admin() {
       <UserDialog
         id={userID}
         onClose={() => setUserID(null)}
-        onOrder={setOrderID}
         onViewOrders={(id) => {
           navigate('orders');
           setUserFilter(id);
@@ -508,6 +430,48 @@ export function Admin() {
     </div>
   );
 }
+function OverviewSection({ period }: { period: OverviewPeriod }) {
+  const { t, notify } = useApp();
+  const [lastSuccess, setLastSuccess] = useState<Overview>();
+  const overview = useQuery({
+    queryKey: ['overview', period],
+    queryFn: () => api<Overview>(`admin/overview?${query(period)}`),
+    placeholderData: (previous) => previous,
+    retry: false,
+  });
+  useEffect(() => {
+    if (overview.isSuccess && !overview.isPlaceholderData) setLastSuccess(overview.data);
+  }, [overview.data, overview.isSuccess, overview.isPlaceholderData]);
+  useEffect(() => {
+    if (overview.error) notify(t('unavailable'), true);
+  }, [overview.error, notify, t]);
+  const displayed = overview.data ?? lastSuccess;
+  return (
+    <section className="overview-panel" aria-busy={overview.isFetching}>
+      <div className="overview-controls">
+        <Button
+          className="d-ghost d-icon overview-refresh"
+          aria-label={t('refreshOverview')}
+          title={t('refreshOverview')}
+          disabled={overview.isFetching}
+          onClick={() => void overview.refetch()}
+        >
+          <RefreshCw />
+        </Button>
+      </div>
+      {overview.isFetching && (
+        <div className="overview-progress" role="progressbar" aria-label={t('loading')} />
+      )}
+      <AnimatedHeight>
+        {displayed ? (
+          <OverviewPanel data={displayed} />
+        ) : (
+          <Empty text={t(overview.error ? 'unavailable' : 'loading')} />
+        )}
+      </AnimatedHeight>
+    </section>
+  );
+}
 function OverviewPanel({ data }: { data: Overview }) {
   const { t } = useApp();
   return (
@@ -541,6 +505,9 @@ function MetricTable({ title, metrics }: { title: string; metrics: Metric[] }) {
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(10);
   const [sort, setSort] = useState<{ key: keyof Metric; asc: boolean }>({ key: 'label', asc: false });
+  useEffect(() => {
+    setPage((current) => Math.min(current, Math.max(1, Math.ceil(metrics.length / size))));
+  }, [metrics.length, size]);
   const columns: [keyof Metric, string][] = [
     ['label', title === 'daily' ? 'time' : 'channel'],
     ['paid_fen', 'totalPaid'],

@@ -220,7 +220,6 @@ export function Home() {
               <HomeReceipt
                 key={current.id}
                 record={current}
-                mine={mine}
                 reduced={!!reduced}
                 onHeight={setHeight}
                 onDetail={setDetail}

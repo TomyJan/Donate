@@ -45,10 +45,13 @@ for (const [width, english, dark] of [
       await page.goto('/admin');
       const navigation = page.getByRole('navigation', { name: t('admin'), exact: true });
       await navigation.getByRole('button', { name: t('orders'), exact: true }).click();
+      const filters = page.locator('.a-filter-toggle');
+      if (!(await page.getByRole('combobox', { name: t('status'), exact: true }).isVisible()))
+        await filters.click();
       await page.getByRole('combobox', { name: t('status'), exact: true }).click();
       await fitsViewport(page.getByRole('listbox'));
       await page.getByRole('option', { name: t('paid'), exact: true }).click();
-      await page.getByRole('button', { name: t('filters'), exact: true }).click();
+      if ((await filters.getAttribute('aria-expanded')) !== 'true') await filters.click();
       await page.getByRole('button', { name: t('from'), exact: true }).click();
       await fitsViewport(page.locator('.date-pop'));
       await page.getByRole('combobox', { name: 'Hour', exact: true }).click();
@@ -59,7 +62,7 @@ for (const [width, english, dark] of [
         .getByRole('button', { name: t('confirm'), exact: true })
         .click();
       await page.getByRole('button', { name: t('reset'), exact: true }).click();
-      await page.getByRole('button', { name: t('filters'), exact: true }).click();
+      await filters.click();
       await page.locator('th[data-field=amount_fen] button').click();
       await expect(page.locator('th[data-field=amount_fen]')).toHaveAttribute('aria-sort', 'descending');
       await page.locator('tbody .custom-check').first().check();
@@ -79,11 +82,13 @@ for (const [width, english, dark] of [
         .getByRole('dialog')
         .filter({ has: page.getByRole('heading', { name: t('details'), exact: true }) });
       await fitsViewport(detail);
+      await page.screenshot({ path: `test-results/order-detail-${width}-${english ? 'en' : 'zh'}.png` });
       await detail.getByRole('button', { name: t('reconcile'), exact: true }).click();
       await expect(page.locator('.toast').filter({ hasText: t('queued') })).toBeVisible();
       await detail.getByRole('button', { name: t('delete'), exact: true }).click();
       const confirmation = page.getByRole('dialog', { name: t('delete'), exact: true });
       await fitsViewport(confirmation);
+      await page.screenshot({ path: `test-results/order-confirm-${width}-${english ? 'en' : 'zh'}.png` });
       await confirmation.getByRole('button', { name: t('cancel'), exact: true }).click();
       await detail
         .getByRole('button', { name: t('close'), exact: true })

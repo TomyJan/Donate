@@ -10,6 +10,7 @@ import (
 )
 
 type Record struct {
+	IsMine    bool      `json:"is_mine"`
 	ID        string    `json:"id"`
 	Nickname  string    `json:"nickname"`
 	AvatarURL string    `json:"avatar_url"`
@@ -31,12 +32,19 @@ type cursor struct {
 
 func (s *Service) List(ctx context.Context, userID string, mine bool, after string) (Page, error) {
 	out := Page{Items: []Record{}}
+	var uid []byte
+	if userID != "" {
+		var e error
+		uid, e = storage.ParseID(userID)
+		if e != nil {
+			return out, ErrForbidden
+		}
+	}
 	where := "o.status='paid' AND o.hidden_order=0"
 	date := "o.paid_at"
 	args := []any{}
 	if mine {
-		uid, e := storage.ParseID(userID)
-		if e != nil {
+		if len(uid) == 0 {
 			return out, ErrForbidden
 		}
 		where = "o.user_id=?"
@@ -59,7 +67,7 @@ func (s *Service) List(ctx context.Context, userID string, mine bool, after stri
 		where += " AND (" + date + "<? OR (" + date + "=? AND o.id<?))"
 		args = append(args, c.At, c.At, id)
 	}
-	rows, e := s.Store.DB.QueryContext(ctx, "SELECT o.id,COALESCE(i.nickname,'捐赠者'),COALESCE(i.avatar_url,''),o.amount_fen,CASE WHEN ? OR o.hidden_message=0 THEN o.message ELSE '' END,COALESCE(l.province,''),"+date+",o.status FROM orders o LEFT JOIN users u ON u.id=o.user_id LEFT JOIN identities i ON i.id=u.public_identity_id LEFT JOIN order_locations l ON l.order_id=o.id WHERE "+where+" ORDER BY "+date+" DESC,o.id DESC LIMIT 11", append([]any{mine}, args...)...)
+	rows, e := s.Store.DB.QueryContext(ctx, "SELECT o.id,COALESCE(o.user_id=?,0),COALESCE(i.nickname,'捐赠者'),COALESCE(i.avatar_url,''),o.amount_fen,CASE WHEN o.user_id=? OR o.hidden_message=0 THEN o.message ELSE '' END,COALESCE(l.province,''),"+date+",o.status FROM orders o LEFT JOIN users u ON u.id=o.user_id LEFT JOIN identities i ON i.id=u.public_identity_id LEFT JOIN order_locations l ON l.order_id=o.id WHERE "+where+" ORDER BY "+date+" DESC,o.id DESC LIMIT 11", append([]any{uid, uid}, args...)...)
 	if e != nil {
 		return out, e
 	}
@@ -68,7 +76,7 @@ func (s *Service) List(ctx context.Context, userID string, mine bool, after stri
 		var r Record
 		var id []byte
 		var at int64
-		if e = rows.Scan(&id, &r.Nickname, &r.AvatarURL, &r.AmountFen, &r.Message, &r.Province, &at, &r.Status); e != nil {
+		if e = rows.Scan(&id, &r.IsMine, &r.Nickname, &r.AvatarURL, &r.AmountFen, &r.Message, &r.Province, &at, &r.Status); e != nil {
 			return out, e
 		}
 		r.ID = storage.IDString(id)

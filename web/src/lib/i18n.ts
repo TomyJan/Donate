@@ -1,4 +1,11 @@
 export const words = {
+  confirmActionPrompt: ['确认{action}？', 'Confirm {action}?'],
+  unknownRegion: ['属地未知', 'Location unavailable'],
+  paymentCheck: ['支付核验', 'Payment verification'],
+  refreshOverview: ['刷新概览', 'Refresh overview'],
+  filterUser: ['用户筛选', 'Filter user'],
+  filterUserSearch: ['搜索用户', 'Search users'],
+  amountRangeRule: ['最低金额不能高于最高金额', 'Minimum amount must not exceed maximum amount'],
   copyInfo: ['复制信息', 'Copy info'],
   copySuccess: ['复制成功', 'Copied'],
   orderInfoTitle: [
@@ -179,6 +186,7 @@ export const words = {
   source: ['属地来源', 'Location source'],
   noMessage: ['未填写留言', 'No message'],
   reconcile: ['手动补单', 'Reconcile payment'],
+  query_failed: ['查询失败', 'Query failed'],
   checked: ['最近核验', 'Last checked'],
   gateway: ['渠道状态', 'Gateway status'],
   remote: ['远端关单', 'Remote close'],

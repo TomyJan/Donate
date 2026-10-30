@@ -18,9 +18,11 @@ export function orderCopyText(order: Order, t: (key: string) => string) {
     `${t('paymentMethod')}: ${t(order.channel)}`,
     `${t('orderId')}: ${order.id}`,
     `${t('merchantOrder')}: ${order.merchant_order_no}`,
+    `${t('trade')}: ${order.trade_no || '—'}`,
     `${t('status')}: ${t(order.status)}`,
     `${t('created')}: ${dateTime(order.created_at)}`,
     ...(order.paid_at ? [`${t('paidAt')}: ${dateTime(order.paid_at)}`] : []),
+    `${t('messageColumn')}:\n${order.message || t('noMessage')}`,
   ].join('\n');
 }
 export async function checkout(id: string) {
@@ -68,6 +70,23 @@ export function OrderDialog({
     retry: false,
   });
   const o = detail.data;
+  const canContinue = !!o && o.status === 'pending' && new Date(o.expires_at).getTime() > Date.now();
+  const reconciliations = o?.reconciliations ?? [];
+  const manualJobIDs = new Set(reconciliations.map((request) => request.job_id));
+  const taskRecords = [
+    ...reconciliations.map((request) => ({
+      ...request,
+      key: `request:${request.id}`,
+      label: t('reconcile'),
+    })),
+    ...(o?.jobs ?? [])
+      .filter((job) => job.kind !== 'geo' && !manualJobIDs.has(job.id))
+      .map((job) => ({
+        ...job,
+        key: `job:${job.id}`,
+        label: t(job.kind === 'close' ? 'closeOrder' : 'paymentCheck'),
+      })),
+  ];
   const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
     try {
@@ -127,6 +146,7 @@ export function OrderDialog({
         [t('created'), dateTime(o.created_at)],
         [t('paidAt'), dateTime(o.paid_at)],
         [t('expires'), dateTime(o.expires_at)],
+        ...(!admin ? [[t('region'), o.province || t('unknownRegion')]] : []),
         ...(admin
           ? [
               [t('userId'), o.user_id || '—'],
@@ -179,7 +199,7 @@ export function OrderDialog({
         </p>
       ) : (
         o && (
-          <>
+          <div className="order-detail">
             <div className="order-heading">
               <div className="d-person">
                 <Avatar name={o.nickname} src={o.avatar_url} />
@@ -206,69 +226,69 @@ export function OrderDialog({
               <span>{t('message').replace('（选填）', '').replace(' (optional)', '')}</span>
               <p>{o.message || t('noMessage')}</p>
             </div>
-            {admin && o.jobs?.some((j) => j.kind !== 'geo') && (
+            {admin && taskRecords.length > 0 && (
               <div className="job-list">
-                {o.jobs
-                  .filter((j) => j.kind !== 'geo')
-                  .slice(0, 3)
-                  .map((j) => (
-                    <div key={j.id}>
-                      <span>{j.kind === 'close' ? t('closeOrder') : t('reconcile')}</span>
-                      <span>
-                        {t(j.status)} · {t(j.result || 'ready')}
-                      </span>
-                    </div>
-                  ))}
+                {taskRecords.map((record) => (
+                  <div key={record.key}>
+                    <span>
+                      {record.label} <time dateTime={record.created_at}>{dateTime(record.created_at)}</time>
+                    </span>
+                    <span>
+                      {t(record.status)} · {t(record.result || 'ready')}
+                    </span>
+                  </div>
+                ))}
               </div>
             )}
-            <div className="detail-actions">
-              {admin ? (
-                <>
-                  <CopyButton key={o.id} text={o.id} label={t('copy')} />
-                  {confirmAction('export', t('export'), <Download />)}
-                  <Button
-                    disabled={busy}
-                    onClick={() =>
-                      void run(async () => {
-                        await api('admin/order/reconcile', {
-                          id: o.id,
-                          idempotency_key: crypto.randomUUID(),
-                        });
-                        setPollUntil(Date.now() + 60000);
-                        notify(t('queued'));
-                        await detail.refetch();
-                      })
-                    }
-                  >
-                    <RefreshCw />
-                    {t('reconcile')}
-                  </Button>
-                  {o.status === 'pending' && confirmAction('close', t('closeOrder'))}
-                  {confirmAction(
-                    o.hidden_order ? 'show_order' : 'hide_order',
-                    t(o.hidden_order ? 'show_order' : 'hide_order'),
-                  )}
-                  {confirmAction(
-                    o.hidden_message ? 'show_message' : 'hide_message',
-                    t(o.hidden_message ? 'show_message' : 'hide_message'),
-                  )}
-                  {confirmAction('delete', t('delete'))}
-                </>
-              ) : (
-                o.status === 'pending' &&
-                new Date(o.expires_at).getTime() > Date.now() && (
-                  <Button
-                    className="d-primary"
-                    disabled={busy}
-                    onClick={() => void run(() => checkout(o.id))}
-                  >
-                    <ExternalLink />
-                    {t('continue')}
-                  </Button>
-                )
-              )}
-            </div>
-          </>
+            {(admin || canContinue) && (
+              <div className="detail-actions">
+                {admin ? (
+                  <>
+                    <CopyButton key={o.id} text={o.id} label={t('copy')} />
+                    {confirmAction('export', t('export'), <Download />)}
+                    <Button
+                      disabled={busy}
+                      onClick={() =>
+                        void run(async () => {
+                          await api('admin/order/reconcile', {
+                            id: o.id,
+                            idempotency_key: crypto.randomUUID(),
+                          });
+                          setPollUntil(Date.now() + 60000);
+                          notify(t('queued'));
+                          await detail.refetch();
+                        })
+                      }
+                    >
+                      <RefreshCw />
+                      {t('reconcile')}
+                    </Button>
+                    {o.status === 'pending' && confirmAction('close', t('closeOrder'))}
+                    {confirmAction(
+                      o.hidden_order ? 'show_order' : 'hide_order',
+                      t(o.hidden_order ? 'show_order' : 'hide_order'),
+                    )}
+                    {confirmAction(
+                      o.hidden_message ? 'show_message' : 'hide_message',
+                      t(o.hidden_message ? 'show_message' : 'hide_message'),
+                    )}
+                    {confirmAction('delete', t('delete'))}
+                  </>
+                ) : (
+                  canContinue && (
+                    <Button
+                      className="d-primary"
+                      disabled={busy}
+                      onClick={() => void run(() => checkout(o.id))}
+                    >
+                      <ExternalLink />
+                      {t('continue')}
+                    </Button>
+                  )
+                )}
+              </div>
+            )}
+          </div>
         )
       )}
     </Modal>

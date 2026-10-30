@@ -1,7 +1,7 @@
 import { ArrowUp } from 'lucide-react';
-import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, motion, useMotionValue, useReducedMotion } from 'motion/react';
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation } from 'react-router';
 import { useApp } from '../app/context';
 import { Button } from './ui';
@@ -10,26 +10,30 @@ import './scroll-chrome.css';
 export function ScrollHeader({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const [hidden, setHidden] = useState(false);
-  const reduced = useReducedMotion();
+  const header = useRef<HTMLElement>(null);
+  const offset = useMotionValue(0);
+  const reveal = () => {
+    offset.set(0);
+    setHidden(false);
+  };
   // biome-ignore lint/correctness/useExhaustiveDependencies: navigating resets the scroll-direction tracker.
   useEffect(() => {
+    offset.set(0);
     setHidden(false);
     let previous = Math.max(0, scrollY),
-      distance = 0,
-      direction = 0,
       frame = 0;
     const update = () => {
       frame = 0;
       const position = Math.max(0, scrollY);
       const delta = position - previous;
       previous = position;
-      const nextDirection = Math.sign(delta);
-      if (nextDirection !== direction) distance = 0;
-      direction = nextDirection;
-      distance += Math.abs(delta);
-      const header = document.querySelector('.d-top');
-      if (position < 32 || header?.querySelector(':focus-visible, [data-state=open]')) setHidden(false);
-      else if (distance > 10) setHidden(direction > 0);
+      const element = header.current;
+      if (!element) return;
+      const height = element.offsetHeight;
+      const locked = element.querySelector(':focus-visible, [data-state=open]');
+      const next = position < 32 || locked ? 0 : Math.min(0, Math.max(-height, offset.get() - delta));
+      offset.set(next);
+      setHidden(height > 0 && next <= -height);
     };
     const scroll = () => {
       if (!frame) frame = requestAnimationFrame(update);
@@ -39,16 +43,16 @@ export function ScrollHeader({ children }: { children: ReactNode }) {
       window.removeEventListener('scroll', scroll);
       cancelAnimationFrame(frame);
     };
-  }, [pathname]);
+  }, [pathname, offset]);
   return (
     <motion.header
+      ref={header}
       className="d-top"
       data-component="site-header"
       data-hidden={hidden}
       initial={false}
-      animate={{ y: hidden ? '-110%' : '0%' }}
-      transition={{ duration: reduced ? 0 : 0.23, ease: [0.22, 1, 0.36, 1] }}
-      onFocusCapture={() => setHidden(false)}
+      style={{ y: offset }}
+      onFocusCapture={reveal}
     >
       {children}
     </motion.header>
@@ -60,8 +64,20 @@ export function BackToTop() {
   const reduced = useReducedMotion();
   const [visible, setVisible] = useState(false);
   useEffect(() => {
-    const update = () => setVisible(scrollY > 160);
-    update();
+    let previous = Math.max(0, scrollY);
+    let upward = 0;
+    const update = () => {
+      const current = Math.max(0, scrollY);
+      const delta = current - previous;
+      previous = current;
+      if (current <= 160 || delta > 0) {
+        upward = 0;
+        setVisible(false);
+      } else if (delta < 0) {
+        upward -= delta;
+        if (upward >= 8) setVisible(true);
+      }
+    };
     window.addEventListener('scroll', update, { passive: true });
     return () => window.removeEventListener('scroll', update);
   }, []);

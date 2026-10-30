@@ -9,13 +9,12 @@ import type { RecordItem } from '../lib/types';
 type Turn = { direction: number; previousId: string | null };
 type Props = {
   record: RecordItem;
-  mine: boolean;
   reduced: boolean;
   onHeight: (height: number) => void;
   onDetail: (id: string) => void;
 };
 
-export function HomeReceipt({ record, mine, reduced, onHeight, onDetail }: Props) {
+export function HomeReceipt({ record, reduced, onHeight, onDetail }: Props) {
   const { t, lang, report } = useApp();
   const present = useIsPresent();
   const turn = usePresenceData() as Turn;
@@ -31,6 +30,7 @@ export function HomeReceipt({ record, mine, reduced, onHeight, onDetail }: Props
     return () => observer.disconnect();
   }, [present, onHeight]);
   // Content and locale changes are also observed through the paper's intrinsic height.
+  const owned = record.is_mine;
   const digits = money(record.amount_fen).length + 1;
   return (
     <motion.article
@@ -73,7 +73,7 @@ export function HomeReceipt({ record, mine, reduced, onHeight, onDetail }: Props
       <div className="r-person">
         <Avatar name={record.nickname} src={record.avatar_url} />
         <strong>{record.nickname}</strong>
-        {mine && record.status !== 'paid' && <span className="r-status">{t(record.status)}</span>}
+        {owned && record.status !== 'paid' && <span className="r-status">{t(record.status)}</span>}
       </div>
       <div className="r-receipt-value">
         <div className="r-receipt-total">
@@ -86,7 +86,7 @@ export function HomeReceipt({ record, mine, reduced, onHeight, onDetail }: Props
             ¥{money(record.amount_fen)}
           </div>
         </div>
-        {mine && (
+        {owned && (
           <div className="r-receipt-action">
             <Button className="d-ghost" onClick={() => onDetail(record.id)}>
               {t('details')}
@@ -101,7 +101,7 @@ export function HomeReceipt({ record, mine, reduced, onHeight, onDetail }: Props
       </div>
       {record.message && <p className="r-note">{record.message}</p>}
       <div className="r-meta">
-        <span>{record.province}</span>
+        <span className="r-province">{record.province || t('unknownRegion')}</span>
         <time>{dateTime(record.date)}</time>
       </div>
     </motion.article>

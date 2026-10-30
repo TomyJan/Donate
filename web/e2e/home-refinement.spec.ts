@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 import type { RecordItem } from '../src/lib/types';
 
 const records: RecordItem[] = Array.from({ length: 6 }, (_, index) => ({
+  is_mine: index === 0,
   id: `home-receipt-${index}`,
   nickname: `纸片 ${index + 1}`,
   avatar_url: '',
@@ -47,7 +48,11 @@ async function home(page: Page, holdMore = false) {
         if (holdMore) await moreReady;
         else await new Promise((resolve) => setTimeout(resolve, 250));
       }
-      data = { items: next ? records.slice(3) : records.slice(0, 3), next_cursor: next ? '' : 'page2' };
+      const items = (next ? records.slice(3) : records.slice(0, 3)).map((record) => ({
+        ...record,
+        is_mine: url.searchParams.get('only_mine') === 'true' || record.is_mine,
+      }));
+      data = { items, next_cursor: next ? '' : 'page2' };
     }
     await route.fulfill({ json: { code: 'OK', message: '', request_id: 'home-test', data } });
   });
@@ -257,4 +262,18 @@ test('amount and right-aligned actions share one row on narrow receipts includin
       }
     }
   }
+});
+
+test('public view offers actions on owned receipts and preserves the province', async ({ page }) => {
+  await home(page);
+  const receipt = page.locator('.r-featured:not(.r-leaving)');
+  await expect(page.getByRole('button', { name: '只看我的', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'false',
+  );
+  await expect(receipt.getByRole('button', { name: '订单详情', exact: true })).toBeVisible();
+  await expect(receipt.locator('.r-meta')).toContainText('上海');
+  await page.locator('.r-index-row').nth(1).click();
+  await expect(receipt).toContainText('纸片 2');
+  await expect(receipt.getByRole('button', { name: '订单详情', exact: true })).toHaveCount(0);
 });

@@ -40,7 +40,7 @@ function renderOrder(admin = false) {
 }
 const response = (data: unknown) => new Response(JSON.stringify({ code: 'OK', data }), { status: 200 });
 
-const order: Order = {
+const order: Order & { province: string } = {
   id: 'order-uuid',
   user_id: 'full-user-uuid',
   nickname: 'Admin',
@@ -60,8 +60,9 @@ const order: Order = {
   hidden_order: false,
   hidden_message: false,
   close_reason: '',
-  message: 'Not part of copied order data',
+  message: '第一行留言\nSecond line\n  keep this indentation',
   ip: '192.0.2.123',
+  province: '广东',
 };
 
 it('copies a complete readable order summary using an explicit safe field list', () => {
@@ -73,12 +74,12 @@ it('copies a complete readable order summary using an explicit safe field list',
   };
   const text = orderCopyText(order, (key) => labels[key] ?? translate(key, 'zh-CN'));
   expect(text).toBe(
-    '捐赠 TomyJan donate.tomys.top 订单信息:\n账号: Admin (full-user-uuid)\n金额: ￥9.88\n付款方式: 支付宝\n订单 ID: order-uuid\n商户订单号: merchant-123\n状态: 已支付\n创建时间: 2026-10-30 08:00\n支付时间: 2026-10-30 08:01',
+    '捐赠 TomyJan donate.tomys.top 订单信息:\n账号: Admin (full-user-uuid)\n金额: ￥9.88\n付款方式: 支付宝\n订单 ID: order-uuid\n商户订单号: merchant-123\n平台流水: gateway-trade\n状态: 已支付\n创建时间: 2026-10-30 08:00\n支付时间: 2026-10-30 08:01\n留言:\n第一行留言\nSecond line\n  keep this indentation',
   );
   expect(text).not.toContain(order.ip);
   expect(text).not.toContain(order.api_trade_no);
   expect(text).not.toContain(order.protocol);
-  expect(text).not.toContain(order.message);
+  expect(text).toContain(order.message);
 });
 
 it('uses translated labels and channel names for an English order summary', () => {
@@ -91,6 +92,8 @@ it('uses translated labels and channel names for an English order summary', () =
   const text = orderCopyText({ ...order, paid_at: null }, (key) => labels[key] ?? translate(key, 'en'));
   expect(text).toContain('Account: Admin (full-user-uuid)\nAmount: ￥9.88\nPayment method: Alipay');
   expect(text).toContain('Status: Paid');
+  expect(text).toContain('Gateway trade: gateway-trade');
+  expect(text).toContain('Message:\n第一行留言\nSecond line\n  keep this indentation');
   expect(text).not.toContain('Paid at:');
 });
 
@@ -113,10 +116,83 @@ it('places the frontend copy summary beside the amount and excludes administrati
   await act(async () => {});
   expect(clipboard).toContain('Account: Admin (full-user-uuid)');
   expect(clipboard).toContain('Payment method: Alipay');
+  expect(clipboard).toContain('Gateway trade: gateway-trade');
+  expect(clipboard).toContain(order.message);
   expect(clipboard).not.toContain('192.0.2.123');
   expect(clipboard).not.toContain('private-channel-trade');
   expect(screen.getByRole('button', { name: 'Copied' })).toBeInTheDocument();
   expect(notify).not.toHaveBeenCalled();
+});
+
+it('shows only the safe province on the frontend and leaves no empty action footer', async () => {
+  vi.stubGlobal('fetch', async () =>
+    response({ ...order, location: { province: '广东', city: 'private-city', street: 'private-street' } }),
+  );
+  renderOrder();
+  await screen.findByRole('button', { name: 'Copy info' });
+  expect(screen.getByText('Location').closest('div')).toHaveTextContent('广东');
+  expect(screen.queryByText('private-city')).not.toBeInTheDocument();
+  expect(screen.queryByText('private-street')).not.toBeInTheDocument();
+  expect(document.querySelector('.detail-actions')).not.toBeInTheDocument();
+});
+
+it('keeps an unknown province state visible when geolocation has no province', async () => {
+  vi.stubGlobal('fetch', async () => response({ ...order, province: '' }));
+  renderOrder();
+  await screen.findByRole('button', { name: 'Copy info' });
+  expect(screen.getByText('Location').closest('div')).toHaveTextContent('Location unavailable');
+});
+
+it('shows every non-geolocation task with its creation time rather than its next run time', async () => {
+  const jobs = Array.from({ length: 5 }, (_, index) => ({
+    id: `job-${index}`,
+    kind: 'reconcile',
+    attempts: 1,
+    result: `result-${index}`,
+    status: 'done',
+    created_at: `2026-10-30T00:0${index}:00Z`,
+    run_at: '2026-10-31T00:00:00Z',
+  }));
+  vi.stubGlobal('fetch', async () =>
+    response({ ...order, jobs: [...jobs, { ...jobs[0], id: 'geo-job', kind: 'geo' }] }),
+  );
+  renderOrder(true);
+  await screen.findByRole('button', { name: 'Reconcile payment' });
+  const rows = document.querySelectorAll('.job-list > div');
+  expect(rows).toHaveLength(5);
+  expect(rows[0]).toHaveTextContent('Payment verification 2026-10-30 08:00');
+  expect(rows[4]).toHaveTextContent('Payment verification 2026-10-30 08:04');
+  expect(document.querySelector('.job-list')).not.toHaveTextContent('2026-10-31');
+});
+
+it('shows every manual reconciliation request separately when the backend reuses one active job', async () => {
+  const reconciliations = Array.from({ length: 5 }, (_, index) => ({
+    id: `request-${index}`,
+    job_id: 'shared-job',
+    created_at: `2026-10-30T00:0${index}:00Z`,
+    status: 'ready',
+    result: '',
+  }));
+  const jobs = [
+    {
+      id: 'shared-job',
+      kind: 'reconcile',
+      source: 'manual',
+      attempts: 0,
+      created_at: '2026-10-29T00:00:00Z',
+      run_at: '2026-10-31T00:00:00Z',
+      status: 'ready',
+      result: '',
+    },
+  ];
+  vi.stubGlobal('fetch', async () => response({ ...order, reconciliations, jobs }));
+  renderOrder(true);
+  await screen.findByRole('button', { name: 'Reconcile payment' });
+  const rows = document.querySelectorAll('.job-list > div');
+  expect(rows).toHaveLength(5);
+  expect(rows[0]).toHaveTextContent('Reconcile payment 2026-10-30 08:00');
+  expect(rows[4]).toHaveTextContent('Reconcile payment 2026-10-30 08:04');
+  expect(document.querySelector('.job-list')).not.toHaveTextContent('2026-10-29');
 });
 
 it('previews a single order before executing its exact operation from a nearby confirmation', async () => {

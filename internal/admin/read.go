@@ -176,6 +176,8 @@ func orderWhere(f Filter) (string, []any, error) {
 }
 
 type Detail struct {
+	Province        string               `json:"province"`
+	Reconciliations []ReconciliationView `json:"reconciliations,omitempty"`
 	order.Order
 	IP        string        `json:"ip,omitempty"`
 	Nickname  string        `json:"nickname"`
@@ -184,12 +186,24 @@ type Detail struct {
 	Jobs      []JobView     `json:"jobs,omitempty"`
 }
 type JobView struct {
-	ID       string    `json:"id"`
-	Kind     string    `json:"kind"`
-	Status   string    `json:"status"`
-	Result   string    `json:"result"`
-	Attempts int       `json:"attempts"`
-	RunAt    time.Time `json:"run_at"`
+	Source    string    `json:"source"`
+	CreatedAt time.Time `json:"created_at"`
+	ID        string    `json:"id"`
+	Kind      string    `json:"kind"`
+	Status    string    `json:"status"`
+	Result    string    `json:"result"`
+	Attempts  int       `json:"attempts"`
+	RunAt     time.Time `json:"run_at"`
+}
+
+// ReconciliationView is a persisted manual request, even when requests share a job.
+// Status and result describe the currently linked job, not an independent execution.
+type ReconciliationView struct {
+	ID        string    `json:"id"`
+	JobID     string    `json:"job_id"`
+	CreatedAt time.Time `json:"created_at"`
+	Status    string    `json:"status"`
+	Result    string    `json:"result"`
 }
 
 func (s *Service) Detail(ctx context.Context, id string, full bool) (Detail, error) {
@@ -204,20 +218,23 @@ func (s *Service) Detail(ctx context.Context, id string, full bool) (Detail, err
 	if e != nil && !errors.Is(e, sql.ErrNoRows) {
 		return d, e
 	}
-	if !full {
-		return d, nil
-	}
-	d.IP = o.IP
 	p := geo.Location{}
 	var at int64
 	e = s.Store.DB.QueryRowContext(ctx, "SELECT country,province,city,district,street,isp,asn,latitude,longitude,accuracy_radius,source,source_version,queried_at FROM order_locations WHERE order_id=?", oid).Scan(&p.Country, &p.Province, &p.City, &p.District, &p.Street, &p.ISP, &p.ASN, &p.Latitude, &p.Longitude, &p.AccuracyRadius, &p.Source, &p.Version, &at)
 	if e == nil {
 		p.QueriedAt = time.Unix(at, 0).UTC()
-		d.Location = &p
+		d.Province = p.Province
 	} else if !errors.Is(e, sql.ErrNoRows) {
 		return d, e
 	}
-	rows, e := s.Store.DB.QueryContext(ctx, "SELECT id,kind,status,last_result,attempts,run_at FROM jobs WHERE order_id=? ORDER BY created_at DESC", oid)
+	if !full {
+		return d, nil
+	}
+	d.IP = o.IP
+	if e == nil {
+		d.Location = &p
+	}
+	rows, e := s.Store.DB.QueryContext(ctx, "SELECT id,kind,status,last_result,attempts,run_at,source,created_at FROM jobs WHERE order_id=? ORDER BY created_at DESC,id DESC", oid)
 	if e != nil {
 		return d, e
 	}
@@ -225,15 +242,39 @@ func (s *Service) Detail(ctx context.Context, id string, full bool) (Detail, err
 	for rows.Next() {
 		var j JobView
 		var id []byte
-		var at int64
-		if e = rows.Scan(&id, &j.Kind, &j.Status, &j.Result, &j.Attempts, &at); e != nil {
+		var at, created int64
+		if e = rows.Scan(&id, &j.Kind, &j.Status, &j.Result, &j.Attempts, &at, &j.Source, &created); e != nil {
 			return d, e
 		}
 		j.ID = storage.IDString(id)
 		j.RunAt = time.Unix(at, 0).UTC()
+		j.CreatedAt = time.Unix(created, 0).UTC()
 		d.Jobs = append(d.Jobs, j)
 	}
-	return d, rows.Err()
+	e = rows.Err()
+	rows.Close()
+	if e != nil {
+		return d, e
+	}
+	// The request UUID is persisted independently of its idempotency key. Join through
+	// the live job and order so deleted targets cannot expose retained request data.
+	requests, e := s.Store.DB.QueryContext(ctx, "SELECT r.id,j.id,r.created_at,j.status,j.last_result FROM idempotency_records r JOIN jobs j ON j.id=r.target_id JOIN orders o ON o.id=j.order_id WHERE r.action='order.reconcile' AND j.kind='payment' AND o.id=? ORDER BY r.created_at DESC,r.id DESC", oid)
+	if e != nil {
+		return d, e
+	}
+	defer requests.Close()
+	for requests.Next() {
+		var request ReconciliationView
+		var id, job []byte
+		var created int64
+		if e = requests.Scan(&id, &job, &created, &request.Status, &request.Result); e != nil {
+			return d, e
+		}
+		request.ID, request.JobID = storage.IDString(id), storage.IDString(job)
+		request.CreatedAt = time.Unix(created, 0).UTC()
+		d.Reconciliations = append(d.Reconciliations, request)
+	}
+	return d, requests.Err()
 }
 
 type User struct {

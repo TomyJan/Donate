@@ -240,6 +240,16 @@ func run() error {
 		if e != nil {
 			return e
 		}
+		// Synthetic rendering fixtures for the reserved test IP, never real IP lookup data.
+		province := "北京"
+		if i%2 == 0 {
+			province = "上海"
+		}
+		oid, _ := storage.ParseID(v.ID)
+		lid := storage.NewID()
+		if _, e = db.DB.Exec("INSERT INTO order_locations(id,order_id,country,province,source,source_version,queried_at) VALUES(?,?,'中国',?,'fixture-synthetic','e2e-reserved-ip',?)", lid[:], oid, province, at.Unix()); e != nil {
+			return e
+		}
 	}
 	db.Close()
 	private := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})

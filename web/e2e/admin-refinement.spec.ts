@@ -46,8 +46,9 @@ test('shared header keeps its height, hides downwards and returns upwards', asyn
   await expect(page.locator('tbody tr').first()).toBeVisible();
   await page.mouse.wheel(0, 650);
   await expect(header).toHaveAttribute('data-hidden', 'true');
-  await expect(page.getByRole('button', { name: '回到顶部', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '回到顶部', exact: true })).toHaveCount(0);
   await page.mouse.wheel(0, -120);
+  await expect(page.getByRole('button', { name: '回到顶部', exact: true })).toBeVisible();
   await expect(header).toHaveAttribute('data-hidden', 'false');
   await page.getByRole('button', { name: '回到顶部', exact: true }).click();
   await expect.poll(() => page.evaluate(() => scrollY)).toBeLessThan(2);

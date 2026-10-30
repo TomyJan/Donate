@@ -81,6 +81,15 @@ func main() {
 	for name, t := range types {
 		schemas[name] = describe(t)
 	}
+	recordProps := schemas["RecordItem"].(schema)["properties"].(map[string]any)
+	recordProps["is_mine"].(schema)["description"] = "Whether this record belongs to the effective authenticated session. Always false for guests; no owner user ID is exposed. Public feeds still contain only paid, non-hidden orders."
+	recordProps["province"].(schema)["description"] = "Stored province-level location only, or an empty string when lookup data is unavailable."
+	orderProps := schemas["Order"].(schema)["properties"].(map[string]any)
+	orderProps["province"].(schema)["description"] = "Province-level location safe for owner detail. Empty when unavailable; full IP/location remains restricted to the admin detail route."
+	orderProps["reconciliations"].(schema)["description"] = "Admin detail only: all persisted distinct manual reconciliation requests, newest first. IDs are stored request UUIDs, not idempotency keys. Several requests may share a job; status/result reflect the currently linked job. Absent from ordinary owner detail and after physical deletion."
+	jobProps := orderProps["jobs"].(schema)["items"].(schema)["properties"].(map[string]any)
+	jobProps["source"].(schema)["description"] = "The job's current wakeup source, such as automatic, manual or browser_return; automatic jobs must not be presented as manual requests."
+	jobProps["created_at"].(schema)["description"] = "Job creation instant. This is not the timestamp of each manual request when an active job is reused."
 	auditProps := schemas["Audit"].(schema)["properties"].(map[string]any)
 	for field, description := range map[string]string{
 		"actor":             "Current actor nickname, or the stable system key when unavailable.",

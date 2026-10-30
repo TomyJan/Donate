@@ -13,7 +13,7 @@ export function OverviewRange({
   value: OverviewPeriod;
   onChange: (value: OverviewPeriod) => void;
 }) {
-  const { t } = useApp();
+  const { t, notify } = useApp();
   const [open, setOpen] = useState(false);
   const customPending = useRef(false);
   const [from, setFrom] = useState(value.from ?? new Date(Date.now() - 30 * 86400000).toISOString());
@@ -67,11 +67,13 @@ export function OverviewRange({
               <span>{t('to')}</span>
               <DateTimeField label={t('to')} value={to} onValue={setTo} />
             </div>
-            {!valid && <p role="alert">{t('dateRule')}</p>}
             <Button
               className="d-primary"
-              disabled={!valid}
               onClick={() => {
+                if (!valid) {
+                  notify(t('dateRule'), true);
+                  return;
+                }
                 onChange({ range: 'custom', from, to });
                 setOpen(false);
               }}

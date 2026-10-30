@@ -3,7 +3,7 @@ import * as Dropdown from '@radix-ui/react-dropdown-menu';
 import * as Select from '@radix-ui/react-select';
 import { ArrowLeft, ArrowRight, Check, ChevronDown, X } from 'lucide-react';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useApp } from '../app/context';
 import { AnimatedHeight } from './AnimatedHeight';
 import './shared-controls.css';
@@ -133,14 +133,23 @@ export function Pagination({
   onSize?: (value: number) => void;
 }) {
   const { t } = useApp();
-  const count = Math.max(1, Math.ceil(total / size));
+  const steps = [10, 20, 50, 100];
+  const options = steps.filter((_, index) => index === 0 || steps[index - 1] < total);
+  const effectiveSize = Math.min(size, options.at(-1) ?? 10);
+  const count = Math.max(1, Math.ceil(total / effectiveSize));
+  useEffect(() => {
+    if (onSize && size !== effectiveSize) {
+      onSize(effectiveSize);
+      onPage(1);
+    }
+  }, [size, effectiveSize, onSize, onPage]);
   return (
     <div className="a-foot">
       <span className="pagination-total">
         {t('total')} {total} {t('items')}
       </span>
       <Select.Root
-        value={String(size)}
+        value={String(effectiveSize)}
         disabled={!onSize}
         onValueChange={(value) => {
           onSize?.(Number(value));
@@ -156,7 +165,7 @@ export function Pagination({
         <Select.Portal container={portal()}>
           <Select.Content className="d-pop select-pop" position="popper" sideOffset={7} collisionPadding={12}>
             <Select.Viewport>
-              {[10, 20, 50, 100].map((value) => (
+              {options.map((value) => (
                 <Select.Item key={value} value={String(value)} className="d-option">
                   <Select.ItemText>
                     {value} {t('perPage')}

@@ -44,7 +44,6 @@ export function ActionConfirm<T = undefined>({
   const [error, setError] = useState('');
   const version = useRef(0);
   const working = useRef(false);
-  const titleID = useId();
   const descriptionID = useId();
   const invalidate = useCallback(() => {
     version.current += 1;
@@ -132,8 +131,9 @@ export function ActionConfirm<T = undefined>({
           sideOffset={8}
           collisionPadding={12}
           align="end"
-          aria-labelledby={titleID}
-          aria-describedby={description ? descriptionID : undefined}
+          aria-label={title}
+          aria-describedby={description || children ? descriptionID : undefined}
+          aria-busy={preparing || busy}
           onEscapeKeyDown={(event) => {
             if (busy) event.preventDefault();
           }}
@@ -141,17 +141,21 @@ export function ActionConfirm<T = undefined>({
             if (busy) event.preventDefault();
           }}
         >
-          <strong id={titleID} className="action-confirm-title">
-            {title}
-          </strong>
-          {description && <p id={descriptionID}>{description}</p>}
-          {children}
-          {preparing && <p role="status">{t('loading')}</p>}
-          {error && (
-            <p role="alert" className="action-confirm-error">
-              {error}
-            </p>
+          <p
+            className={`action-confirm-prompt ${error ? 'action-confirm-error' : ''}`}
+            role={error ? 'alert' : undefined}
+          >
+            {error || t('confirmActionPrompt').replace('{action}', title)}
+          </p>
+          {(description || children) && (
+            <div id={descriptionID} hidden>
+              {description}
+              {children}
+            </div>
           )}
+          <span role="status" className="action-confirm-status">
+            {preparing ? t('loading') : ''}
+          </span>
           <div className="action-confirm-actions">
             <Button disabled={busy} onClick={() => changeOpen(false)}>
               {t('cancel')}
@@ -159,7 +163,7 @@ export function ActionConfirm<T = undefined>({
             <Button
               disabled={preparing || busy || !prepared}
               className={danger ? 'is-danger' : 'd-primary'}
-              aria-busy={busy}
+              aria-busy={preparing || busy}
               onClick={() => void confirm()}
             >
               {busy ? t('loading') : t('confirm')}

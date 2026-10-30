@@ -1,14 +1,58 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ActionConfirm } from './ActionConfirm';
 
+const shellStyles = readFileSync('src/styles/shell.css', 'utf8');
+const confirmationStyles = readFileSync('src/components/ActionConfirm.css', 'utf8');
+
 const { report } = vi.hoisted(() => ({ report: vi.fn() }));
-vi.mock('../app/context', () => ({ useApp: () => ({ t: (key: string) => key, report }) }));
+vi.mock('../app/context', () => ({
+  useApp: () => ({ t: (key: string) => (key === 'confirmActionPrompt' ? 'Confirm {action}?' : key), report }),
+}));
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
   report.mockClear();
+});
+
+it('shows one compact confirmation sentence and two buttons while preserving its accessible action name', async () => {
+  render(
+    <ActionConfirm
+      trigger={<button type="button">Hide order</button>}
+      title="Hide order"
+      description="The donation will stop appearing in public records."
+      onConfirm={async () => {}}
+    />,
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Hide order' }));
+  await act(async () => {});
+  const dialog = screen.getByRole('dialog', { name: 'Hide order' });
+  expect(within(dialog).getByText('Confirm Hide order?')).toBeVisible();
+  expect(within(dialog).queryByText('Hide order')).not.toBeInTheDocument();
+  expect(within(dialog).getByText('The donation will stop appearing in public records.')).not.toBeVisible();
+  expect(within(dialog).getAllByRole('button')).toHaveLength(2);
+});
+
+it('keeps the confirmation and buttons in one row despite the shared menu column layout', async () => {
+  const host = document.createElement('div');
+  host.className = 'd-app';
+  document.body.append(host);
+  const view = render(
+    <>
+      <style>{shellStyles + confirmationStyles}</style>
+      <ActionConfirm trigger={<button type="button">Hide</button>} title="Hide" onConfirm={async () => {}} />
+    </>,
+    { container: host },
+  );
+  try {
+    fireEvent.click(screen.getByRole('button', { name: 'Hide' }));
+    await act(async () => {});
+    expect(getComputedStyle(screen.getByRole('dialog', { name: 'Hide' })).flexDirection).toBe('row');
+  } finally {
+    view.unmount();
+    host.remove();
+  }
 });
 
 it('waits for the preview and only executes the prepared operation once', async () => {
@@ -213,3 +257,5 @@ it('returns keyboard focus to the original trigger when Escape cancels a confirm
   await waitFor(() => expect(trigger).toHaveFocus());
   expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
 });
+
+import { readFileSync } from 'node:fs';

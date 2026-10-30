@@ -65,11 +65,15 @@
 #donate-admin .overview-stats strong { font-size:clamp(20px,2.5vw,28px); font-weight:500; font-variant-numeric:tabular-nums; overflow-wrap:anywhere; }
 #donate-admin .overview-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:32px; }
 #donate-admin .overview-grid>section { min-width:0; }
+#donate-admin .overview-panel { position:relative; min-width:0; }
+#donate-admin .overview-controls { display:flex; justify-content:flex-end; min-height:36px; }
+#donate-admin .overview-refresh { width:36px; min-height:36px; padding:8px; }
+#donate-admin .overview-progress { position:absolute; top:39px; inset-inline:0; height:2px; background:var(--d-accent); border-radius:9px; }
 #donate-admin .a-summary-table { table-layout:fixed; }
 #donate-admin .a-summary-table th { padding-inline:4px; }
 #donate-admin .a-summary-table td { padding-inline:4px; font-variant-numeric:tabular-nums; }
 @media (max-width:1100px) {
-  #donate-admin .a-layout { grid-template-columns:minmax(0,1fr); }
+  #donate-admin .a-layout { grid-template-columns:minmax(0,1fr); grid-template-rows:max-content minmax(0,1fr); }
   #donate-admin .a-side { flex-direction:row; align-items:center; border-right:0; border-bottom:1px solid var(--d-line); padding:12px 24px; }
   #donate-admin .a-side .d-btn { flex:1; justify-content:center; }
   #donate-admin .a-side>a { display:none; }
@@ -155,8 +159,23 @@
 .range-field>span { font-size:12px; color:var(--d-muted); }
 .range-field .d-btn { width:100%; justify-content:space-between; }
 .range-pop>p { margin:0; color:var(--d-danger); font-size:12px; }
-.user-actions { margin-top:22px; padding-top:18px; border-top:1px solid var(--d-line); }
-#donate-admin .user-filter { margin-bottom:12px; font-size:12px; }
+#donate-admin .user-actions { margin-top:0; padding-top:0; border-top:0; }
+#donate-admin .a-order-filters { min-width:0; }
+#donate-admin .a-order-tools { flex-wrap:nowrap; }
+#donate-admin .a-order-tools .a-search { flex:1 1 150px; }
+#donate-admin .a-basic-filter { flex:0 0 120px; min-width:0; }
+#donate-admin .a-basic-filter>.d-btn { width:100%; max-width:100%; }
+#donate-admin .a-filter-toggle { flex:0 0 auto; min-height:42px; padding-inline:10px; white-space:nowrap; }
+#donate-admin .a-filter-toggle small { display:inline-flex; justify-content:center; min-width:16px; font-size:10px; }
+#donate-admin .a-tucked-filter .d-btn { max-width:100%; }
+#donate-admin .a-user-filter>span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.admin-user-pop { width:min(320px,calc(100vw - 24px)); }
+#donate-admin .admin-user-search { width:100%; margin-bottom:8px; }
+.admin-user-options { max-height:280px; overflow-y:auto; overscroll-behavior:contain; }
+.admin-user-option { display:flex; justify-content:space-between; gap:12px; text-align:left; width:100%; min-height:44px; }
+.admin-user-option>span { min-width:0; display:flex; flex-direction:column; }
+.admin-user-option strong { font-weight:500; font-size:12px; overflow-wrap:anywhere; }
+.admin-user-option small { font-size:10px; color:var(--d-muted); overflow-wrap:anywhere; }
 @media (max-width:960px) {
   #donate-admin .a-data-table :is(th,td)[data-field] { width:auto; }
   #donate-admin .a-data-table td[data-field=message] { grid-area:message; }

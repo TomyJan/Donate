@@ -467,6 +467,11 @@
                   "format": "int64",
                   "type": "integer"
                 },
+                "created_at": {
+                  "description": "Job creation instant. This is not the timestamp of each manual request when an active job is reused.",
+                  "format": "date-time",
+                  "type": "string"
+                },
                 "id": {
                   "type": "string"
                 },
@@ -480,16 +485,22 @@
                   "format": "date-time",
                   "type": "string"
                 },
+                "source": {
+                  "description": "The job's current wakeup source, such as automatic, manual or browser_return; automatic jobs must not be presented as manual requests.",
+                  "type": "string"
+                },
                 "status": {
                   "type": "string"
                 }
               },
               "required": [
                 "attempts",
+                "created_at",
                 "id",
                 "kind",
                 "result",
                 "run_at",
+                "source",
                 "status"
               ],
               "type": "object"
@@ -579,6 +590,42 @@
           "protocol": {
             "type": "string"
           },
+          "province": {
+            "description": "Province-level location safe for owner detail. Empty when unavailable; full IP/location remains restricted to the admin detail route.",
+            "type": "string"
+          },
+          "reconciliations": {
+            "description": "Admin detail only: all persisted distinct manual reconciliation requests, newest first. IDs are stored request UUIDs, not idempotency keys. Several requests may share a job; status/result reflect the currently linked job. Absent from ordinary owner detail and after physical deletion.",
+            "items": {
+              "properties": {
+                "created_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "job_id": {
+                  "type": "string"
+                },
+                "result": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "created_at",
+                "id",
+                "job_id",
+                "result",
+                "status"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
           "remote_close_status": {
             "type": "string"
           },
@@ -608,6 +655,7 @@
           "message",
           "nickname",
           "protocol",
+          "province",
           "remote_close_status",
           "status",
           "trade_no",
@@ -1035,6 +1083,10 @@
           "id": {
             "type": "string"
           },
+          "is_mine": {
+            "description": "Whether this record belongs to the effective authenticated session. Always false for guests; no owner user ID is exposed. Public feeds still contain only paid, non-hidden orders.",
+            "type": "boolean"
+          },
           "message": {
             "type": "string"
           },
@@ -1042,6 +1094,7 @@
             "type": "string"
           },
           "province": {
+            "description": "Stored province-level location only, or an empty string when lookup data is unavailable.",
             "type": "string"
           },
           "status": {
@@ -1053,6 +1106,7 @@
           "avatar_url",
           "date",
           "id",
+          "is_mine",
           "message",
           "nickname",
           "province",
@@ -1079,6 +1133,9 @@
                 "id": {
                   "type": "string"
                 },
+                "is_mine": {
+                  "type": "boolean"
+                },
                 "message": {
                   "type": "string"
                 },
@@ -1097,6 +1154,7 @@
                 "avatar_url",
                 "date",
                 "id",
+                "is_mine",
                 "message",
                 "nickname",
                 "province",
