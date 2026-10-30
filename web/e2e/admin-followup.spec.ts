@@ -239,7 +239,7 @@ test('failed overview range requests retain previous metrics and pagination', as
   );
   await page.getByRole('combobox', { name: '时间范围', exact: true }).click();
   await page.getByRole('option', { name: '7d', exact: true }).click();
-  await expect(page.locator('.toast').filter({ hasText: '服务暂不可用' })).toBeVisible();
+  await expect(page.locator('.toast').filter({ hasText: '第三方暂未响应' })).toBeVisible();
   expect(await card.evaluate((el) => el.isConnected)).toBe(true);
   await expect(page.locator('.overview-stats strong').first()).toHaveText(amount ?? '');
   await expect(daily).toContainText('2 / 2');

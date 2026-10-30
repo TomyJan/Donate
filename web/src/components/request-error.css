@@ -1,0 +1,36 @@
+.d-app .request-error {
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 22px;
+  color: var(--d-muted);
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.request-error p {
+  margin: 0;
+  max-width: 36em;
+}
+.d-app .request-error .d-btn {
+  min-height: 36px;
+  padding: 7px 12px;
+  font-size: 12px;
+  gap: 7px;
+}
+.request-error .is-spinning {
+  animation: request-spin 1s linear infinite;
+}
+@keyframes request-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .request-error .is-spinning {
+    animation: none;
+  }
+}

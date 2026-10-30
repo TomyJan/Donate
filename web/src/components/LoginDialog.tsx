@@ -4,6 +4,7 @@ import { useApp } from '../app/context';
 import { loginProviders } from '../lib/providers';
 import { LegalLinks } from './LegalLinks';
 import { ProviderIcon } from './ProviderIcon';
+import { RequestError } from './RequestError';
 import { Button, Modal } from './ui';
 
 export function LoginDialog() {
@@ -24,7 +25,13 @@ export function LoginDialog() {
             <span className="provider-name">{provider.name}</span>
           </Button>
         ))}
-        {!site?.providers.length && <p>{t('notConfigured')}</p>}
+        {!site &&
+          (app.siteError ? (
+            <RequestError error={app.siteError} onRetry={() => void app.retrySite()} />
+          ) : (
+            <p role="status">{t('loading')}</p>
+          ))}
+        {site && !site.providers.length && <p>{t('notConfigured')}</p>}
       </div>
       <div className="login-agreement">
         <span className="agreement-check">

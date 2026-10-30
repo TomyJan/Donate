@@ -7,6 +7,7 @@ import { ActionConfirm } from './ActionConfirm';
 import { AdminLoading } from './AdminLoading';
 import { CopyButton } from './CopyButton';
 import { IdentityBindings } from './IdentityBindings';
+import { RequestError } from './RequestError';
 import { Avatar, Button, Empty, Modal } from './ui';
 
 export function UserDialog({
@@ -108,6 +109,8 @@ export function UserDialog({
         </>
       ) : user.isLoading ? (
         <AdminLoading kind="detail" />
+      ) : user.error ? (
+        <RequestError error={user.error} busy={user.isFetching} onRetry={() => void user.refetch()} />
       ) : (
         <Empty text={t('not_found')} />
       )}

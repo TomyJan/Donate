@@ -4,6 +4,7 @@ export class APIError extends Error {
     message: string,
     public status: number,
     public requestID = '',
+    public requestPath = '',
   ) {
     super(message);
   }
@@ -18,38 +19,74 @@ function signalAccessFailure(path: string, status: number, code: string) {
   else if (status === 403 && code === 'FORBIDDEN' && path.startsWith('admin/'))
     window.dispatchEvent(new Event('admin-forbidden'));
 }
-export async function api<T>(path: string, body?: unknown): Promise<T> {
-  const r = await fetch(`/api/v1/${path}`, {
-    method: body === undefined ? 'GET' : 'POST',
-    credentials: 'same-origin',
-    headers: body === undefined ? {} : { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  let v: { code: string; message: string; data: T; request_id: string };
+function responseError(path: string, response: Response) {
+  const code =
+    response.status === 401
+      ? 'UNAUTHORIZED'
+      : response.status === 403
+        ? 'FORBIDDEN'
+        : response.status === 429
+          ? 'RATE_LIMITED'
+          : response.status >= 500
+            ? 'SERVER_UNAVAILABLE'
+            : 'INVALID_RESPONSE';
+  signalAccessFailure(path, response.status, code);
+  return new APIError(code, '', response.status, response.headers.get('X-Request-ID') ?? '', path);
+}
+async function request(path: string, body?: unknown, signal?: AbortSignal) {
   try {
-    v = await r.json();
+    const timeout = AbortSignal.timeout(15000);
+    return await fetch(`/api/v1/${path}`, {
+      method: body === undefined ? 'GET' : 'POST',
+      credentials: 'same-origin',
+      headers: body === undefined ? {} : { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    const code = !navigator.onLine
+      ? 'OFFLINE'
+      : error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError')
+        ? 'REQUEST_TIMEOUT'
+        : 'NETWORK_ERROR';
+    throw new APIError(code, '', 0, '', path);
+  }
+}
+async function envelope<T>(path: string, response: Response): Promise<T> {
+  let value: unknown;
+  try {
+    value = await response.json();
   } catch {
-    throw new APIError('NETWORK_ERROR', '服务暂不可用', r.status);
+    throw responseError(path, response);
   }
-  if (!r.ok || v.code !== 'OK') {
-    signalAccessFailure(path, r.status, v.code);
-    throw new APIError(v.code, v.message, r.status, v.request_id);
+  if (!value || typeof value !== 'object' || !('code' in value) || typeof value.code !== 'string')
+    throw responseError(path, response);
+  const wire = value as { code: string; message?: string; request_id?: string; data: T };
+  if (!response.ok || wire.code !== 'OK') {
+    signalAccessFailure(path, response.status, wire.code);
+    throw new APIError(
+      wire.code,
+      typeof wire.message === 'string' ? wire.message : '',
+      response.status,
+      typeof wire.request_id === 'string' ? wire.request_id : '',
+      path,
+    );
   }
-  return v.data;
+  if (!Object.hasOwn(wire, 'data')) throw responseError(path, response);
+  return wire.data;
+}
+export async function api<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
+  return envelope<T>(path, await request(path, body, signal));
 }
 export async function downloadExport(id: string) {
-  const r = await fetch('/api/v1/admin/order/export', {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
-    body: JSON.stringify({ operation_id: id }),
-  });
-  if (!r.ok || !r.headers.get('Content-Type')?.includes('text/csv')) {
-    const v = await r.json();
-    signalAccessFailure('admin/order/export', r.status, v.code);
-    throw new APIError(v.code, v.message, r.status, v.request_id);
+  const path = 'admin/order/export';
+  const response = await request(path, { operation_id: id });
+  if (!response.ok || !response.headers.get('Content-Type')?.includes('text/csv')) {
+    await envelope(path, response);
+    throw responseError(path, response);
   }
-  const url = URL.createObjectURL(await r.blob());
+  const url = URL.createObjectURL(await response.blob());
   const a = document.createElement('a');
   a.href = url;
   a.download = 'donate-orders.csv';

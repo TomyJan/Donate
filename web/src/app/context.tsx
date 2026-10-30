@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { APIError, api, setCSRF } from '../lib/api';
+import { errorMessage } from '../lib/errors';
 import type { Language } from '../lib/i18n';
 import { translate } from '../lib/i18n';
 import { LEGAL_CONSENT_KEY, useLocalAcknowledgment } from '../lib/legal';
@@ -27,6 +28,7 @@ type AppState = {
   notify: (text: string, error?: boolean) => void;
   report: (e: unknown) => void;
   refresh: () => Promise<void>;
+  retrySite: () => Promise<void>;
   login: (provider: string, bind?: boolean) => Promise<void>;
   logout: () => Promise<void>;
   toasts: Toast[];
@@ -72,17 +74,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
   const report = useCallback(
     (e: unknown) => {
-      const key = e instanceof APIError ? e.code : '';
-      const labels: Record<string, string> = {
-        UNAUTHORIZED: 'unauthorized',
-        FORBIDDEN: 'forbidden',
-        ACCOUNT_BANNED: 'banned',
-        UPSTREAM_UNAVAILABLE: 'unavailable',
-        VALIDATION_FAILED: 'amountRule',
-        SELF_BAN_FORBIDDEN: 'forbidden',
-        LAST_IDENTITY_FORBIDDEN: 'lastIdentityHint',
-      };
-      notify(labels[key] ? t(labels[key]) : e instanceof Error ? e.message : t('network'), true);
+      notify(errorMessage(e, t), true);
     },
     [notify, t],
   );
@@ -243,6 +235,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         notify,
         report,
         refresh,
+        retrySite: () => client.invalidateQueries({ queryKey: ['site'] }),
         login,
         logout,
         toasts,

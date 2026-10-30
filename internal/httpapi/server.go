@@ -138,8 +138,10 @@ func (s *Server) failure(w http.ResponseWriter, r *http.Request, e error) {
 		code, message = "ORDER_NOT_PAYABLE", e.Error()
 	case errors.Is(e, order.ErrMismatch):
 		code, message = "PAYMENT_MISMATCH", "支付核验未通过"
-	case errors.Is(e, auth.ErrUpstream), errors.Is(e, payment.ErrUnavailable), errors.Is(e, payment.ErrProtocol):
-		code, message = "UPSTREAM_UNAVAILABLE", "第三方服务暂不可用"
+	case errors.Is(e, auth.ErrUpstream):
+		code, message = "LOGIN_PROVIDER_UNAVAILABLE", "登录服务暂未响应，请稍后再试或选择其他方式"
+	case errors.Is(e, payment.ErrUnavailable), errors.Is(e, payment.ErrProtocol):
+		code, message = payment.UserError(e)
 	case errors.Is(e, admin.ErrSelfBan):
 		code, message = "SELF_BAN_FORBIDDEN", e.Error()
 	case errors.Is(e, admin.ErrLastIdentity):

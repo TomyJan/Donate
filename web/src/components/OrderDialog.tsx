@@ -7,6 +7,7 @@ import type { Operation, Order } from '../lib/types';
 import { ActionConfirm } from './ActionConfirm';
 import { AdminLoading } from './AdminLoading';
 import { CopyButton } from './CopyButton';
+import { RequestError } from './RequestError';
 import { Avatar, Button, Modal } from './ui';
 import './OrderDialog.css';
 
@@ -195,10 +196,8 @@ export function OrderDialog({
     <Modal open={!!id} onOpenChange={(v) => !v && onClose()} title={t('details')} wide>
       {detail.isLoading ? (
         <AdminLoading kind="detail" />
-      ) : detail.error ? (
-        <p role="alert">
-          {t('error')} <Button onClick={() => void detail.refetch()}>{t('retry')}</Button>
-        </p>
+      ) : detail.error && !o ? (
+        <RequestError error={detail.error} busy={detail.isFetching} onRetry={() => void detail.refetch()} />
       ) : (
         o && (
           <div className="order-detail">

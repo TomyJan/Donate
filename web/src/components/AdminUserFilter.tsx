@@ -5,6 +5,7 @@ import { useId, useState } from 'react';
 import { useApp } from '../app/context';
 import { api, query } from '../lib/api';
 import type { Page, User } from '../lib/types';
+import { RequestError } from './RequestError';
 import { Button, Empty, portal } from './ui';
 
 export function AdminUserFilter({ value, onValue }: { value: string; onValue: (id: string) => void }) {
@@ -89,9 +90,16 @@ export function AdminUserFilter({ value, onValue }: { value: string; onValue: (i
                 {user.id === value && <Check />}
               </Button>
             ))}
-            {!users.data?.items.length && (
-              <Empty text={t(users.isLoading ? 'loading' : users.error ? 'unavailable' : 'empty')} />
-            )}
+            {!users.data?.items.length &&
+              (users.error ? (
+                <RequestError
+                  error={users.error}
+                  busy={users.isFetching}
+                  onRetry={() => void users.refetch()}
+                />
+              ) : (
+                <Empty text={t(users.isLoading ? 'loading' : 'empty')} />
+              ))}
           </div>
         </Popover.Content>
       </Popover.Portal>

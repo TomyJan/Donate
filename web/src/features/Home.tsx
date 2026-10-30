@@ -6,10 +6,12 @@ import { useApp } from '../app/context';
 import { ConstrainedInput } from '../components/ConstrainedInput';
 import { MessageInput } from '../components/MessageInput';
 import { checkout, OrderDialog } from '../components/OrderDialog';
+import { RequestError } from '../components/RequestError';
 import { SelectionButton, SelectionGroup } from '../components/SelectionGroup';
 import { Button, Empty, Menu } from '../components/ui';
 import { acceptAmountEdit, amountFen } from '../lib/amount';
 import { api, query } from '../lib/api';
+import { errorMessage } from '../lib/errors';
 import type { Order, Records } from '../lib/types';
 import { HomeReceipt } from './HomeReceipt';
 import { HomeRecordIndex } from './HomeRecordIndex';
@@ -174,7 +176,13 @@ export function Home() {
           }))}
         />
       </div>
-      <p className="r-ticket-foot">{t(app.site?.payment_enabled ? 'foot' : 'paymentDisabled')}</p>
+      <p className="r-ticket-foot">
+        {app.siteError
+          ? errorMessage(app.siteError, t)
+          : !app.site
+            ? t('loading')
+            : t(app.site.payment_enabled ? 'foot' : 'paymentDisabled')}
+      </p>
     </article>
   );
   return (
@@ -231,8 +239,10 @@ export function Home() {
               />
             </AnimatePresence>
           </motion.div>
+        ) : list.error ? (
+          <RequestError error={list.error} busy={list.isFetching} onRetry={() => void list.refetch()} />
         ) : (
-          <Empty text={list.isLoading ? t('loading') : list.error ? t('unavailable') : t('empty')} />
+          <Empty text={list.isLoading ? t('loading') : t('empty')} />
         )}
         <HomeRecordIndex
           pages={list.data?.pages ?? []}

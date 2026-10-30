@@ -26,6 +26,7 @@ import { AnimatedHeight } from '../components/AnimatedHeight';
 import { SelectField } from '../components/forms';
 import { OrderDialog } from '../components/OrderDialog';
 import { type OverviewPeriod, OverviewRange } from '../components/OverviewRange';
+import { RequestError } from '../components/RequestError';
 import { SelectionButton, SelectionGroup } from '../components/SelectionGroup';
 import { UserDialog } from '../components/UserDialog';
 import { Button, Empty, Menu, Modal, Pagination } from '../components/ui';
@@ -306,8 +307,8 @@ export function Admin() {
             )}
             {list.isLoading ? (
               <AdminLoading kind="table" />
-            ) : list.error ? (
-              <Empty text={t('error')} />
+            ) : list.error && !rows.length ? (
+              <RequestError error={list.error} busy={list.isFetching} onRetry={() => void list.refetch()} />
             ) : !rows.length ? (
               <Empty />
             ) : (
@@ -429,7 +430,7 @@ function OverviewSection({
   period: OverviewPeriod;
   onChange: (value: OverviewPeriod) => void;
 }) {
-  const { t, notify } = useApp();
+  const { t, report } = useApp();
   const [lastSuccess, setLastSuccess] = useState<Overview>();
   const overview = useQuery({
     queryKey: ['overview', period],
@@ -441,8 +442,8 @@ function OverviewSection({
     if (overview.isSuccess && !overview.isPlaceholderData) setLastSuccess(overview.data);
   }, [overview.data, overview.isSuccess, overview.isPlaceholderData]);
   useEffect(() => {
-    if (overview.error) notify(t('unavailable'), true);
-  }, [overview.error, notify, t]);
+    if (overview.error) report(overview.error);
+  }, [overview.error, report]);
   const displayed = overview.data ?? lastSuccess;
   return (
     <>
@@ -466,7 +467,11 @@ function OverviewSection({
           {displayed ? (
             <OverviewPanel data={displayed} />
           ) : overview.error ? (
-            <Empty text={t('unavailable')} />
+            <RequestError
+              error={overview.error}
+              busy={overview.isFetching}
+              onRetry={() => void overview.refetch()}
+            />
           ) : (
             <AdminLoading />
           )}

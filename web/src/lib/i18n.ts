@@ -234,6 +234,73 @@ export const words = {
   unauthorized: ['请先登录', 'Please sign in'],
   forbidden: ['无权访问', 'Access denied'],
   unavailable: ['服务暂不可用', 'Service unavailable'],
+  offlineError: ['网络已断开，恢复连接后再试。', 'You are offline. Reconnect and try again.'],
+  connectionError: [
+    '没能连接到本站，请检查网络后重试。',
+    'Could not connect. Check your connection and try again.',
+  ],
+  timeoutError: ['请求超时，请稍后重试。', 'The request timed out. Please try again.'],
+  invalidResponseError: [
+    '返回内容异常，请刷新页面后重试。',
+    'An unexpected response was received. Refresh and try again.',
+  ],
+  serverBusyError: ['服务器正在忙，请稍后重试。', 'The server is busy. Please try again shortly.'],
+  requestFailedError: ['这次请求未完成，请重试。', 'The request did not complete. Please try again.'],
+  checkInputError: ['请检查填写的内容后再试。', 'Check the entered information and try again.'],
+  rateLimitedError: ['操作太频繁，稍等一会儿再试。', 'Too many requests. Wait a moment and try again.'],
+  recordMissingError: ['这条记录不存在或已被删除。', 'This record does not exist or has been deleted.'],
+  sessionChangedError: [
+    '登录状态已更新，请刷新页面后重试。',
+    'Your session has changed. Refresh and try again.',
+  ],
+  identityConflictError: [
+    '这个第三方账号已绑定其他用户。',
+    'This account is already linked to another user.',
+  ],
+  changedRequestError: [
+    '订单内容已经变化，请刷新后再试。',
+    'The order has changed. Refresh before trying again.',
+  ],
+  orderNotPayableError: [
+    '订单已支付或已关闭，请查看订单详情。',
+    'The order is already paid or closed. Check its details.',
+  ],
+  alreadyPaidError: [
+    '该订单已支付，请查看捐赠记录。',
+    'This order is already paid. Check your donation history.',
+  ],
+  paymentVerificationError: [
+    '暂时没能核实支付结果，请在订单详情中查看进度。',
+    'The payment could not be verified yet. Check the order for updates.',
+  ],
+  paymentUnavailableError: [
+    '支付服务暂未响应，可稍后在订单详情中继续支付。',
+    'The payment service did not respond. You can resume payment from the order details.',
+  ],
+  paymentTimeoutError: [
+    '支付请求超时，请先查看订单状态，避免重复付款。',
+    'The payment request timed out. Check the order before paying again.',
+  ],
+  paymentChannelError: [
+    '该支付方式暂时无法使用，请换一种方式或稍后重试。',
+    'This payment method is currently unavailable. Choose another or try later.',
+  ],
+  paymentAmountError: [
+    '金额超出该支付通道限额，请调整金额后再试。',
+    'The amount exceeds this payment channel’s limit. Adjust it and try again.',
+  ],
+  paymentConfigurationError: [
+    '支付配置需要站点管理员处理，请稍后再试。',
+    'The payment setup needs the site administrator’s attention. Please try later.',
+  ],
+  loginProviderError: [
+    '登录服务暂未响应，请稍后再试或选择其他方式。',
+    'The sign-in provider did not respond. Try again or choose another method.',
+  ],
+  upstreamError: [
+    '第三方暂未响应，请稍后重试。',
+    'The external service did not respond. Please try again shortly.',
+  ],
   network: ['网络请求失败', 'Network request failed'],
   success: ['已完成', 'Done'],
   checkPayment: [
