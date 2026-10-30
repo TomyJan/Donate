@@ -62,7 +62,25 @@ async function prepare(page: Page, options: { status?: string; error?: string; s
         csrf_token: 'test',
         expires_at: '2099-01-01T00:00:00Z',
       };
-    if (path.endsWith('/order/list')) data = { items: [], next_cursor: '' };
+    if (path.endsWith('/order/list'))
+      data = {
+        items: paid
+          ? [
+              {
+                id: orderID,
+                is_mine: options.signedIn !== false,
+                nickname: paidOrder.nickname,
+                avatar_url: '',
+                amount_fen: paidOrder.amount_fen,
+                message: paidOrder.message,
+                province: paidOrder.province,
+                status: 'paid',
+                date: paidOrder.paid_at,
+              },
+            ]
+          : [],
+        next_cursor: '',
+      };
     await route.fulfill({ json: { code: 'OK', data } });
   });
   return {
@@ -474,6 +492,50 @@ test('fresh server records replace the temporary receipt snapshot after payment'
   await page.getByRole('button', { name: '只看我的', exact: true }).click();
   await expect(page.locator('.r-featured:not(.r-leaving)')).toContainText('更新后的留言');
   await expect(page.locator('.r-featured:not(.r-leaving)')).toContainText('上海');
+});
+
+test('authoritative empty records do not resurrect a delivered payment after deletion', async ({ page }) => {
+  await prepare(page);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  let removed = false;
+  let requests = 0;
+  await page.route('**/api/v1/order/list?**', (route) => {
+    requests++;
+    return route.fulfill({
+      json: {
+        code: 'OK',
+        data: {
+          items: removed ? [] : [{ ...paidOrder, date: paidOrder.paid_at, is_mine: true }],
+          next_cursor: '',
+        },
+      },
+    });
+  });
+  await page.goto(`/?payment=returned&order=${orderID}`);
+  await expect(page.locator('.r-write .r-ticket')).toHaveAttribute('data-payment-phase', 'complete');
+  await expect(page.locator('.r-featured:not(.r-leaving)')).toContainText(paidOrder.message);
+  await expect.poll(() => requests).toBeGreaterThanOrEqual(2);
+  removed = true;
+  await page.getByRole('button', { name: '只看我的', exact: true }).click();
+  await expect.poll(() => requests).toBeGreaterThanOrEqual(3);
+  await expect(page.locator('.r-book .r-empty')).toBeVisible();
+  await expect(page.locator('.r-featured:not(.r-leaving)')).toHaveCount(0);
+  await expect(page.locator('.r-book')).not.toContainText(paidOrder.message);
+});
+
+test('a successful empty refresh retires the temporary payment snapshot', async ({ page }) => {
+  await prepare(page);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  let requests = 0;
+  await page.route('**/api/v1/order/list?**', (route) => {
+    requests++;
+    return route.fulfill({ json: { code: 'OK', data: { items: [], next_cursor: '' } } });
+  });
+  await page.goto(`/?payment=returned&order=${orderID}`);
+  await expect(page.locator('.r-write .r-ticket')).toHaveAttribute('data-payment-phase', 'complete');
+  await expect.poll(() => requests).toBeGreaterThanOrEqual(2);
+  await expect(page.locator('.r-book .r-empty')).toBeVisible();
+  await expect(page.locator('.r-index-row')).toHaveCount(0);
 });
 
 test('retrying a failed OAuth authorization preserves the payment return destination', async ({ page }) => {

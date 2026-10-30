@@ -54,7 +54,9 @@ export function Home() {
   const reduced = useReducedMotion();
   const payment = usePaymentReturn();
   const [composerEpoch, setComposerEpoch] = useState(0);
-  const [delivered, setDelivered] = useState<{ owner: string; item: RecordItem } | null>(null);
+  const [delivered, setDelivered] = useState<{ owner: string; item: RecordItem; pending: boolean } | null>(
+    null,
+  );
   const destination = useRef<HTMLDivElement>(null);
   const arrival = useRef<HTMLElement>(null);
   const incoming: RecordItem | null = payment.order
@@ -85,6 +87,7 @@ export function Home() {
     if (order && order.user_id === profile?.id) {
       setDelivered({
         owner: profile.id,
+        pending: true,
         item: {
           id: order.id,
           is_mine: true,
@@ -112,6 +115,13 @@ export function Home() {
     arrival,
     onComplete: finishTransfer,
   });
+  // A snapshot only bridges filing and its first successful list refresh. Keep
+  // the arrival identity stable so acknowledging the API does not remount the paper.
+  useEffect(() => {
+    if (delivered?.pending && list.isSuccess && !list.isFetching) {
+      setDelivered({ ...delivered, pending: false });
+    }
+  }, [delivered, list.isSuccess, list.isFetching]);
   // A callback can arrive after the public API already includes this payment. Keep that
   // row out until the paper has landed, including the initial response and focus refetches.
   const fetchedPages = (list.data?.pages ?? []).map((page) =>
@@ -120,7 +130,7 @@ export function Home() {
   const received =
     delivered && delivered.owner === profile?.id
       ? (fetchedPages.flatMap((page) => page.items).find((item) => item.id === delivered.item.id) ??
-        delivered.item)
+        (delivered.pending ? delivered.item : null))
       : null;
   const pages = received
     ? [
@@ -189,6 +199,7 @@ export function Home() {
       app.setLoginOpen(true);
       return;
     }
+    setDelivered((previous) => (previous?.pending ? { ...previous, pending: false } : previous));
     setSelection({ selected: 0, direction: 1, previousId: null });
     setMine((v) => !v);
   };
