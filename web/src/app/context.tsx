@@ -109,15 +109,16 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [client]);
   const clearSession = useCallback(() => {
     void client.cancelQueries({ queryKey: ['profile'] });
+    void client.cancelQueries({ queryKey: ['site'] });
     client.setQueryData(['profile'], null);
     client.removeQueries({ predicate: (q) => q.queryKey[0] !== 'site' && q.queryKey[0] !== 'profile' });
     setAccountOpen(false);
+    void client.invalidateQueries({ queryKey: ['site'] });
   }, [client]);
   useEffect(() => {
     const invalidate = (event: Event) => {
       clearSession();
       if ((event as CustomEvent).detail === 'ACCOUNT_BANNED') notify(t('banned'), true);
-      void client.invalidateQueries({ queryKey: ['site'] });
     };
     window.addEventListener('session-invalid', invalidate);
     const revokeAdmin = () => {
@@ -170,6 +171,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
             // An expired authorization can still start a normal sign-in.
           }
         }
+      }
+      if (!bind && !current) {
+        const anonymous = await client.fetchQuery({
+          queryKey: ['site'],
+          queryFn: () => api<Site>('site/info'),
+          staleTime: 60000,
+        });
+        if (client.getQueryData<Profile | null>(['profile'])) return;
+        setCSRF(anonymous.csrf_token);
       }
       const v = await api<{ authorization_url: string }>(bind ? 'user/identity/bind' : 'user/login', {
         provider,
