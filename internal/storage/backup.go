@@ -16,6 +16,12 @@ import (
 
 // Backup uses SQLite's consistent snapshot operation, including committed WAL data.
 func (s *Store) Backup(ctx context.Context, dir string) (string, error) {
+	return s.backup(ctx, dir, nil)
+}
+
+// A restore protects its selected source only for this retention pass. The newly
+// created snapshot is always retained, including when older files have future dates.
+func (s *Store) backup(ctx context.Context, dir string, protected os.FileInfo) (string, error) {
 	if e := os.MkdirAll(dir, 0700); e != nil {
 		return "", e
 	}
@@ -32,23 +38,38 @@ func (s *Store) Backup(ctx context.Context, dir string) (string, error) {
 	if e = os.Chmod(path, 0600); e != nil {
 		return path, e
 	}
+	created, e := os.Stat(path)
+	if e != nil {
+		return path, e
+	}
 	paths, e := filepath.Glob(filepath.Join(dir, "donate-*.db"))
 	if e != nil {
 		return path, e
 	}
 	sort.Strings(paths)
-	if len(paths) > 7 {
-		for _, old := range paths[:len(paths)-7] {
-			if e = os.Remove(old); e != nil {
-				return path, e
-			}
+	remaining := len(paths) - 7
+	for _, old := range paths {
+		if remaining <= 0 {
+			break
 		}
+		info, err := os.Stat(old)
+		if err != nil {
+			return path, err
+		}
+		if os.SameFile(info, created) || protected != nil && os.SameFile(info, protected) {
+			continue
+		}
+		if e = os.Remove(old); e != nil {
+			return path, e
+		}
+		remaining--
 	}
 	return path, nil
 }
 
 // Restore must run with the application's exclusive instance lock held and no open Store.
 // It never migrates or writes the source snapshot. A rollback snapshot is kept before replacement.
+// Its source is exempt from this restore's retention pass; later backups rotate normally.
 func Restore(ctx context.Context, source, target string) error {
 	knownVersions := map[int64]bool{}
 	entries, e := migrations.ReadDir("migrations")
@@ -148,6 +169,9 @@ func Restore(ctx context.Context, source, target string) error {
 	if _, e = db.ExecContext(ctx, "VACUUM INTO ?", stage); e != nil {
 		return e
 	}
+	if e = db.Close(); e != nil {
+		return e
+	}
 	if e = os.Chmod(stage, 0600); e != nil {
 		return e
 	}
@@ -182,7 +206,7 @@ func Restore(ctx context.Context, source, target string) error {
 		if err != nil {
 			return err
 		}
-		_, err = (&Store{DB: current}).Backup(ctx, filepath.Join(filepath.Dir(dst), "backups"))
+		_, err = (&Store{DB: current}).backup(ctx, filepath.Join(filepath.Dir(dst), "backups"), info)
 		if err == nil {
 			_, err = current.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)")
 		}
