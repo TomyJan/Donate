@@ -42,6 +42,7 @@ export function ActionConfirm<T = undefined>({
   const [busy, setBusy] = useState(false);
   const [prepared, setPrepared] = useState<{ value: T }>();
   const [error, setError] = useState('');
+  const disabled = !!trigger.props.disabled;
   const version = useRef(0);
   const working = useRef(false);
   const descriptionID = useId();
@@ -61,7 +62,13 @@ export function ActionConfirm<T = undefined>({
       version.current += 1;
     };
   }, [scopeKey, invalidate]);
+  useEffect(() => {
+    if (!disabled || busy) return;
+    setOpen(false);
+    invalidate();
+  }, [disabled, busy, invalidate]);
   const prepareCurrent = async () => {
+    if (disabled) return false;
     const current = ++version.current;
     setPrepared(undefined);
     setError('');
@@ -86,13 +93,13 @@ export function ActionConfirm<T = undefined>({
     }
   };
   const changeOpen = (value: boolean) => {
-    if (busy) return;
+    if (busy || (value && disabled)) return;
     setOpen(value);
     if (value) void prepareCurrent();
     else invalidate();
   };
   const confirm = async () => {
-    if (!prepared || working.current) return;
+    if (disabled || !prepared || working.current) return;
     const expiry = expiresAt?.(prepared.value);
     const expiryTime = typeof expiry === 'string' ? Date.parse(expiry) : expiry;
     if (expiryTime !== undefined && (!Number.isFinite(expiryTime) || expiryTime <= Date.now())) {
@@ -161,7 +168,7 @@ export function ActionConfirm<T = undefined>({
               {t('cancel')}
             </Button>
             <Button
-              disabled={preparing || busy || !prepared}
+              disabled={disabled || preparing || busy || !prepared}
               className={danger ? 'is-danger' : 'd-primary'}
               aria-busy={preparing || busy}
               onClick={() => void confirm()}

@@ -41,6 +41,37 @@ function renderOrder(admin = false) {
 }
 const response = (data: unknown) => new Response(JSON.stringify({ code: 'OK', data }), { status: 200 });
 
+it('revokes an already-open destructive confirmation when the detail refresh fails', async () => {
+  let failed = false;
+  const executed: string[] = [];
+  vi.stubGlobal('fetch', async (input: string) => {
+    const path = String(input);
+    if (path.endsWith('/preview'))
+      return response({
+        id: 'delete-preview',
+        action: 'delete',
+        expires_at: '2099-01-01T00:00:00Z',
+        items: [{ id: 'order-uuid', result: 'ready' }],
+      });
+    if (path.endsWith('/execute')) {
+      executed.push(path);
+      return response({});
+    }
+    return failed ? new Response('unavailable', { status: 503 }) : response(order);
+  });
+  const { client } = renderOrder(true);
+  fireEvent.click(await screen.findByRole('button', { name: 'Delete order' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled());
+  failed = true;
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: ['order-detail'] });
+  });
+  await screen.findByText(translate('serverBusyError', 'en'));
+  expect(screen.getByRole('button', { name: 'Delete order' })).toBeDisabled();
+  expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument();
+  expect(executed).toEqual([]);
+});
+
 const order: Order & { province: string } = {
   id: 'order-uuid',
   user_id: 'full-user-uuid',

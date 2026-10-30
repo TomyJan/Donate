@@ -259,3 +259,64 @@ it('returns keyboard focus to the original trigger when Escape cancels a confirm
 });
 
 import { readFileSync } from 'node:fs';
+
+it('revokes an open confirmation when its trigger becomes disabled and requires a fresh preview', async () => {
+  let previews = 0;
+  const executed: string[] = [];
+  const content = (disabled: boolean) => (
+    <ActionConfirm
+      trigger={
+        <button type="button" disabled={disabled}>
+          Delete
+        </button>
+      }
+      title="Delete?"
+      prepare={async () => `preview-${++previews}`}
+      onConfirm={async (value) => {
+        executed.push(value);
+      }}
+    />
+  );
+  const view = render(content(false));
+  fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'confirm' })).toBeEnabled());
+  view.rerender(content(true));
+  await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  expect(executed).toEqual([]);
+  view.rerender(content(false));
+  fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'confirm' })).toBeEnabled());
+  fireEvent.click(screen.getByRole('button', { name: 'confirm' }));
+  await waitFor(() => expect(executed).toEqual(['preview-2']));
+});
+
+it('discards an in-flight preview when the trigger is disabled before it resolves', async () => {
+  let finish: ((value: string) => void) | undefined;
+  const executed: string[] = [];
+  const content = (disabled: boolean) => (
+    <ActionConfirm
+      trigger={
+        <button type="button" disabled={disabled}>
+          Delete
+        </button>
+      }
+      title="Delete?"
+      prepare={() =>
+        new Promise<string>((resolve) => {
+          finish = resolve;
+        })
+      }
+      onConfirm={async (value) => {
+        executed.push(value);
+      }}
+    />
+  );
+  const view = render(content(false));
+  fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+  view.rerender(content(true));
+  await act(async () => {
+    finish?.('revoked-operation');
+  });
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  expect(executed).toEqual([]);
+});
