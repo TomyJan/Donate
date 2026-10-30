@@ -2347,7 +2347,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                provider: "qq" | "oidc";
+                provider: string;
             };
             cookie?: never;
         };

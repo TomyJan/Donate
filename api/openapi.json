@@ -3727,10 +3727,7 @@
             "name": "provider",
             "required": true,
             "schema": {
-              "enum": [
-                "qq",
-                "oidc"
-              ],
+              "description": "QQ or configured OIDC public provider ID from site/info.provider_details; use id, not the stable identity kind. Only enabled providers are accepted by the server.",
               "type": "string"
             }
           },

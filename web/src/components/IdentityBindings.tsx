@@ -72,10 +72,11 @@ export function IdentityBindings({
                     trigger={
                       <Button
                         className="is-danger"
+                        aria-label={`${t('unbind')} ${configured.name}`}
                         disabled={busy || bindings.length < 2}
                         aria-describedby={bindings.length < 2 ? lastIdentityID : undefined}
                       >
-                        {t('unbind')} {configured.name}
+                        {t('unbind')}
                       </Button>
                     }
                     prepare={async () => validate(identity.id, scopeKey)}

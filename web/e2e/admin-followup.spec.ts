@@ -391,6 +391,79 @@ test('user details show registration, donation amount and binding times with man
   await expect(dialog.getByRole('button', { name: '解绑 OIDC', exact: true })).toBeDisabled();
 });
 
+for (const lang of ['zh-CN', 'en'] as const) {
+  test(`${lang}: long provider names keep identity information readable beside compact unlink actions`, async ({
+    page,
+  }) => {
+    await page.addInitScript((value) => localStorage.setItem('donate-language', value), lang);
+    await admin(page);
+    let providerName = 'TomyJan 统一身份认证中心';
+    await page.route('**/api/v1/site/info', async (route) => {
+      const response = await route.fetch();
+      const body = await response.json();
+      body.data.providers = ['campus', 'qq'];
+      body.data.provider_details = [
+        { id: 'campus', kind: 'oidc', name: providerName, icon_url: '' },
+        { id: 'qq', kind: 'qq', name: 'QQ', icon_url: '' },
+      ];
+      await route.fulfill({ json: body });
+    });
+    await page.route('**/api/v1/admin/user/detail?**', (route) =>
+      route.fulfill({
+        json: {
+          code: 'OK',
+          data: {
+            ...users[0],
+            bindings: ['qq', 'oidc'].map((provider, index) => ({
+              id: `identity-${index}`,
+              provider,
+              nickname: 'Donor',
+              avatar_url: '',
+              bound_at: '2026-10-30T00:00:00Z',
+            })),
+          },
+        },
+      }),
+    );
+    for (const name of ['TomyJan 统一身份认证中心', 'a'.repeat(64)]) {
+      providerName = name;
+      await page.reload();
+      await page
+        .locator('.a-side')
+        .getByRole('button', { name: lang === 'en' ? 'Users' : '用户', exact: true })
+        .click();
+      await page
+        .getByRole('button', { name: lang === 'en' ? /^User details / : /^用户详情 / })
+        .first()
+        .click();
+      const dialog = page.getByRole('dialog', {
+        name: lang === 'en' ? 'User details' : '用户详情',
+        exact: true,
+      });
+      const binding = dialog.locator('.d-bind').last();
+      const unlink = binding.getByRole('button', {
+        name: `${lang === 'en' ? 'Unlink' : '解绑'} ${name}`,
+        exact: true,
+      });
+      for (const width of [320, 390, 1280]) {
+        await page.setViewportSize({ width, height: 900 });
+        await expect(unlink).toBeVisible();
+        await expect
+          .poll(() => binding.locator('.d-bind-info').evaluate((el) => el.getBoundingClientRect().width))
+          .toBeGreaterThanOrEqual(100);
+        expect(await unlink.evaluate((el) => el.getBoundingClientRect().width)).toBeLessThanOrEqual(100);
+        expect(await binding.evaluate((el) => el.getBoundingClientRect().height)).toBeLessThan(360);
+        expect(await dialog.evaluate((el) => el.scrollWidth > el.clientWidth + 1)).toBe(false);
+      }
+      await expect(unlink).toHaveText(lang === 'en' ? 'Unlink' : '解绑');
+      await unlink.click();
+      await expect(
+        page.getByRole('dialog', { name: `${lang === 'en' ? 'Unlink' : '解绑'} ${name}`, exact: true }),
+      ).toContainText(name);
+    }
+  });
+}
+
 test('admin navigation animates content and selection without resetting the active page', async ({
   page,
 }) => {
