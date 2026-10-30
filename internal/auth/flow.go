@@ -29,13 +29,13 @@ type flowSecret struct {
 	ReturnTo string
 	Identity flowIdentity
 }
-type flowIdentity struct{ Provider, Issuer, Subject, Nickname, AvatarURL, QQNumber string }
+type flowIdentity struct{ Provider, Issuer, Subject, Nickname, AvatarURL, QQNumber, QQOpenID, QQUnionID string }
 
 func (p flowIdentity) profile() Identity {
-	return Identity{Provider: p.Provider, Issuer: p.Issuer, Subject: p.Subject, Nickname: p.Nickname, AvatarURL: p.AvatarURL, QQNumber: p.QQNumber}
+	return Identity{Provider: p.Provider, Issuer: p.Issuer, Subject: p.Subject, Nickname: p.Nickname, AvatarURL: p.AvatarURL, QQNumber: p.QQNumber, QQOpenID: p.QQOpenID, QQUnionID: p.QQUnionID}
 }
 func secretIdentity(p Identity) flowIdentity {
-	return flowIdentity{p.Provider, p.Issuer, p.Subject, p.Nickname, p.AvatarURL, p.QQNumber}
+	return flowIdentity{Provider: p.Provider, Issuer: p.Issuer, Subject: p.Subject, Nickname: p.Nickname, AvatarURL: p.AvatarURL, QQNumber: p.QQNumber, QQOpenID: p.QQOpenID, QQUnionID: p.QQUnionID}
 }
 
 type flow struct {
@@ -109,11 +109,11 @@ func (s *Service) provider(ctx context.Context) (*oidc.Provider, error) {
 	return p, nil
 }
 func (s *Service) oidcConfig(p *oidc.Provider) oauth2.Config {
-	return oauth2.Config{ClientID: s.Config.OIDCclientID, ClientSecret: s.Config.OIDCsecret, Endpoint: p.Endpoint(), RedirectURL: s.Config.PublicURL + "/api/v1/user/oauth/callback/oidc", Scopes: []string{oidc.ScopeOpenID, "profile"}}
+	return oauth2.Config{ClientID: s.Config.OIDCclientID, ClientSecret: s.Config.OIDCsecret, Endpoint: p.Endpoint(), RedirectURL: s.Config.PublicURL + "/api/v1/user/oauth/callback/" + s.Config.OIDCProviderID(), Scopes: []string{oidc.ScopeOpenID, "profile"}}
 }
 
 func (s *Service) BeginFlow(ctx context.Context, provider, intent string, session *Session, returnTo string) (FlowStart, error) {
-	if provider != "qq" && provider != "oidc" || intent != "login" && intent != "bind" {
+	if provider != "qq" && provider != s.Config.OIDCProviderID() || intent != "login" && intent != "bind" {
 		return FlowStart{}, ErrInvalid
 	}
 	if intent == "bind" && session == nil {
@@ -123,7 +123,7 @@ func (s *Service) BeginFlow(ctx context.Context, provider, intent string, sessio
 	id := storage.NewID()
 	payload := flowSecret{Verifier: oauth2.GenerateVerifier(), ReturnTo: validReturn(returnTo)}
 	var authURL string
-	if provider == "oidc" {
+	if provider == s.Config.OIDCProviderID() {
 		p, e := s.provider(ctx)
 		if e != nil {
 			return FlowStart{}, e
@@ -223,6 +223,9 @@ func (s *Service) FlowStatus(ctx context.Context, cookie string) (FlowStatus, er
 }
 
 func (s *Service) Callback(ctx context.Context, provider, state, code, cookie string, current *Session) (FlowResult, error) {
+	if provider != "qq" && provider != s.Config.OIDCProviderID() {
+		return FlowResult{}, ErrInvalid
+	}
 	f, e := s.claimFlow(ctx, state, cookie)
 	if e != nil {
 		return FlowResult{}, e
@@ -234,7 +237,7 @@ func (s *Service) Callback(ctx context.Context, provider, state, code, cookie st
 		return FlowResult{}, ErrUnauthorized
 	}
 	var p Identity
-	if provider == "oidc" {
+	if provider == s.Config.OIDCProviderID() {
 		p, e = s.exchangeOIDC(ctx, code, f)
 	} else {
 		p, e = s.exchangeQQ(ctx, code)
@@ -243,13 +246,13 @@ func (s *Service) Callback(ctx context.Context, provider, state, code, cookie st
 		return FlowResult{}, e
 	}
 	if provider == "qq" {
-		var number string
-		e = s.Store.DB.QueryRowContext(ctx, "SELECT qq_number FROM identities WHERE provider='qq' AND issuer=? AND subject=?", p.Issuer, p.Subject).Scan(&number)
+		known, lookupErr := lookupIdentity(ctx, s.Store.DB, p)
+		e = lookupErr
 		if e != nil && !errors.Is(e, sql.ErrNoRows) {
 			return FlowResult{}, e
 		}
-		p.QQNumber = number
-		if number == "" {
+		p.QQNumber = known.qqNumber
+		if p.QQNumber == "" {
 			f.Secret.Identity = secretIdentity(p)
 			b, e := s.seal(f.Secret)
 			if e != nil {

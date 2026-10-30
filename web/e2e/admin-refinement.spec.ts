@@ -3,6 +3,7 @@ import { expect, test } from '@playwright/test';
 async function login(page: import('@playwright/test').Page) {
   await page.goto('/');
   await page.getByRole('button', { name: '登录', exact: true }).click();
+  await page.getByRole('checkbox', { name: '同意用户协议与隐私政策' }).check();
   await page.getByRole('button', { name: 'OIDC', exact: true }).click();
   await expect(page.getByRole('button', { name: '账号信息', exact: true })).toBeVisible();
   await page.goto('/admin');

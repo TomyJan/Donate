@@ -75,6 +75,8 @@ type Identity struct {
 	QqNumber  string
 	CreatedAt int64
 	UpdatedAt int64
+	QqOpenid  string
+	QqUnionid string
 }
 
 type Job struct {

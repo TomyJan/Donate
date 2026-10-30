@@ -21,17 +21,15 @@ func (s *Server) siteInfo(w http.ResponseWriter, r *http.Request) {
 		s.setCookie(w, s.cookieName("csrf"), token, time.Now().Add(30*24*time.Hour))
 	}
 	providers := []string{}
-	if s.Config.OIDCissuer != "" {
-		providers = append(providers, "oidc")
-	}
-	if s.Config.QQappID != "" {
-		providers = append(providers, "qq")
+	details := s.Config.LoginProviders()
+	for _, provider := range details {
+		providers = append(providers, provider.ID)
 	}
 	csrf := s.anonymousCSRF(token)
 	if state(r).Session != nil {
 		csrf = state(r).Session.CSRF
 	}
-	s.ok(w, r, map[string]any{"name": "捐赠 TomyJan", "logo": "https://public-cdn.tomys.top/head.png", "version": s.Version, "providers": providers, "payment_enabled": s.Payments.Gateway.Ready(), "csrf_token": csrf})
+	s.ok(w, r, map[string]any{"name": "捐赠 TomyJan", "logo": "https://public-cdn.tomys.top/head.png", "version": s.Version, "providers": providers, "provider_details": details, "payment_enabled": s.Payments.Gateway.Ready(), "csrf_token": csrf})
 }
 
 func (s *Server) begin(w http.ResponseWriter, r *http.Request, intent string) {

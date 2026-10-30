@@ -37,6 +37,8 @@ type Identity struct {
 	Nickname  string    `json:"nickname"`
 	AvatarURL string    `json:"avatar_url"`
 	QQNumber  string    `json:"-"`
+	QQOpenID  string    `json:"-"`
+	QQUnionID string    `json:"-"`
 	BoundAt   time.Time `json:"bound_at"`
 }
 type Session struct {
@@ -94,17 +96,19 @@ func (s *Service) LoginIdentity(ctx context.Context, p Identity) (Credentials, e
 	return s.loginIdentity(ctx, p, nil)
 }
 func (s *Service) loginIdentity(ctx context.Context, p Identity, flowID []byte) (Credentials, error) {
-	if p.Provider != "qq" && p.Provider != "oidc" || p.Issuer == "" || p.Subject == "" || p.Provider == "qq" && p.QQNumber == "" {
-		return Credentials{}, ErrInvalid
+	var validation error
+	p, validation = s.normalizeIdentity(p)
+	if validation != nil {
+		return Credentials{}, validation
 	}
 	now := s.Now().UTC()
 	sid := storage.NewID()
 	token := RandomToken()
 	var uid, iid []byte
 	err := s.Store.Write(ctx, func(tx *sql.Tx) error {
-		var status string
-		e := tx.QueryRowContext(ctx, "SELECT i.id,i.user_id,u.status FROM identities i JOIN users u ON u.id=i.user_id WHERE i.provider=? AND i.issuer=? AND i.subject=?", p.Provider, p.Issuer, p.Subject).Scan(&iid, &uid, &status)
-		if e == nil && status != "active" {
+		matched, e := lookupIdentity(ctx, tx, p)
+		iid, uid = matched.id, matched.userID
+		if e == nil && matched.status != "active" {
 			return ErrBanned
 		}
 		if errors.Is(e, sql.ErrNoRows) {
@@ -119,7 +123,10 @@ func (s *Service) loginIdentity(ctx context.Context, p Identity, flowID []byte) 
 		} else if e != nil {
 			return e
 		} else {
-			if _, e = tx.ExecContext(ctx, "UPDATE identities SET nickname=?,avatar_url=?,updated_at=? WHERE id=?", name(p.Nickname), SafeAvatar(p.AvatarURL), now.Unix(), iid); e != nil {
+			if _, e = tx.ExecContext(ctx, "UPDATE identities SET subject=?,nickname=?,avatar_url=?,qq_openid=CASE WHEN ?='' THEN qq_openid ELSE ? END,qq_unionid=CASE WHEN ?='' THEN qq_unionid ELSE ? END,updated_at=? WHERE id=?", p.Subject, name(p.Nickname), SafeAvatar(p.AvatarURL), p.QQOpenID, p.QQOpenID, p.QQUnionID, p.QQUnionID, now.Unix(), iid); e != nil {
+				if storage.Conflict(e) {
+					return ErrConflict
+				}
 				return e
 			}
 		}
@@ -153,7 +160,7 @@ func name(v string) string {
 	return v
 }
 func insertIdentity(ctx context.Context, tx *sql.Tx, iid, uid []byte, p Identity, now time.Time) error {
-	_, e := tx.ExecContext(ctx, "INSERT INTO identities(id,user_id,provider,issuer,subject,nickname,avatar_url,qq_number,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?)", iid, uid, p.Provider, p.Issuer, p.Subject, name(p.Nickname), SafeAvatar(p.AvatarURL), p.QQNumber, now.Unix(), now.Unix())
+	_, e := tx.ExecContext(ctx, "INSERT INTO identities(id,user_id,provider,issuer,subject,nickname,avatar_url,qq_number,qq_openid,qq_unionid,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", iid, uid, p.Provider, p.Issuer, p.Subject, name(p.Nickname), SafeAvatar(p.AvatarURL), p.QQNumber, p.QQOpenID, p.QQUnionID, now.Unix(), now.Unix())
 	if storage.Conflict(e) {
 		return ErrConflict
 	}
@@ -260,8 +267,10 @@ func (s *Service) BindIdentity(ctx context.Context, sessionID string, p Identity
 	return s.bindIdentity(ctx, sessionID, p, nil)
 }
 func (s *Service) bindIdentity(ctx context.Context, sessionID string, p Identity, flowID []byte) error {
-	if p.Provider != "qq" && p.Provider != "oidc" || p.Subject == "" || p.Issuer == "" || p.Provider == "qq" && p.QQNumber == "" {
-		return ErrInvalid
+	var validation error
+	p, validation = s.normalizeIdentity(p)
+	if validation != nil {
+		return validation
 	}
 	sid, e := storage.ParseID(sessionID)
 	if e != nil {
@@ -285,6 +294,12 @@ func (s *Service) bindIdentity(ctx context.Context, sessionID string, p Identity
 		}
 		if revoked.Valid || expires <= now.Unix() {
 			return ErrUnauthorized
+		}
+		if _, lookupErr := lookupIdentity(ctx, tx, p); !errors.Is(lookupErr, sql.ErrNoRows) {
+			if lookupErr == nil {
+				return ErrConflict
+			}
+			return lookupErr
 		}
 		id := storage.NewID()
 		if e = insertIdentity(ctx, tx, id[:], uid, p, now); e != nil {

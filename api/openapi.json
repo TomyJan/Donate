@@ -325,6 +325,29 @@
         ],
         "type": "object"
       },
+      "LoginProvider": {
+        "properties": {
+          "icon_url": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "icon_url",
+          "id",
+          "kind",
+          "name"
+        ],
+        "type": "object"
+      },
       "LoginStart": {
         "properties": {
           "authorization_url": {
@@ -1199,6 +1222,13 @@
           },
           "payment_enabled": {
             "type": "boolean"
+          },
+          "provider_details": {
+            "description": "Public sign-in IDs, names and icons. kind is the stable stored identity type; use id for login, binding and callback routes.",
+            "items": {
+              "$ref": "#/components/schemas/LoginProvider"
+            },
+            "type": "array"
           },
           "providers": {
             "items": {

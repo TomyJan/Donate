@@ -2,6 +2,7 @@ package storage
 
 import (
 	"context"
+	"database/sql"
 	"github.com/pressly/goose/v3"
 	"path/filepath"
 	"strings"
@@ -20,7 +21,11 @@ func TestFailedMigrationRollsBackItsSchemaChanges(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	fs := fstest.MapFS{"00001_init.sql": {Data: initial}, "00002_failure.sql": {Data: []byte("-- +goose Up\nCREATE TABLE should_rollback(id INTEGER);\nINSERT INTO intentional_missing VALUES(1);\n-- +goose Down\nDROP TABLE should_rollback;\n")}}
+	identifiers, e := migrations.ReadFile("migrations/00002_qq_identifiers.sql")
+	if e != nil {
+		t.Fatal(e)
+	}
+	fs := fstest.MapFS{"00001_init.sql": {Data: initial}, "00002_qq_identifiers.sql": {Data: identifiers}, "00003_failure.sql": {Data: []byte("-- +goose Up\nCREATE TABLE should_rollback(id INTEGER);\nINSERT INTO intentional_missing VALUES(1);\n-- +goose Down\nDROP TABLE should_rollback;\n")}}
 	provider, e := goose.NewProvider(goose.DialectSQLite3, s.DB, fs, goose.WithDisableGlobalRegistry(true))
 	if e != nil {
 		t.Fatal(e)
@@ -31,6 +36,69 @@ func TestFailedMigrationRollsBackItsSchemaChanges(t *testing.T) {
 	var n int
 	if e = s.DB.QueryRow("SELECT count(*) FROM sqlite_master WHERE name='should_rollback'").Scan(&n); e != nil || n != 0 {
 		t.Fatal("failed schema survived", n, e)
+	}
+}
+
+func TestQQIdentifierMigrationPreservesLegacyBinding(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "legacy.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	initial, err := migrations.ReadFile("migrations/00001_init.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider, err := goose.NewProvider(goose.DialectSQLite3, db, fstest.MapFS{"00001_init.sql": {Data: initial}}, goose.WithDisableGlobalRegistry(true))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = provider.Up(ctx); err != nil {
+		t.Fatal(err)
+	}
+	uid, iid := NewID(), NewID()
+	if _, err = db.Exec("INSERT INTO users(id,created_at) VALUES(?,1)", uid[:]); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec("INSERT INTO identities(id,user_id,provider,issuer,subject,nickname,qq_number,created_at,updated_at) VALUES(?,?,'qq','app','legacy-open','old','123456',1,1)", iid[:], uid[:]); err != nil {
+		t.Fatal(err)
+	}
+	snapshot := filepath.Join(filepath.Dir(path), "legacy-snapshot.db")
+	if _, err = db.Exec("VACUUM INTO ?", snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	upgraded, err := Open(ctx, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer upgraded.Close()
+	var actualID []byte
+	var open, union, subject string
+	if err = upgraded.DB.QueryRow("SELECT id,qq_openid,qq_unionid,subject FROM identities").Scan(&actualID, &open, &union, &subject); err != nil {
+		t.Fatal(err)
+	}
+	if IDString(actualID) != iid.String() || open != "legacy-open" || union != "" || subject != "legacy-open" {
+		t.Fatal("legacy binding changed", IDString(actualID), open, union, subject)
+	}
+	restoredPath := filepath.Join(filepath.Dir(path), "restored.db")
+	if err = Restore(ctx, snapshot, restoredPath); err != nil {
+		t.Fatal("legacy backup rejected", err)
+	}
+	restored, err := Open(ctx, restoredPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restored.Close()
+	if err = restored.DB.QueryRow("SELECT id,qq_openid,qq_unionid,subject FROM identities").Scan(&actualID, &open, &union, &subject); err != nil {
+		t.Fatal(err)
+	}
+	if IDString(actualID) != iid.String() || open != "legacy-open" || union != "" {
+		t.Fatal("restored legacy binding changed")
 	}
 }
 

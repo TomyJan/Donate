@@ -59,11 +59,17 @@ func (s *Service) exchangeQQ(ctx context.Context, code string) (Identity, error)
 	var me struct {
 		ClientID string `json:"client_id"`
 		OpenID   string `json:"openid"`
+		UnionID  string `json:"unionid"`
+		Error    int    `json:"error"`
 	}
-	if e = s.getQQ(ctx, "oauth2.0/me", url.Values{"access_token": {token.Token}, "fmt": {"json"}}, &me); e != nil {
+	identityQuery := url.Values{"access_token": {token.Token}, "fmt": {"json"}}
+	if s.Config.QQuseUnionID {
+		identityQuery.Set("unionid", "1")
+	}
+	if e = s.getQQ(ctx, "oauth2.0/me", identityQuery, &me); e != nil {
 		return Identity{}, e
 	}
-	if me.ClientID != s.Config.QQappID || me.OpenID == "" {
+	if me.Error != 0 || me.ClientID != s.Config.QQappID || me.OpenID == "" || s.Config.QQuseUnionID && me.UnionID == "" {
 		return Identity{}, ErrUnauthorized
 	}
 	var info struct {
@@ -84,7 +90,13 @@ func (s *Service) exchangeQQ(ctx context.Context, code string) (Identity, error)
 	if strings.HasPrefix(info.Avatar, "http://") {
 		info.Avatar = "https://" + strings.TrimPrefix(info.Avatar, "http://")
 	}
-	return Identity{Provider: "qq", Issuer: s.Config.QQappID, Subject: me.OpenID, Nickname: info.Nickname, AvatarURL: SafeAvatar(info.Avatar)}, nil
+	subject := me.OpenID
+	if s.Config.QQuseUnionID {
+		subject = me.UnionID
+	} else {
+		me.UnionID = ""
+	}
+	return Identity{Provider: "qq", Issuer: s.Config.QQappID, Subject: subject, QQOpenID: me.OpenID, QQUnionID: me.UnionID, Nickname: info.Nickname, AvatarURL: SafeAvatar(info.Avatar)}, nil
 }
 func (s *Service) avatar(ctx context.Context, raw string) (image.Image, error) {
 	u, e := url.Parse(raw)

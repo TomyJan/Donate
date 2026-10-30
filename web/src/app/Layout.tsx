@@ -3,11 +3,16 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Suspense, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router';
 import { AdminLoading } from '../components/AdminLoading';
+import { CookieNotice } from '../components/CookieNotice';
 import { IdentityBindings } from '../components/IdentityBindings';
+import { LegalLinks } from '../components/LegalLinks';
+import { LoginDialog } from '../components/LoginDialog';
 import { BackToTop, ScrollHeader } from '../components/ScrollChrome';
 import type { MenuItem } from '../components/ui';
 import { Avatar, Button, Menu, Modal } from '../components/ui';
+import { COOKIE_NOTICE_KEY, useLocalAcknowledgment } from '../lib/legal';
 import { useApp } from './context';
+import '../styles/legal.css';
 export function Layout() {
   const app = useApp();
   const { t, profile, site } = app;
@@ -15,6 +20,7 @@ export function Layout() {
   const navigate = useNavigate();
   const admin = location.pathname.startsWith('/admin');
   const [binding, setBinding] = useState('');
+  const [cookieAcknowledged, setCookieAcknowledged] = useLocalAcknowledgment(COOKIE_NOTICE_KEY);
   const themes = [
     ['system', Monitor],
     ['light', Sun],
@@ -126,28 +132,22 @@ export function Layout() {
           <Outlet />
         </Suspense>
         <footer className="d-footer" data-component="site-footer">
-          <a href="https://github.com/TomyJan/Donate" target="_blank" rel="noreferrer">
-            Donate
-          </a>{' '}
-          <a href={versionURL} target="_blank" rel="noreferrer">
-            V{version?.version ?? '0.0.1'}
-            {suffix}
-          </a>
+          <span className="footer-version">
+            <a href="https://github.com/TomyJan/Donate" target="_blank" rel="noreferrer">
+              Donate
+            </a>{' '}
+            <a href={versionURL} target="_blank" rel="noreferrer">
+              V{version?.version ?? '0.0.1'}
+              {suffix}
+            </a>
+          </span>
+          <LegalLinks />
+          <Button className="text-button footer-cookie" onClick={() => setCookieAcknowledged(false)}>
+            Cookie
+          </Button>
         </footer>
-        <Modal open={app.loginOpen} onOpenChange={app.setLoginOpen} title={t('login')}>
-          <div className="d-row">
-            {site?.providers.map((provider) => (
-              <Button
-                key={provider}
-                className={provider === 'qq' ? 'd-primary' : ''}
-                onClick={() => void app.login(provider)}
-              >
-                {provider.toUpperCase()}
-              </Button>
-            ))}
-            {!site?.providers.length && <p>{t('notConfigured')}</p>}
-          </div>
-        </Modal>
+        <CookieNotice open={!cookieAcknowledged} onDismiss={() => setCookieAcknowledged(true)} />
+        <LoginDialog />
         <Modal open={app.accountOpen && !!profile} onOpenChange={app.setAccountOpen} title={t('account')}>
           {profile && (
             <>

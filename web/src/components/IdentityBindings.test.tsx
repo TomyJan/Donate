@@ -1,14 +1,16 @@
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { translate } from '../lib/i18n';
+import type { Site } from '../lib/types';
 import { IdentityBindings } from './IdentityBindings';
 
-const state = vi.hoisted(() => ({ admin: false, report: vi.fn() }));
+const state = vi.hoisted(() => ({ admin: false, report: vi.fn(), site: undefined as Site | undefined }));
 vi.mock('../app/context', () => ({
   useApp: () => ({
     profile: { id: 'administrator', admin: state.admin },
     t: (key: string) => translate(key, 'en'),
     report: state.report,
+    site: state.site,
   }),
 }));
 const bindings = [
@@ -30,7 +32,43 @@ const bindings = [
 afterEach(() => {
   cleanup();
   state.admin = false;
+  state.site = undefined;
   state.report.mockClear();
+});
+
+it('uses custom OIDC presentation while matching stored kinds and submitting the public binding ID', () => {
+  state.site = {
+    name: 'Donate',
+    logo: '',
+    csrf_token: '',
+    payment_enabled: false,
+    version: { version: 'test', commit: '', tag: '', built_at: '' },
+    providers: ['campus', 'qq'],
+    provider_details: [
+      { id: 'campus', kind: 'oidc', name: 'Campus account', icon_url: 'https://cdn.test/icon.svg' },
+    ],
+  };
+  const actions: string[] = [];
+  const first = render(
+    <IdentityBindings
+      bindings={bindings.slice(0, 1)}
+      available={state.site.providers}
+      onBind={(id) => actions.push(id)}
+    />,
+  );
+  expect(screen.getByText('Campus account')).toBeVisible();
+  fireEvent.click(screen.getByRole('button', { name: 'Link' }));
+  expect(actions).toEqual(['campus']);
+  first.unmount();
+  render(
+    <IdentityBindings
+      bindings={bindings}
+      available={state.site.providers}
+      onBind={(id) => actions.push(id)}
+    />,
+  );
+  expect(screen.getByText('Campus account').closest('.d-bind')).toHaveTextContent('OIDC donor');
+  expect(screen.queryByRole('button', { name: 'Link' })).not.toBeInTheDocument();
 });
 
 it('shows each linked time without offering an unlink action in a regular account dialog', () => {

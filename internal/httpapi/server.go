@@ -381,7 +381,7 @@ func (l *limiter) allow(key string, n int, window time.Duration) bool {
 }
 func (s *Server) static(w http.ResponseWriter, r *http.Request) {
 	p := strings.TrimPrefix(path.Clean(r.URL.Path), "/")
-	if p == "" || p == "." || p == "admin" || p == "auth/complete" {
+	if p == "" || p == "." || p == "admin" || p == "auth/complete" || p == "terms" || p == "privacy" {
 		p = "index.html"
 	} else if !strings.HasPrefix(p, "assets/") {
 		state(r).Status = 404

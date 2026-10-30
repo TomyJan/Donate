@@ -642,6 +642,12 @@ export interface components {
             provider: string;
             return_to: string;
         };
+        LoginProvider: {
+            icon_url: string;
+            id: string;
+            kind: string;
+            name: string;
+        };
         LoginStart: {
             authorization_url: string;
         };
@@ -900,6 +906,8 @@ export interface components {
             logo: string;
             name: string;
             payment_enabled: boolean;
+            /** @description Public sign-in IDs, names and icons. kind is the stable stored identity type; use id for login, binding and callback routes. */
+            provider_details?: components["schemas"]["LoginProvider"][];
             providers: string[];
             version: components["schemas"]["SiteVersion"];
         };

@@ -1,8 +1,10 @@
 import { useId, useRef, useState } from 'react';
 import { useApp } from '../app/context';
 import { dateTime } from '../lib/api';
+import { providerForKind } from '../lib/providers';
 import type { Profile } from '../lib/types';
 import { ActionConfirm } from './ActionConfirm';
+import { ProviderIcon } from './ProviderIcon';
 import { Avatar, Button } from './ui';
 import './IdentityBindings.css';
 export function IdentityBindings({
@@ -18,7 +20,7 @@ export function IdentityBindings({
   ownerID?: string;
   onUnbind?: (identityID: string) => Promise<void>;
 }) {
-  const { t, profile } = useApp();
+  const { t, profile, site } = useApp();
   const [busy, setBusy] = useState(false);
   const working = useRef(false);
   const lastIdentityID = useId();
@@ -39,16 +41,19 @@ export function IdentityBindings({
   return (
     <div className="d-bindings">
       {['qq', 'oidc'].map((provider) => {
+        const configured = providerForKind(provider, site);
         const identity = bindings.find((binding) => binding.provider === provider);
         return (
           <div className="d-bind" key={provider}>
             {identity ? (
               <Avatar name={identity.nickname} src={identity.avatar_url} />
             ) : (
-              <span className="d-avatar">{provider === 'qq' ? 'Q' : 'O'}</span>
+              <span className="d-avatar">
+                <ProviderIcon provider={configured} />
+              </span>
             )}
             <div className="d-bind-info">
-              <p>{provider.toUpperCase()}</p>
+              <p>{configured.name}</p>
               {identity && <span className="d-secondary">{identity.nickname}</span>}
               {identity && (
                 <span className="d-bind-time">
@@ -61,7 +66,7 @@ export function IdentityBindings({
                 profile?.admin && onUnbind ? (
                   <ActionConfirm
                     scopeKey={scopeKey + identity.id}
-                    title={`${t('unbind')} ${provider.toUpperCase()}`}
+                    title={`${t('unbind')} ${configured.name}`}
                     description={t('unbindHint')}
                     danger
                     trigger={
@@ -70,7 +75,7 @@ export function IdentityBindings({
                         disabled={busy || bindings.length < 2}
                         aria-describedby={bindings.length < 2 ? lastIdentityID : undefined}
                       >
-                        {t('unbind')} {provider.toUpperCase()}
+                        {t('unbind')} {configured.name}
                       </Button>
                     }
                     prepare={async () => validate(identity.id, scopeKey)}
@@ -90,7 +95,7 @@ export function IdentityBindings({
                   t('bound')
                 )
               ) : onBind ? (
-                <Button disabled={!available.includes(provider)} onClick={() => onBind(provider)}>
+                <Button disabled={!available.includes(configured.id)} onClick={() => onBind(configured.id)}>
                   {t('bind')}
                 </Button>
               ) : (

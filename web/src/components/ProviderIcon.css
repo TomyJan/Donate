@@ -1,0 +1,31 @@
+.provider-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+}
+.provider-icon img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.provider-icon > span {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1;
+}
+.d-avatar .provider-icon {
+  width: 20px;
+  height: 20px;
+  flex-basis: 20px;
+}
+.login-providers .d-btn {
+  min-width: 0;
+}
+.login-providers .provider-name {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}

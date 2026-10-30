@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useState } from 'rea
 import { APIError, api, setCSRF } from '../lib/api';
 import type { Language } from '../lib/i18n';
 import { translate } from '../lib/i18n';
+import { LEGAL_CONSENT_KEY, useLocalAcknowledgment } from '../lib/legal';
 import type { Profile, Site } from '../lib/types';
 
 type Toast = { id: string; text: string; error: boolean };
@@ -18,6 +19,8 @@ type AppState = {
   setLang: (v: Language) => void;
   setTheme: (v: string) => void;
   loginOpen: boolean;
+  legalAccepted: boolean;
+  setLegalAccepted: (value: boolean) => void;
   setLoginOpen: (v: boolean) => void;
   accountOpen: boolean;
   setAccountOpen: (v: boolean) => void;
@@ -30,16 +33,31 @@ type AppState = {
   dismiss: (id: string) => void;
 };
 const Context = createContext<AppState | null>(null);
+function readPreference(key: string, fallback: string) {
+  try {
+    return localStorage.getItem(key) || fallback;
+  } catch {
+    return fallback;
+  }
+}
+function savePreference(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    // Preferences remain usable in memory when browser storage is unavailable.
+  }
+}
 export function AppProvider({ children }: { children: ReactNode }) {
   const client = useQueryClient();
   const [lang, setLanguage] = useState<Language>(() =>
-    localStorage.getItem('donate-language') === 'en' ? 'en' : 'zh-CN',
+    readPreference('donate-language', 'zh-CN') === 'en' ? 'en' : 'zh-CN',
   );
-  const [theme, setAppearance] = useState(() => localStorage.getItem('donate-theme') || 'system');
+  const [theme, setAppearance] = useState(() => readPreference('donate-theme', 'system'));
   useEffect(() => {
     document.documentElement.style.colorScheme = theme === 'system' ? 'light dark' : theme;
   }, [theme]);
   const [loginOpen, setLoginOpen] = useState(false);
+  const [legalAccepted, setLegalAccepted] = useLocalAcknowledgment(LEGAL_CONSENT_KEY);
   const [accountOpen, setAccountOpen] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const t = useCallback((key: string) => translate(key, lang), [lang]);
@@ -172,14 +190,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
   }, [currentUserID, report]);
   const setLang = (v: Language) => {
-    localStorage.setItem('donate-language', v);
+    savePreference('donate-language', v);
     setLanguage(v);
   };
   const setTheme = (v: string) => {
-    localStorage.setItem('donate-theme', v);
+    savePreference('donate-theme', v);
     setAppearance(v);
   };
   const login = async (provider: string, bind = false) => {
+    if (!bind && !legalAccepted) {
+      notify(t('acceptPoliciesFirst'), true);
+      setLoginOpen(true);
+      return;
+    }
     try {
       const v = await api<{ authorization_url: string }>(bind ? 'user/identity/bind' : 'user/login', {
         provider,
@@ -212,6 +235,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setLang,
         setTheme,
         loginOpen,
+        legalAccepted,
+        setLegalAccepted,
         setLoginOpen,
         accountOpen,
         setAccountOpen,

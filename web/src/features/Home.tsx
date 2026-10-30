@@ -57,7 +57,11 @@ export function Home() {
   const records = list.data?.pages.flatMap((v) => v.items) ?? [];
   const current = records[Math.min(selected, Math.max(0, records.length - 1))];
   useEffect(() => {
-    sessionStorage.setItem('donate-draft', JSON.stringify(draft));
+    try {
+      sessionStorage.setItem('donate-draft', JSON.stringify(draft));
+    } catch {
+      // Draft editing still works if storage is blocked or full.
+    }
     requestKey.current = crypto.randomUUID();
   }, [draft]);
   useEffect(() => {

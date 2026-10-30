@@ -1,4 +1,26 @@
 export const words = {
+  terms: ['用户协议', 'Terms of Use'],
+  privacy: ['隐私政策', 'Privacy Policy'],
+  legalUpdated: ['更新及生效日期', 'Updated and effective'],
+  legalNavigation: ['条款页面', 'Legal documents'],
+  legalContact: ['联系 TomyJan', 'Contact TomyJan'],
+  legalContactQQ: ['QQ 联系群', 'QQ contact group'],
+  legalContactHint: [
+    '请联系本人或群管理员，勿在群聊公开个人信息或支付凭证。',
+    'Contact me or a group administrator privately. Do not post personal information or payment evidence in group chats.',
+  ],
+  acceptPolicies: ['同意用户协议与隐私政策', 'Agree to the Terms of Use and Privacy Policy'],
+  readAndAgree: ['我已阅读并同意', 'I have read and agree to the'],
+  acceptPoliciesFirst: [
+    '请先阅读并同意用户协议与隐私政策。',
+    'Read and agree to the Terms of Use and Privacy Policy first.',
+  ],
+  cookieTitle: ['Cookie 与本地存储', 'Cookies and local storage'],
+  cookieSummary: [
+    '用于登录、安全验证和保存偏好，不用于广告追踪。了解详情：',
+    'Used for sign-in, security and preferences, not advertising tracking. Learn more:',
+  ],
+  gotIt: ['知道了', 'Got it'],
   adminSignInHint: ['登录后继续访问站点管理。', 'Sign in to continue to site management.'],
   adminDeniedHint: ['此账号没有站点管理权限。', 'This account cannot access site management.'],
   calendarPreviousMonth: ['上一月', 'Previous month'],

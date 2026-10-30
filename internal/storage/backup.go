@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -49,6 +50,22 @@ func (s *Store) Backup(ctx context.Context, dir string) (string, error) {
 // Restore must run with the application's exclusive instance lock held and no open Store.
 // It never migrates or writes the source snapshot. A rollback snapshot is kept before replacement.
 func Restore(ctx context.Context, source, target string) error {
+	knownVersions := map[int64]bool{}
+	entries, e := migrations.ReadDir("migrations")
+	if e != nil {
+		return e
+	}
+	for _, entry := range entries {
+		prefix, _, ok := strings.Cut(entry.Name(), "_")
+		if !ok || entry.IsDir() || !strings.HasSuffix(entry.Name(), ".sql") {
+			continue
+		}
+		version, err := strconv.ParseInt(prefix, 10, 64)
+		if err != nil {
+			return fmt.Errorf("迁移文件名无效: %s", entry.Name())
+		}
+		knownVersions[version] = true
+	}
 	src, e := filepath.Abs(source)
 	if e != nil {
 		return e
@@ -109,8 +126,8 @@ func Restore(ctx context.Context, source, target string) error {
 		if e = db.QueryRowContext(ctx, "SELECT version_id FROM goose_db_version WHERE is_applied=1 ORDER BY id DESC LIMIT 1").Scan(&version); e != nil {
 			return e
 		}
-		// Version 1 is the only schema shipped by this binary. Do not silently downgrade a future database.
-		if version != 1 {
+		// Older shipped snapshots are migrated on the next Open; unknown versions must never be downgraded.
+		if !knownVersions[version] {
 			return fmt.Errorf("备份迁移版本 %d 与本程序不兼容", version)
 		}
 		return nil

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/TomyJan/Donate/internal/admin"
 	"github.com/TomyJan/Donate/internal/auth"
+	"github.com/TomyJan/Donate/internal/config"
 	"github.com/TomyJan/Donate/internal/geo"
 	"github.com/TomyJan/Donate/internal/httpapi"
 	"github.com/TomyJan/Donate/internal/order"
@@ -106,6 +107,8 @@ func main() {
 	}
 	ref := func(name string) schema { return schema{"$ref": "#/components/schemas/" + name} }
 	schemas["Site"] = schema{"type": "object", "required": []string{"name", "logo", "version", "providers", "payment_enabled", "csrf_token"}, "properties": schema{"name": schema{"type": "string"}, "logo": schema{"type": "string"}, "version": ref("SiteVersion"), "providers": schema{"type": "array", "items": schema{"type": "string"}}, "payment_enabled": schema{"type": "boolean"}, "csrf_token": schema{"type": "string"}}}
+	schemas["LoginProvider"] = describe(reflect.TypeFor[config.LoginProvider]())
+	schemas["Site"].(schema)["properties"].(schema)["provider_details"] = schema{"type": "array", "items": ref("LoginProvider"), "description": "Public sign-in IDs, names and icons. kind is the stable stored identity type; use id for login, binding and callback routes."}
 
 	requestTypes := map[string]reflect.Type{"LoginInput": reflect.TypeFor[httpapi.LoginInput](), "QQInput": reflect.TypeFor[httpapi.QQInput](), "CreateOrderInput": reflect.TypeFor[httpapi.CreateOrderInput](), "IDInput": reflect.TypeFor[httpapi.IDInput](), "OperationInput": reflect.TypeFor[httpapi.OperationInput](), "PreviewInput": reflect.TypeFor[httpapi.PreviewInput](), "ReconcileInput": reflect.TypeFor[httpapi.ReconcileInput]()}
 	for name, t := range requestTypes {

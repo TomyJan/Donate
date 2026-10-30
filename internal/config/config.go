@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -21,7 +23,9 @@ type Config struct {
 	AdminIDs                                                               map[string]bool
 	TrustedProxies                                                         []netip.Prefix
 	OIDCissuer, OIDCclientID, OIDCsecret                                   string
+	OIDCid, OIDCname, OIDCiconURL                                          string
 	QQappID, QQsecret                                                      string
+	QQuseUnionID                                                           bool
 	EpayURL, EpayPID, EpayProtocol, EpayKey, EpayPrivateKey, EpayPublicKey string
 	PaymentRedirectHosts                                                   []string
 	GeoMode, GeoPath                                                       string
@@ -40,6 +44,23 @@ func Load() (Config, error) {
 	u, err := url.Parse(c.PublicURL)
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" || (u.Scheme != "https" && !(c.Development && u.Scheme == "http")) {
 		return c, errors.New("PUBLIC_URL 必须为无路径、查询或凭据的 HTTPS 站点地址")
+	}
+	c.OIDCid, c.OIDCname, c.OIDCiconURL = env("OIDC_ID", "oidc"), env("OIDC_NAME", "OIDC"), os.Getenv("OIDC_ICON_URL")
+	if !regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`).MatchString(c.OIDCid) || c.OIDCid == "qq" {
+		return c, errors.New("OIDC_ID 必须为 1 至 32 位小写字母、数字、下划线或连字符，以字母开头且不能为 qq")
+	}
+	c.OIDCname = strings.TrimSpace(c.OIDCname)
+	if c.OIDCname == "" || len([]rune(c.OIDCname)) > 64 || strings.ContainsAny(c.OIDCname, "\r\n\t") {
+		return c, errors.New("OIDC_NAME 必须为 1 至 64 字的单行名称")
+	}
+	if c.OIDCiconURL != "" {
+		icon, e := url.Parse(c.OIDCiconURL)
+		if e != nil || icon.Scheme != "https" || icon.Hostname() == "" || icon.User != nil || icon.Fragment != "" {
+			return c, errors.New("OIDC_ICON_URL 必须为不含凭据及片段的 HTTPS 图片地址")
+		}
+	}
+	if c.QQuseUnionID, err = strconv.ParseBool(env("QQ_USE_UNIONID", "false")); err != nil {
+		return c, errors.New("QQ_USE_UNIONID 必须为布尔值")
 	}
 	for _, s := range strings.Split(os.Getenv("ADMIN_USER_IDS"), ",") {
 		if s = strings.TrimSpace(s); s != "" {
@@ -113,6 +134,36 @@ func Load() (Config, error) {
 	}
 	c.DataDir, err = filepath.Abs(c.DataDir)
 	return c, err
+}
+
+// The public ID is a routing identifier. Stored OIDC identity keys remain issuer + subject.
+func (c Config) OIDCProviderID() string {
+	if c.OIDCid == "" {
+		return "oidc"
+	}
+	return c.OIDCid
+}
+
+type LoginProvider struct {
+	ID      string `json:"id"`
+	Kind    string `json:"kind"`
+	Name    string `json:"name"`
+	IconURL string `json:"icon_url"`
+}
+
+func (c Config) LoginProviders() []LoginProvider {
+	providers := []LoginProvider{}
+	if c.OIDCissuer != "" {
+		name := c.OIDCname
+		if name == "" {
+			name = "OIDC"
+		}
+		providers = append(providers, LoginProvider{ID: c.OIDCProviderID(), Kind: "oidc", Name: name, IconURL: c.OIDCiconURL})
+	}
+	if c.QQappID != "" {
+		providers = append(providers, LoginProvider{ID: "qq", Kind: "qq", Name: "QQ"})
+	}
+	return providers
 }
 
 func readSecret(name string) (string, error) {

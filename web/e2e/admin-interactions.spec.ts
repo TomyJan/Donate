@@ -34,6 +34,7 @@ for (const [width, english, dark] of [
       await page.setViewportSize({ width, height: 900 });
       await page.goto('/');
       await page.getByRole('button', { name: '登录', exact: true }).click();
+      await page.getByRole('checkbox', { name: '同意用户协议与隐私政策' }).check();
       await page.getByRole('button', { name: 'OIDC', exact: true }).click();
       await expect(page.getByRole('button', { name: '账号信息', exact: true })).toBeVisible();
       await page.getByRole('button', { name: '切换外观', exact: true }).click();

@@ -89,7 +89,7 @@ func (f *fixture) handler(w http.ResponseWriter, r *http.Request) {
 		write(w, map[string]any{"keys": []any{map[string]any{"kty": "RSA", "use": "sig", "kid": "fixture", "alg": "RS256", "n": base64.RawURLEncoding.EncodeToString(f.key.N.Bytes()), "e": base64.RawURLEncoding.EncodeToString(big.NewInt(int64(f.key.E)).Bytes())}}})
 	case "/authorize":
 		q := r.URL.Query()
-		if q.Get("redirect_uri") != f.app+"/api/v1/user/oauth/callback/oidc" || q.Get("client_id") != "donate-test" || q.Get("code_challenge_method") != "S256" {
+		if q.Get("redirect_uri") != f.app+"/api/v1/user/oauth/callback/fixture-login" || q.Get("client_id") != "donate-test" || q.Get("code_challenge_method") != "S256" {
 			http.Error(w, "invalid authorization", 400)
 			return
 		}
@@ -264,6 +264,8 @@ func run() error {
 		return e
 	}
 	env := map[string]string{"APP_ENV": "development", "PUBLIC_URL": app, "DATA_DIR": dir, "GEO_MODE": "disabled", "OIDC_ISSUER": issuer, "OIDC_CLIENT_ID": "donate-test", "ADMIN_USER_IDS": creds.Session.UserID, "EPAY_URL": issuer, "EPAY_PID": "1001", "EPAY_PROTOCOL": "v2", "EPAY_PRIVATE_KEY_FILE": privatePath, "EPAY_PUBLIC_KEY_FILE": publicPath}
+	env["OIDC_ID"] = "fixture-login"
+	env["OIDC_NAME"] = "OIDC"
 	b, _ := json.Marshal(env)
 	if e = os.WriteFile(filepath.Join(dir, "environment.json"), b, 0600); e != nil {
 		return e

@@ -11,6 +11,7 @@
 - [彩虹易支付接入方案](docs/payment-integration.md)
 - [最终界面、组件和交互规范](docs/design/README.md)
 - [IP 属地数据方案](docs/ip-geolocation.md)
+- [用户协议、隐私提示与登录配置](docs/legal-and-login.md)
 - [首页 HTML](docs/design/preview/index.html) / [后台 HTML](docs/design/preview/admin.html)
 
 构建正式程序（工具版本见 `.node-version`、`go.mod`、`package.json`）：

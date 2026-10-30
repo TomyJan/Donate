@@ -10,6 +10,7 @@ const Admin = React.lazy(() => import('./features/Admin').then((m) => ({ default
 
 import { CompleteLogin } from './features/CompleteLogin';
 import { Home } from './features/Home';
+import { LegalPage } from './features/LegalPage';
 import './styles/shell.css';
 import './styles/home.css';
 import './styles/admin.css';
@@ -34,6 +35,8 @@ createRoot(root).render(
                 <Route index element={<Home />} />
                 <Route path="admin" element={<Admin />} />
                 <Route path="auth/complete" element={<CompleteLogin />} />
+                <Route path="terms" element={<LegalPage kind="terms" />} />
+                <Route path="privacy" element={<LegalPage kind="privacy" />} />
               </Route>
             </Routes>
           </AppProvider>
