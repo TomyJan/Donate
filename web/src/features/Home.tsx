@@ -1,4 +1,4 @@
-import { useInfiniteQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight, Check, ChevronDown, LoaderCircle } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
@@ -53,10 +53,15 @@ export function Home() {
     book = useRef<HTMLElement>(null);
   const reduced = useReducedMotion();
   const payment = usePaymentReturn();
+  const client = useQueryClient();
   const [composerEpoch, setComposerEpoch] = useState(0);
-  const [delivered, setDelivered] = useState<{ owner: string; item: RecordItem; pending: boolean } | null>(
-    null,
-  );
+  const [delivered, setDelivered] = useState<{
+    owner: string;
+    mine: boolean;
+    item: RecordItem;
+    pending: boolean;
+    refreshVersion: number;
+  } | null>(null);
   const destination = useRef<HTMLDivElement>(null);
   const arrival = useRef<HTMLElement>(null);
   const incoming: RecordItem | null = payment.order
@@ -85,9 +90,12 @@ export function Home() {
   const finishTransfer = () => {
     const order = payment.order;
     if (order && order.user_id === profile?.id) {
+      const queryKey = ['records', profile.id, mine] as const;
       setDelivered({
         owner: profile.id,
+        mine,
         pending: true,
+        refreshVersion: client.getQueryState(queryKey)?.dataUpdateCount ?? 0,
         item: {
           id: order.id,
           is_mine: true,
@@ -103,7 +111,11 @@ export function Home() {
       setSelection({ selected: 0, direction: 1, previousId: null });
       setDraft({ amount: yearAmount(), message: '', channel: 'alipay' });
       setComposerEpoch((value) => value + 1);
-      void list.refetch();
+      // With no cached data, refetch otherwise reuses the initial in-flight
+      // request. Its pre-landing result cannot acknowledge this paid snapshot.
+      void client
+        .cancelQueries({ queryKey, exact: true })
+        .then(() => client.refetchQueries({ queryKey, exact: true, type: 'active' }));
     }
     payment.finish();
   };
@@ -118,19 +130,39 @@ export function Home() {
   // A snapshot only bridges filing and its first successful list refresh. Keep
   // the arrival identity stable so acknowledging the API does not remount the paper.
   useEffect(() => {
-    if (delivered?.pending && list.isSuccess && !list.isFetching) {
+    if (delivered?.pending && (delivered.owner !== profile?.id || delivered.mine !== mine)) {
       setDelivered({ ...delivered, pending: false });
     }
-  }, [delivered, list.isSuccess, list.isFetching]);
+  }, [delivered, profile?.id, mine]);
+  useEffect(
+    () =>
+      client.getQueryCache().subscribe((event) => {
+        // Cached success survives paused/cancelled requests. A real full-list
+        // success is authoritative, even with identical data in the same millisecond.
+        if (event.type !== 'updated' || event.action.type !== 'success' || event.action.manual) return;
+        const { queryKey, state } = event.query;
+        if (queryKey[0] !== 'records' || state.fetchMeta?.fetchMore) return;
+        setDelivered((previous) =>
+          previous?.pending &&
+          previous.owner === queryKey[1] &&
+          previous.mine === queryKey[2] &&
+          state.dataUpdateCount > previous.refreshVersion
+            ? { ...previous, pending: false }
+            : previous,
+        );
+      }),
+    [client],
+  );
   // A callback can arrive after the public API already includes this payment. Keep that
   // row out until the paper has landed, including the initial response and focus refetches.
   const fetchedPages = (list.data?.pages ?? []).map((page) =>
     payment.locked ? { ...page, items: page.items.filter((item) => item.id !== payment.id) } : page,
   );
   const received =
-    delivered && delivered.owner === profile?.id
-      ? (fetchedPages.flatMap((page) => page.items).find((item) => item.id === delivered.item.id) ??
-        (delivered.pending ? delivered.item : null))
+    delivered && delivered.owner === profile?.id && delivered.mine === mine
+      ? delivered.pending
+        ? delivered.item
+        : (fetchedPages.flatMap((page) => page.items).find((item) => item.id === delivered.item.id) ?? null)
       : null;
   const pages = received
     ? [
