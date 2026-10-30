@@ -63,7 +63,7 @@ test('release accepts an existing annotated remote tag without changing it', t =
   git(repo, 'tag', '-a', 'v1.2.3', '-m', 'release');
   git(repo, 'push', '--atomic', 'origin', 'master', 'refs/tags/v1.2.3');
   const output = join(root, 'output');
-  const result = run('release-prepare.mjs', repo, {RELEASE_TAG: 'v1.2.3', SOURCE_SHA: source, GITHUB_OUTPUT: output, DEFAULT_BRANCH: 'master'});
+  const result = run('release-prepare.mjs', repo, {RELEASE_TAG: 'v1.2.3', GITHUB_REF: 'refs/tags/v1.2.3', SOURCE_SHA: source, GITHUB_OUTPUT: output, DEFAULT_BRANCH: 'master'});
   assert.equal(result.status, 0, result.stderr);
   assert.equal(readFileSync(output, 'utf8'), 'sha=' + source + '\nversion=1.2.3\ntag=v1.2.3\n');
   assert.equal(git(remote, 'rev-parse', 'v1.2.3^{}'), source);
@@ -71,22 +71,26 @@ test('release accepts an existing annotated remote tag without changing it', t =
 
 test('release refuses an absent tag, wrong source, mismatched versions or off-branch tag', t => {
   const { root, repo, sha } = fixture(t);
-  const env = {RELEASE_TAG: 'v0.0.1', SOURCE_SHA: sha, GITHUB_OUTPUT: join(root, 'output'), DEFAULT_BRANCH: 'master'};
+  const env = {RELEASE_TAG: 'v0.0.1', GITHUB_REF: 'refs/tags/v0.0.1', SOURCE_SHA: sha, GITHUB_OUTPUT: join(root, 'output'), DEFAULT_BRANCH: 'master'};
   assert.notEqual(run('release-prepare.mjs', repo, env).status, 0);
   git(repo, 'tag', 'v0.0.1');
   git(repo, 'tag', 'v9.9.9');
   git(repo, 'push', 'origin', '--tags');
   const accepted = run('release-prepare.mjs', repo, env);
   assert.equal(accepted.status, 0, accepted.stderr);
+  const branchEvent = run('release-prepare.mjs', repo, {...env, GITHUB_REF: 'refs/heads/master'});
+  assert.notEqual(branchEvent.status, 0);
+  assert.match(branchEvent.stderr, /Release must run on its version tag/);
+  assert.notEqual(run('release-prepare.mjs', repo, {...env, SOURCE_SHA: ''}).status, 0);
   assert.notEqual(run('release-prepare.mjs', repo, {...env, SOURCE_SHA: 'a'.repeat(40)}).status, 0);
-  assert.notEqual(run('release-prepare.mjs', repo, {...env, RELEASE_TAG: 'v9.9.9'}).status, 0);
+  assert.notEqual(run('release-prepare.mjs', repo, {...env, RELEASE_TAG: 'v9.9.9', GITHUB_REF: 'refs/tags/v9.9.9'}).status, 0);
   git(repo, 'checkout', '-b', 'unreleased');
   writeFileSync(join(repo, 'unreleased'), 'not on default branch');
   git(repo, 'add', '.');
   git(repo, 'commit', '-m', 'unreleased');
   git(repo, 'tag', 'v0.0.2');
   git(repo, 'push', 'origin', 'refs/tags/v0.0.2');
-  assert.notEqual(run('release-prepare.mjs', repo, {...env, RELEASE_TAG: 'v0.0.2', SOURCE_SHA: git(repo, 'rev-parse', 'HEAD')}).status, 0);
+  assert.notEqual(run('release-prepare.mjs', repo, {...env, RELEASE_TAG: 'v0.0.2', GITHUB_REF: 'refs/tags/v0.0.2', SOURCE_SHA: git(repo, 'rev-parse', 'HEAD')}).status, 0);
 });
 
 test('version synchronization workflow commits and atomically pushes synchronized versions and tag', t => {
@@ -95,8 +99,8 @@ test('version synchronization workflow commits and atomically pushes synchronize
   for (const file of ['release-version.mjs', 'set-release-version.mjs']) {
     copyFileSync(resolve(import.meta.dirname, file), join(repo, 'scripts', file));
   }
-  const workflow = readFileSync(resolve(import.meta.dirname, '../.github/workflows/sync-version.yml'), 'utf8');
-  const block = workflow.match(/        run: \|\r?\n((?:          [^\r\n]*\r?\n)+)/)?.[1];
+  const workflow = readFileSync(resolve(import.meta.dirname, '../.github/workflows/release-prepare.yml'), 'utf8');
+  const block = workflow.match(/        id: version\r?\n[\s\S]*?        run: \|\r?\n((?:          [^\r\n]*\r?\n)+)/)?.[1];
   assert.ok(block, 'Workflow must expose the synchronization script');
   const script = join(root, 'sync.sh');
   writeFileSync(script, block.replace(/^          /gm, '').replaceAll('\r\n', '\n'));
@@ -113,6 +117,22 @@ test('version synchronization workflow commits and atomically pushes synchronize
   const wrongBranch = spawnSync(bash, [script], {cwd: repo, encoding: 'utf8', env: {...process.env, GITHUB_REF: 'refs/heads/feature', DEFAULT_BRANCH: 'master', BUMP: 'patch', GITHUB_OUTPUT: output}, windowsHide: true});
   assert.notEqual(wrongBranch.status, 0);
   assert.equal(git(remote, 'rev-parse', 'master'), source);
+});
+
+test('release preparation refuses a missing token before modifying the repository', t => {
+  const { root, repo, sha } = fixture(t);
+  const workflow = readFileSync(resolve(import.meta.dirname, '../.github/workflows/release-prepare.yml'), 'utf8');
+  const block = workflow.match(/        run: \|\r?\n((?:          [^\r\n]*\r?\n)+)/)?.[1];
+  assert.ok(block, 'Workflow must check the release token before checkout');
+  const script = join(root, 'credentials.sh');
+  writeFileSync(script, block.replace(/^          /gm, '').replaceAll('\r\n', '\n'));
+  const bash = process.platform === 'win32' ? resolve(git(repo, '--exec-path'), '../../../bin/bash.exe') : 'bash';
+  const missing = spawnSync(bash, [script], {cwd: repo, encoding: 'utf8', env: {...process.env, RELEASE_TOKEN: ''}, windowsHide: true});
+  assert.notEqual(missing.status, 0);
+  assert.match(missing.stdout + missing.stderr, /RELEASE_TOKEN/);
+  assert.equal(git(repo, 'rev-parse', 'HEAD'), sha);
+  const configured = spawnSync(bash, [script], {cwd: repo, encoding: 'utf8', env: {...process.env, RELEASE_TOKEN: 'local-test-placeholder'}, windowsHide: true});
+  assert.equal(configured.status, 0, configured.stderr);
 });
 
 test('publish refuses a moved remote tag before invoking the release API', t => {

@@ -1,4 +1,4 @@
-name: Sync version
+name: Prepare Release
 
 on:
   workflow_dispatch:
@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: sync-version
+  group: prepare-release
   cancel-in-progress: false
 
 jobs:
@@ -22,17 +22,22 @@ jobs:
     name: Synchronize version and create tag
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    permissions:
-      contents: write
-    outputs:
-      sha: ${{ steps.version.outputs.sha }}
-      tag: ${{ steps.version.outputs.tag }}
     steps:
+      - name: Require credentials that can trigger tag push workflows
+        env:
+          RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        shell: bash
+        run: |
+          if [ -z "$RELEASE_TOKEN" ]; then
+            echo '::error::Configure RELEASE_TOKEN with repository Contents read/write permission. GITHUB_TOKEN pushes cannot trigger the tag release workflow.'
+            exit 1
+          fi
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: true
+          token: ${{ secrets.RELEASE_TOKEN }}
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .node-version
@@ -48,7 +53,7 @@ jobs:
             echo 'Version synchronization must run on the default branch.' >&2
             exit 1
           fi
-          git fetch origin "$DEFAULT_BRANCH" --tags
+          git fetch origin "refs/heads/$DEFAULT_BRANCH:refs/remotes/origin/$DEFAULT_BRANCH" --tags
           if [ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/$DEFAULT_BRANCH")" ]; then
             echo 'Default branch changed; start a new version synchronization run.' >&2
             exit 1
@@ -62,13 +67,3 @@ jobs:
           git tag "v$version"
           git push --atomic origin "HEAD:refs/heads/$DEFAULT_BRANCH" "refs/tags/v$version"
           printf 'sha=%s\ntag=v%s\n' "$(git rev-parse HEAD)" "$version" >> "$GITHUB_OUTPUT"
-
-  release:
-    name: Release synchronized version
-    needs: sync
-    permissions:
-      contents: write
-    uses: ./.github/workflows/release.yml
-    with:
-      tag: ${{ needs.sync.outputs.tag }}
-      sha: ${{ needs.sync.outputs.sha }}

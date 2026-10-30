@@ -1,26 +1,15 @@
 name: Release
+run-name: Release ${{ github.ref_name }}
 
 on:
-  workflow_dispatch:
-    inputs:
-      tag:
-        description: Existing version tag, e.g. v1.2.3
-        type: string
-        required: true
-  workflow_call:
-    inputs:
-      tag:
-        type: string
-        required: true
-      sha:
-        type: string
-        required: true
+  push:
+    tags: ['v*']
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ inputs.tag }}
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -34,7 +23,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ inputs.sha || github.sha }}
+          ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -43,8 +32,8 @@ jobs:
       - name: Validate synchronized version and existing tag
         id: source
         env:
-          RELEASE_TAG: ${{ inputs.tag }}
-          SOURCE_SHA: ${{ inputs.sha }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          SOURCE_SHA: ${{ github.sha }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         run: node scripts/release-prepare.mjs
 

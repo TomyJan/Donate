@@ -47,4 +47,4 @@
 
 ## 发版
 
-在主分支手动运行 GitHub Actions 的 Sync version，选择 patch / minor / major；同步版本并打标签后，自动调用 Release 检查、构建和发布。失败时可单独运行 Release，填入已有标签重试。不自动部署。
+配置仓库 Secret RELEASE_TOKEN（仓库 Contents 读写权限）。在主分支手动运行 Prepare Release，选择 patch / minor / major，同步版本并推送标签；独立的 Release 由标签推送触发，检查、构建并发布。失败时重新运行对应的 Release，不自动部署。
