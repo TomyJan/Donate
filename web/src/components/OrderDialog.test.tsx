@@ -23,6 +23,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   for (const client of clients.splice(0)) client.clear();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   report.mockClear();
   notify.mockClear();
@@ -40,6 +41,72 @@ function renderOrder(admin = false) {
   return { ...view, client };
 }
 const response = (data: unknown) => new Response(JSON.stringify({ code: 'OK', data }), { status: 200 });
+
+it.each([false, true])(
+  'preserves an order confirmation across automatic polling (delayed preview=%s)',
+  async (delayedPreview) => {
+    vi.useFakeTimers();
+    let detailRequests = 0;
+    let finishPreview: ((value: Response) => void) | undefined;
+    const executed: unknown[] = [];
+    const operation = {
+      id: 'delete-preview',
+      action: 'delete',
+      expires_at: '2099-01-01T00:00:00Z',
+      items: [{ id: 'order-uuid', result: 'ready' }],
+    };
+    vi.stubGlobal('fetch', async (input: string, init?: RequestInit) => {
+      const path = String(input);
+      if (path.endsWith('/reconcile')) return response({});
+      if (path.endsWith('/preview')) {
+        if (!delayedPreview) return response(operation);
+        return new Promise<Response>((resolve) => {
+          finishPreview = resolve;
+        });
+      }
+      if (path.endsWith('/execute')) {
+        executed.push(JSON.parse(String(init?.body)));
+        return response({ ...operation, items: [{ id: 'order-uuid', result: 'deleted' }] });
+      }
+      if (path.includes('/order/detail?')) {
+        detailRequests += 1;
+        return new Promise<Response>((resolve) => {
+          setTimeout(() => resolve(response({ ...order, protocol: 'v2' })), 100);
+        });
+      }
+      throw new Error(`Unexpected request: ${path}`);
+    });
+    const advance = async (milliseconds: number) => {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(milliseconds);
+      });
+    };
+    renderOrder(true);
+    await advance(200);
+    fireEvent.click(screen.getByRole('button', { name: 'Reconcile payment' }));
+    await advance(200);
+    fireEvent.click(screen.getByRole('button', { name: 'Delete order' }));
+    await advance(10);
+    if (delayedPreview) expect(screen.getByRole('button', { name: 'Confirm' })).toBeDisabled();
+    else expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled();
+
+    await advance(2100);
+    expect(detailRequests).toBeGreaterThanOrEqual(3);
+    expect(screen.queryByRole('button', { name: 'Confirm' })).toBeInTheDocument();
+    expect(executed).toEqual([]);
+    if (delayedPreview) {
+      await act(async () => {
+        finishPreview?.(response(operation));
+      });
+      await advance(10);
+    }
+    expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    await advance(200);
+    expect(executed).toEqual([{ operation_id: 'delete-preview' }]);
+    expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument();
+  },
+);
 
 it('revokes an already-open destructive confirmation when the detail refresh fails', async () => {
   let failed = false;

@@ -86,7 +86,8 @@ export function OrderDialog({
     if (cached?.state.data !== undefined) cached.setState({ data: undefined, dataUpdatedAt: 0 });
   }, [unavailable, client, admin, id]);
   const o = unavailable ? undefined : detail.data;
-  const actionsDisabled = busy || detail.isFetching || !!detail.error;
+  // Background polling does not revoke confirmations; failed refreshes still do.
+  const actionsDisabled = busy || !!detail.error;
   const canContinue = !!o && o.status === 'pending' && new Date(o.expires_at).getTime() > Date.now();
   const reconciliations = o?.reconciliations ?? [];
   const manualJobIDs = new Set(reconciliations.map((request) => request.job_id));
