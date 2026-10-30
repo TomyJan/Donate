@@ -47,4 +47,4 @@
 
 ## 发版
 
-在主分支手动运行 GitHub Actions 的 Release，输入 `x.y.z`。工作流检查后生成 tag、二进制和校验和，不自动部署。
+在主分支手动运行 GitHub Actions 的 Sync version，选择 patch / minor / major；同步版本并打标签后，自动调用 Release 检查、构建和发布。失败时可单独运行 Release，填入已有标签重试。不自动部署。

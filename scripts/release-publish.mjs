@@ -1,9 +1,25 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { readdirSync } from 'node:fs';
-const run=(cmd,args)=>execFileSync(cmd,args,{encoding:'utf8',stdio:'inherit'});
-const sha=process.env.SOURCE_SHA,version=process.env.RELEASE_VERSION;
-if (!/^[0-9a-f]{40}$/.test(sha ?? '') || !/^\d+\.\d+\.\d+$/.test(version ?? '')) throw new Error('Invalid release metadata');
-run('git',['tag',`v${version}`,sha]);
-run('git',['push','origin',`refs/tags/v${version}`]);
-const assets=readdirSync('release-assets').map(name=>`release-assets/${name}`);
-run('gh',['release','create',`v${version}`,'--verify-tag','--target',sha,'--title',`V${version}`,'--generate-notes',...assets]);
+import { versionPattern } from './release-version.mjs';
+
+const run = (cmd, args) => execFileSync(cmd, args, {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']}).trim();
+const sha = process.env.SOURCE_SHA, version = process.env.RELEASE_VERSION;
+if (!/^[0-9a-f]{40}$/.test(sha ?? '') || !versionPattern.test(version ?? '')) throw new Error('Invalid release metadata');
+const tag = 'v' + version;
+if (run('git', ['rev-parse', 'HEAD']) !== sha) throw new Error('Checkout differs from the tested source');
+const refs = run('git', ['ls-remote', 'origin', 'refs/tags/' + tag, 'refs/tags/' + tag + '^{}']).split(/\r?\n/).filter(Boolean).map(line => line.split(/\s+/));
+const remote = refs.find(([, ref]) => ref.endsWith('^{}')) ?? refs[0];
+if (remote?.[0] !== sha) throw new Error('Remote release tag changed after verification');
+const assets = readdirSync('release-assets').map(name => 'release-assets/' + name);
+if (!assets.length) throw new Error('No release assets');
+const repo = process.env.GITHUB_REPOSITORY;
+if (!repo || !/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error('Invalid repository');
+const existing = spawnSync('gh', ['api', 'repos/' + repo + '/releases/tags/' + tag], {encoding: 'utf8'});
+if (existing.status === 0) {
+  const release = JSON.parse(existing.stdout);
+  if (release.draft) throw new Error('An existing draft release needs explicit review');
+  console.log(run('gh', ['release', 'upload', tag, ...assets, '--clobber']));
+} else {
+  if (!/HTTP 404/.test(existing.stderr ?? '')) throw new Error('Could not check existing release: ' + (existing.stderr || existing.error?.message || 'unknown error'));
+  console.log(run('gh', ['release', 'create', tag, '--verify-tag', '--target', sha, '--title', 'V' + version, '--generate-notes', ...assets]));
+}

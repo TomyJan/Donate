@@ -11,7 +11,7 @@ const build = metadata({
   commit: git('rev-parse', 'HEAD'),
   exactTag: optionalGit('describe', '--exact-match', '--tags', 'HEAD'),
   nearestTag: optionalGit('describe', '--tags', '--abbrev=0', '--match', 'v[0-9]*'),
-  version: process.argv.find(v => v.startsWith('--version='))?.slice(10),
+  version: process.argv.find(v => v.startsWith('--version='))?.slice(10) ?? JSON.parse(readFileSync('web/package.json', 'utf8')).version,
   release,
   dirty: !!git('status', '--porcelain'),
 });

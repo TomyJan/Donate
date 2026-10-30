@@ -24,7 +24,6 @@ import (
 	"time"
 )
 
-var version = "0.0.1"
 var commit = "unknown"
 var tag = ""
 var builtAt = ""
