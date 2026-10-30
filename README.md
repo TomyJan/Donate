@@ -10,7 +10,9 @@
 ./donate
 ```
 
-默认从当前工作目录读取 `.env`，数据库、日志和备份也保存在此。详见[运行说明](docs/operations.md)和[登录配置](docs/legal-and-login.md)。
+默认从当前工作目录读取 `.env`，数据库、日志和备份也保存在此。
+
+配置说明：[运行与备份](docs/operations.md) · [登录与回调](docs/legal-and-login.md) · [支付接入](docs/payment-integration.md) · [IP 属地与本地库推荐](docs/ip-geolocation.md)。
 
 ## 开发
 

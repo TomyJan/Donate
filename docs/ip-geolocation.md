@@ -1,55 +1,88 @@
-# IP 属地数据方案
+# IP 属地配置
 
-Go 单实例可直接读取本地库，无需独立服务。前台最多显示省级；后台展示数据源实际可用的完整细字段。当前未采购或接入数据库，选型不能仅凭库名推断准确率或中国覆盖。
+## 选择模式
 
-## 数据源与选择
+| 配置 | 行为 |
+| --- | --- |
+| `GEO_MODE=online` | 默认值，使用内置在线查询与故障转移，无需下载数据或填写 API Key |
+| `GEO_MODE=local` | 读取 `GEO_DATABASE` 指定的本地 MMDB；仅在开启 `GEO_ONLINE_FALLBACK` 时允许在线补充 |
+| `GEO_MODE=disabled` | 不查询属地，仍记录下单 IP |
 
-| 数据源 | 可用信息与接入 | 本项目用途 |
+## 本地库怎么配
+
+1. 从下面的数据源下载 **City / 城市级 MMDB**，解压得到 `.mmdb` 文件。不要把压缩包、CSV、Country 或 ASN 库当成城市库。
+2. 放在程序可读的位置，修改启动工作目录里的 `.env`，例如：
+
+```dotenv
+GEO_MODE=local
+GEO_DATABASE=./GeoLite2-City.mmdb
+GEO_ONLINE_FALLBACK=false
+```
+
+3. 重启程序。通过公网访问并新建订单，在后台订单详情查看下单 IP、属地及来源；来源为 `mmdb` 表示使用了本地查询结果。
+
+文件放在当前目录即可，不要求固定目录；也可使用其他相对路径或绝对路径。相对路径以**启动工作目录**为准，不是二进制所在目录或 `DATA_DIR`；路径含空格时加引号。程序不附带本地库，也不负责下载或自动更新。
+
+当前只读取一个文件，并按 **MaxMind City 字段结构**解析：`country.names`、`subdivisions[].names`、`city.names` 等。名称优先 `zh-CN`，缺失时取 `en`；省、市、第二级行政区、坐标、ISP / ASN 等仅在文件实际提供对应字段时保存，不合并其他库、不推测缺失信息。不是所有 `.mmdb` 都符合这一结构，更不能通过改扩展名接入其他格式。
+
+## 数据源推荐
+
+### 匹配当前解析器
+
+| 数据源 | 选择建议 | 下载与注意事项 |
 | --- | --- | --- |
-| [ip2region 开源](https://github.com/lionsoul2014/ip2region/blob/master/README_zh.md) | IPv4 / IPv6 XDB，国家、省、市、ISP 等；[官方 Go 客户端](https://github.com/lionsoul2014/ip2region/blob/master/binding/golang/README_zh.md) | 免费本地方案首选验证对象；不承诺全量区县 |
-| [ip2region 商用](https://www.ip2region.net/products/offline) | 按套餐提供区县、坐标、行政区码等；V4 / V6 分开订阅 | 中国细粒度候选；采购时核对字段、更新和授权 |
-| [MaxMind GeoLite City / GeoIP City](https://dev.maxmind.com/geoip/docs/databases/city-and-country/) | 全球双栈 MMDB / CSV；GeoLite 下载需账号与 License Key，GeoIP 付费；ISP / ASN 为独立数据产品 | 工具成熟，但不保证中国每个 IP 都有省市区；中文 locale 也不代表地名全部中文 |
-| [纯真商业库](https://www.cz88.net/geo-commercial) | 双栈、区县、部分重点地区街道、ISP / AS，TXT / CSV / CZDB | 中文细粒度候选，需询价及核对授权 |
-| [IPIP.NET](https://www.ipip.net/product/ipv6.html) | 中国城市 / 区县、IPv6 与定制字段，IPDB，按产品采购 | 中国细粒度候选；明确公开展示查询结果的授权 |
+| [MaxMind GeoLite2 City](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data/) | 免费入门，先验证本站实际省市显示是否够用 | 注册账号，从账户下载城市级 MMDB；需遵守 GeoLite 署名及更新要求 |
+| [MaxMind GeoIP City](https://dev.maxmind.com/geoip/docs/databases/city-and-country/) | 付费候选，与现有解析器同一字段体系 | 选择 `GeoIP2-City.mmdb`，订阅更新；不要误选独立 Country / ASN / ISP 产品 |
+| [DB-IP IP to City Lite](https://db-ip.com/db/download/ip-to-city-lite) | 免费替代，适合先比较大陆 IPv4 / IPv6 样本 | 选择 MMDB，解压 `.mmdb.gz` 后配置实际文件名；按月更新，展示结果的页面须按其要求署名并链接 DB-IP |
+| [DB-IP IP to Location](https://db-ip.com/db/ip-to-location) | 付费候选，可与 MaxMind 比较省市与第二级行政区覆盖 | 选择 MMDB，按订阅获取更新；不是在线 API 套餐 |
 
-纯真[社区版](https://www.cz88.net/geo-public)与[对比页](https://www.cz88.net/compare)的 BY-SA / 非商用许可口径存在差异，未澄清前不作为公开打赏站默认数据。
+两家数据的字段结构分别见 [MaxMind City](https://dev.maxmind.com/geoip/docs/databases/city-and-country/)、[DB-IP Lite](https://db-ip.com/db/format/ip-to-city-lite/mmdb.html) 和 [DB-IP Location](https://db-ip.com/db/format/ip-to-location/mmdb.html)。这表示字段可接入，不代表已验证所有中国 IP 的精度；正式选型用已知位置的宽带、移动网络、校园网及 IPv6 样本比较。
 
-本地方案建议先验证 ip2region 免费双栈，再根据已知真实位置的宽带、移动网络、校园网、跨省与 IPv6 样本决定是否购买商用数据。供应商字段说明不能代替覆盖率、准确率和时延实测；多个库答案一致也不等于真实位置正确。
+免费库也有使用条件：[GeoLite 对外展示要求署名](https://support.maxmind.com/knowledge-base/articles/sell-or-display-data-from-geolite-databases-and-web-services)，[DB-IP Lite 下载页](https://db-ip.com/db/download/ip-to-city-lite)列明页面署名要求。本程序不会根据所选库自动添加来源署名，部署方需按所用数据的要求补充。
 
-本地数据包确定前，免密钥在线实现基线为：
+### 中国区县数据候选，当前需要另行适配
 
-- IPv4：**IP9 → IP优（ipyou.net）→ I5P → 太平洋 → 未知**。
-- IPv6：**IP9 → IP优 → I5P → 未知**，不向太平洋发送 IPv6。
-- 有限超时、重试与故障转移，遵守各源限流；失败显示未知，不阻塞交易。
-
-采用本地模式时无需强制向外发送访客 IP。是否保留在线补充由部署配置决定，不把用户询问本地库视为已采购某个产品。
-
-## 在线适配器与故障转移
-
-| 服务 | 协议参考 | 省级字段 |
+| 数据源 | 适用方向 | 当前限制 |
 | --- | --- | --- |
-| IP9 | [官方接口与额度](https://www.ip9.com.cn/)，接入时复核当前协议 | `data.prov` |
-| IP优 | [协议](https://github.com/ipyou-net/ipyou-cli/blob/main/docs/api.md)，`https://ipyou.net/{ip}`，`Accept: application/json` | `geo.province` |
-| I5P | [协议](https://www.i5p.com/zh/apidoc)，`https://www.i5p.com/api/ip?ip={ip}` | `data.province` |
-| 太平洋 | `https://whois.pconline.com.cn/ipJson.jsp?json=true&ip={ip}`，仅 IPv4，GB18030 解码 | `pro` |
+| [IPIP.NET](https://www.ipip.net/product/ipv6.html) | 中国城市 / 区县、运营商等，按产品选购 IPv4 / IPv6 数据 | 官方 IPDB 不能直接填入 `GEO_DATABASE`，需增加解析适配；公开展示结果的授权需向供应商确认 |
+| [纯真商业离线库](https://www.cz88.net/) | 中国省市区县数据候选，可向供应商索取样本比较 | 需适配交付格式及字段，不能仅填路径启用 |
+| [ip2region](https://github.com/lionsoul2014/ip2region/blob/master/README_zh.md) | 免费双栈城市数据；对更新与精度要求更高时可比较其商用数据 | 当前不支持 XDB，需要新增读取适配；开源查询引擎不等于所有数据包均可任意使用 |
 
-1. 下单事务写入真实请求 IP 与查询任务，worker 有并发控制及租约，重启可继续。支付通知的来源 IP 不覆盖下单 IP；私网、回环、保留地址不向外查询。
-2. 规范化 IP 作为缓存键，成功缓存 24 小时，未知 5 分钟，同 IP 并发合并，容量有上限。缓存到期不重写订单快照。
-3. 按地址族顺序切换，每源最多 2 秒，每轮网络总预算 8 秒；跳过熔断或额度耗尽的源，不在同一轮立即重试同源。复用连接、验证 TLS，只请求固定 HTTPS 域名、不跟随重定向，响应体上限 64 KiB。
-4. 校验 HTTP、业务状态、结构及字段类型，并检查回显 IP 规范化后与查询相同。国内省份映射到省级枚举，不拿城市、运营商或错误文本补位；有效境外结果可只展示国家 / 地区。
-5. 本地限流：IP9 每分钟最多 50 次、均匀发出；IP优单并发且启动间隔至少 2 秒；I5P 单并发且至少 3 秒；太平洋单并发且至少 2 秒。遇 429 / 配额错误立即换源，按 `Retry-After` 冷却，未提供则至少 60 秒。实际供应商额度变化时同步调整。
-6. 连续三次网络、超时、5xx 或格式错误后暂停 60 秒，到期只放一个待查询任务探测；失败延长冷却，最多 10 分钟。有效“查不到”不计为服务故障，继续尝试备用源。
-7. 全部失败展示未知；同任务最多再尝试两轮，约 1 分钟、10 分钟后加抖动，遵守限流 / 熔断并允许刷新未知缓存。任务不改变支付状态。
+希望现在直接离线运行，先试上面的 City MMDB；若中国区县覆盖是首要要求，再向国内服务商要样本，确定数据与授权后做相应适配。不要因为“支持中文”就假定每个地址都有省、市、区县。
 
-只采纳优先级中第一个有效结果，不为每笔订单同时请求所有服务、不投票或拼接位置。免费接口无生产可用性保证，正式部署复核协议、额度、授权及实际网络表现。
+## 更新与验证
 
-## 实现约束
+- 按供应商要求定期更新。MaxMind 可用官方 [geoipupdate](https://dev.maxmind.com/geoip/updating-databases/) 下载；下载器的账号 / License Key 不填写到 Donate 的配置中。
+- 新库先下载并解压到另一个临时文件，确认不是错误页面或压缩包；停服后替换 `GEO_DATABASE` 指向的文件，再启动。保留上一份以便回退，不要原地截断或覆盖进程正在读取的文件。
+- 更新工具只负责文件，Donate **不热加载**，更换库后仍需重启。新查询使用新库，已有订单的属地快照不会被重算。
+- 可安装 `mmdblookup` 验证文件及字段，例如：
 
-- 本地库通过 `GEO_DATABASE` 指定，不限定存放目录，独立于内嵌前端的 Go 二进制，更新不必重新发布程序。文件格式与提供商数据区分处理。
-- 更新先下载临时文件、校验格式与完整性，再切换 reader；失败保留上一份可用库。密钥只在部署侧保存，付费数据不提交或随开源仓库再分发。
-- 下单记录实际请求 IP 并持久化查询任务，后台异步查询；在线模式校验返回 IP、响应结构和地址族，执行短超时、限流 / 熔断、缓存及有限重试。
-- 保存每笔订单的结果快照、数据源、版本、查询时间与实际粒度；数据库更新不自动改写旧订单。不同来源不拼凑成虚假精细位置。
-- 完整可用字段包括国家、省、市、区县、街道、运营商、ASN，以及实际存在时的坐标和精度范围。没有细字段就省略；[IP 定位不能识别住宅地址](https://dev.maxmind.com/geoip/geolite2-free-geolocation-data/)，坐标小数位数不代表准确性。
-- 公开 API 仅序列化省级展示值，后台鉴权后才提供完整 IP 与细字段；不能靠前端隐藏保护原始响应。
+```sh
+mmdblookup --file ./GeoLite2-City.mmdb --ip 223.5.5.5
+```
 
-供应商、预算、精度及授权以实现阶段确认的数据包为准；本文件不宣称已完成生产接入或给出未经真实样本验证的准确率排名。
+示例 IP 仅用于检查读取是否正常，不作为准确率样本。最终用自己的公网 IPv4 / IPv6 和已知实际位置核对；本机 `127.0.0.1` 或内网地址不查询属地。经反代部署时先核对 `REAL_IP_HEADER`，反代应覆盖该头并限制源站直连，避免把反代 IP 误当访客 IP。
+
+## 在线查询与补充
+
+内置顺序为：
+
+- IPv4：**IP9 → IP优 → I5P → 太平洋**。
+- IPv6：**IP9 → IP优 → I5P**，不向太平洋发送 IPv6。
+
+查询有缓存、限流、超时和失败切换，不阻塞支付；全部失败时属地未知。当前没有在线服务商的自定义 URL / Key 配置项。
+
+本地模式开启 `GEO_ONLINE_FALLBACK=true` 后，仅在本地查询报错或未取得国家信息时走同一在线链；**只有省市缺失不会触发补充**。开启补充会把待查询的公网 IP 发给第三方；保持 `false` 才是纯本地查询。`GEO_MODE=online` 本身始终在线，不受这个开关控制。
+
+## 常见问题
+
+| 现象 | 检查 |
+| --- | --- |
+| 启动报库文件错误 | 检查 `GEO_DATABASE` 的工作目录、读权限及解压后的文件格式；文件打不开会启动失败，在线补充不能兜底启动 |
+| 启动正常却查不到省市 | 确认使用 City 数据及兼容字段；Country 只有国家，ASN 没有省市，扩展名是 MMDB 也可能字段不兼容 |
+| 本地可用但区县 / 运营商为空 | 数据包可能没有这些字段；开启在线补充不会补齐已有有效国家结果的缺失细节 |
+| 显示内网 / 反代的 IP 或属地为空 | 检查真实 IP 请求头和反代覆盖配置；内网、回环、保留地址不会查询 |
+| 换库后旧订单没变化 | 结果按订单保存为快照；重启后用新建订单验证，不自动覆盖旧数据 |
+| 前台没有后台那么细 | 公开结果最多省级，后台展示实际可用细节；IP 属地不是用户的精确地址 |
+
+更多部署设置见[运行说明](operations.md)，全部变量见 [`.env.example`](../.env.example)。
