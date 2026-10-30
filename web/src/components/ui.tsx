@@ -53,17 +53,15 @@ export function Modal({
             if (!dismissible) event.preventDefault();
           }}
         >
-          <AnimatedHeight>
-            <div className="d-dialog-head">
-              <Dialog.Title>{title}</Dialog.Title>
-              <Dialog.Close asChild>
-                <Button className="d-icon d-ghost" aria-label={t('close')} disabled={!dismissible}>
-                  <X />
-                </Button>
-              </Dialog.Close>
-            </div>
-            {children}
-          </AnimatedHeight>
+          <div className="d-dialog-head">
+            <Dialog.Title>{title}</Dialog.Title>
+            <Dialog.Close asChild>
+              <Button className="d-icon d-ghost" aria-label={t('close')} disabled={!dismissible}>
+                <X />
+              </Button>
+            </Dialog.Close>
+          </div>
+          <AnimatedHeight>{children}</AnimatedHeight>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

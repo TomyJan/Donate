@@ -105,10 +105,90 @@ for (const lang of ['en', 'zh-CN'] as const)
         .locator('.date-calendar-heading button')
         .evaluateAll((buttons) => buttons.map((button) => Math.round(button.getBoundingClientRect().y)));
       expect(new Set(captionRows).size).toBe(1);
+      const captionBounds = await page.locator('.date-calendar-heading button').evaluateAll((buttons) =>
+        buttons.map((button) => ({
+          left: button.getBoundingClientRect().left,
+          right: button.getBoundingClientRect().right,
+        })),
+      );
+      for (let index = 1; index < captionBounds.length; index++)
+        expect(captionBounds[index].left - captionBounds[index - 1].right).toBeGreaterThanOrEqual(4);
+      for (const control of ['.date-calendar-year', '.date-calendar-month'])
+        await expect(page.locator(control)).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
       await page.screenshot({ path: info.outputPath('calendar-320.png'), animations: 'disabled' });
     });
   }
+
+for (const theme of ['light', 'dark']) {
+  test(`${theme}: modal close targets remain fully visible and clickable`, async ({ page }) => {
+    await openOrders(page, 'en', theme);
+    for (const width of [320, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.locator('.d-nav').getByRole('button', { name: 'Account', exact: true }).click();
+      await page.getByRole('menuitem', { name: 'Account', exact: true }).click();
+      const dialog = page.getByRole('dialog', { name: 'Account', exact: true });
+      const close = dialog.getByRole('button', { name: 'Close', exact: true });
+      await close.focus();
+      await expect(close).toBeFocused();
+      await expect
+        .poll(() =>
+          close.evaluate((button) => {
+            const box = button.getBoundingClientRect();
+            return [
+              [box.left + box.width / 2, box.top + 3],
+              [box.right - 3, box.top + box.height / 2],
+            ].every(([x, y]) => button.contains(document.elementFromPoint(x, y)));
+          }),
+        )
+        .toBe(true);
+      const box = await close.boundingBox();
+      if (!box) throw new Error('Close button has no hit target');
+      await page.mouse.click(box.x + box.width / 2, box.y + 3);
+      await expect(dialog).toHaveCount(0);
+    }
+  });
+
+  test(`${theme}: menus dialogs date pickers and nested selects have opaque elevated surfaces`, async ({
+    page,
+  }) => {
+    await openOrders(page, 'en', theme);
+    const elevated = async (surface: ReturnType<Page['locator']>) => {
+      await expect(surface).toBeVisible();
+      await expect(surface).not.toHaveCSS('box-shadow', 'none');
+      await expect(surface).not.toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+      await expect(surface).toHaveCSS('opacity', '1');
+    };
+    for (const label of ['Language', 'Appearance', 'Account']) {
+      await page.locator('.d-nav').getByRole('button', { name: label, exact: true }).click();
+      await elevated(page.getByRole('menu'));
+      await page.keyboard.press('Escape');
+    }
+    await page.getByRole('combobox', { name: 'Status', exact: true }).click();
+    await elevated(page.getByRole('listbox'));
+    await page.keyboard.press('Escape');
+    await page.locator('.d-nav').getByRole('button', { name: 'Account', exact: true }).click();
+    await page.getByRole('menuitem', { name: 'Account', exact: true }).click();
+    await elevated(page.getByRole('dialog', { name: 'Account', exact: true }));
+    await page.getByRole('button', { name: 'Close', exact: true }).click();
+    await page.setViewportSize({ width: 320, height: 900 });
+    await page.getByRole('button', { name: 'From', exact: true }).click();
+    await elevated(page.locator('.date-time-pop'));
+    for (const label of ['Choose year', 'Choose month', 'Hour', 'Minute']) {
+      await page.getByRole('combobox', { name: label, exact: true }).click();
+      await elevated(page.getByRole('listbox'));
+      await page.keyboard.press('Escape');
+      await expect(page.locator('.date-time-pop')).toBeVisible();
+    }
+    await page.keyboard.press('Escape');
+    await page.locator('.a-side').getByRole('button', { name: 'Overview', exact: true }).click();
+    await page.getByRole('button', { name: 'Custom', exact: true }).click();
+    await elevated(page.locator('.range-pop'));
+    await page.getByRole('button', { name: 'From', exact: true }).click();
+    await elevated(page.locator('.date-time-pop'));
+    await expect(page.locator('.range-pop')).toBeVisible();
+  });
+}
 
 test('calendar title controls share the arrow row and preserve Shanghai time through keyboard browsing', async ({
   page,

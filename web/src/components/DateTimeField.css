@@ -10,7 +10,7 @@
   display: grid;
   grid-template-columns: 30px minmax(64px, 0.8fr) minmax(82px, 1.2fr) 30px;
   align-items: center;
-  gap: 3px;
+  gap: 6px;
 }
 .d-app .date-time-pop .date-calendar-heading .d-btn {
   min-width: 0;
@@ -26,6 +26,12 @@
 .d-app .date-time-pop .date-calendar-heading .date-calendar-arrow {
   justify-content: center;
   padding: 5px;
+}
+.d-app .date-time-pop .date-calendar-heading .a-select {
+  padding-inline: 8px;
+  gap: 6px;
+  border-color: var(--d-line);
+  background: var(--d-bg);
 }
 .d-app .date-time-pop .date-calendar-heading .d-btn:hover,
 .d-app .date-time-pop .date-calendar-heading .d-btn[data-state="open"] {
