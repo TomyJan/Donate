@@ -71,6 +71,22 @@ async function home(page: Page, holdMore = false) {
   return releaseMore;
 }
 
+test('the current year preset is selected by default and preserves an edited draft', async ({ page }) => {
+  await page.clock.setFixedTime(new Date('2027-06-01T12:00:00+08:00'));
+  await home(page);
+  const amount = page.getByRole('textbox', { name: '金额（元）', exact: true });
+  await expect(amount).toHaveValue('20.27');
+  const preset = page.locator('.r-presets').getByRole('button', { name: '20.27', exact: true });
+  await expect(preset).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.locator('.r-presets').getByRole('button', { name: '20.26', exact: true })).toHaveCount(0);
+  await amount.fill('19.99');
+  await page.reload();
+  await expect(amount).toHaveValue('19.99');
+  await expect(preset).toHaveAttribute('aria-pressed', 'false');
+  await preset.click();
+  await expect(amount).toHaveValue('20.27');
+});
+
 test('amount presets share the moving selection and keep manual amount input authoritative', async ({
   page,
 }) => {

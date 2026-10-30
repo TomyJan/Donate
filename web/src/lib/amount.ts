@@ -1,3 +1,6 @@
+export function yearAmount() {
+  return (new Date().getFullYear() / 100).toFixed(2);
+}
 export function acceptAmountEdit(v: string) {
   return /^\d{0,6}(?:\.\d{0,2})?$/.test(v) && (v === '' || v === '.' || Number(v) <= 100000);
 }

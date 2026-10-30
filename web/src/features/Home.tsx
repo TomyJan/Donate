@@ -9,7 +9,7 @@ import { checkout, OrderDialog } from '../components/OrderDialog';
 import { RequestError } from '../components/RequestError';
 import { SelectionButton, SelectionGroup } from '../components/SelectionGroup';
 import { Button, Empty, Menu } from '../components/ui';
-import { acceptAmountEdit, amountFen } from '../lib/amount';
+import { acceptAmountEdit, amountFen, yearAmount } from '../lib/amount';
 import { api, money, query } from '../lib/api';
 import { errorMessage } from '../lib/errors';
 import type { Order, RecordItem, Records } from '../lib/types';
@@ -33,7 +33,7 @@ function initialDraft(): Draft {
     )
       return v;
   } catch {}
-  return { amount: '20.26', message: '', channel: 'alipay' };
+  return { amount: yearAmount(), message: '', channel: 'alipay' };
 }
 export function Home() {
   const app = useApp(),
@@ -98,7 +98,7 @@ export function Home() {
         },
       });
       setSelection({ selected: 0, direction: 1, previousId: null });
-      setDraft({ amount: '20.26', message: '', channel: 'alipay' });
+      setDraft({ amount: yearAmount(), message: '', channel: 'alipay' });
       setComposerEpoch((value) => value + 1);
       void list.refetch();
     }
@@ -224,7 +224,7 @@ export function Home() {
         />
       </label>
       <SelectionGroup className="r-presets">
-        {['0.01', '8.88', '20.26', '50', '128', '256', '648'].map((value) => (
+        {['0.01', '8.88', yearAmount(), '50', '128', '256', '648'].map((value) => (
           <SelectionButton
             className="r-preset"
             key={value}

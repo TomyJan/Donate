@@ -156,6 +156,7 @@ test('a verified payment pauses for a second, slowly files the receipt and resto
   page,
 }, info) => {
   const gateway = await prepare(page, { status: 'pending' });
+  await page.clock.setFixedTime(new Date('2031-06-01T12:00:00+08:00'));
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(`/?payment=returned&order=${orderID}`);
   const ticket = page.locator('.r-write .r-ticket');
@@ -177,6 +178,11 @@ test('a verified payment pauses for a second, slowly files the receipt and resto
   await expect(page.locator('.r-featured:not(.r-leaving)')).toContainText('广东');
   await expect(pay).toBeEnabled();
   await expect(ticket.locator('textarea')).toHaveValue('');
+  await expect(ticket.getByRole('textbox', { name: '金额（元）', exact: true })).toHaveValue('20.31');
+  await expect(ticket.getByRole('button', { name: '20.31', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
   await expect(page).toHaveURL('/');
   await page.screenshot({ path: info.outputPath('filed.png') });
   await page.reload();
