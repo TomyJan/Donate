@@ -62,15 +62,17 @@ export function OrderDialog({
   onClose: () => void;
   admin?: boolean;
 }) {
-  const { t, report, notify } = useApp();
+  const { t, report, notify, profile } = useApp();
+  const identity = profile ? `${profile.id}:${profile.csrf_token}` : 'guest';
   const client = useQueryClient();
   const [busy, setBusy] = useState(false),
     [pollUntil, setPollUntil] = useState(0);
   const activeID = useRef(id);
   activeID.current = id;
   const detail = useQuery({
-    queryKey: ['order-detail', admin, id],
-    queryFn: () => api<Order>(`${admin ? 'admin/' : ''}order/detail?${query({ id: id ?? '' })}`),
+    queryKey: ['order-detail', admin, id, identity],
+    queryFn: ({ signal }) =>
+      api<Order>(`${admin ? 'admin/' : ''}order/detail?${query({ id: id ?? '' })}`, undefined, signal),
     enabled: !!id,
     refetchInterval: () => (Date.now() < pollUntil ? 2000 : false),
     retry: false,
@@ -80,11 +82,13 @@ export function OrderDialog({
     ['NOT_FOUND', 'UNAUTHORIZED', 'FORBIDDEN', 'ACCOUNT_BANNED'].includes(detail.error.code);
   useEffect(() => {
     if (!unavailable) return;
-    const cached = client.getQueryCache().find({ queryKey: ['order-detail', admin, id], exact: true });
+    const cached = client
+      .getQueryCache()
+      .find({ queryKey: ['order-detail', admin, id, identity], exact: true });
     // Preserve the terminal error while revoking its data for every observer,
     // including dialogs reopened after this component has unmounted.
     if (cached?.state.data !== undefined) cached.setState({ data: undefined, dataUpdatedAt: 0 });
-  }, [unavailable, client, admin, id]);
+  }, [unavailable, client, admin, id, identity]);
   const o = unavailable ? undefined : detail.data;
   // Background polling does not revoke confirmations; failed refreshes still do.
   const actionsDisabled = busy || !!detail.error;

@@ -45,10 +45,14 @@ export function Home() {
       direction: 1,
       previousId: null as string | null,
     }),
-    [detail, setDetail] = useState<string | null>(null),
+    [detail, setDetail] = useState<{ id: string; identity: string } | null>(null),
     [busy, setBusy] = useState(false),
     [height, setHeight] = useState(180);
   const requestKey = useRef(crypto.randomUUID());
+  const identity = profile ? `${profile.id}:${profile.csrf_token}` : 'guest';
+  useEffect(() => {
+    setDetail((value) => (value?.identity === identity ? value : null));
+  }, [identity]);
   const composer = useRef<HTMLElement>(null),
     book = useRef<HTMLElement>(null);
   const reduced = useReducedMotion();
@@ -408,7 +412,7 @@ export function Home() {
                   record={current}
                   reduced={!!reduced}
                   onHeight={setHeight}
-                  onDetail={setDetail}
+                  onDetail={(id) => setDetail({ id, identity })}
                 />
               </AnimatePresence>
             </motion.div>
@@ -464,7 +468,11 @@ export function Home() {
           </Button>
         </div>
       </section>
-      <OrderDialog id={detail} onClose={() => setDetail(null)} />
+      <OrderDialog
+        key={identity}
+        id={detail?.identity === identity ? detail.id : null}
+        onClose={() => setDetail(null)}
+      />
     </main>
   );
 }

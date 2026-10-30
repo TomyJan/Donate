@@ -5,12 +5,17 @@ import { translate } from '../lib/i18n';
 import type { Order } from '../lib/types';
 import { OrderDialog, orderCopyText } from './OrderDialog';
 
-const { report, notify } = vi.hoisted(() => ({ report: vi.fn(), notify: vi.fn() }));
+const { report, notify, session } = vi.hoisted(() => ({
+  report: vi.fn(),
+  notify: vi.fn(),
+  session: { profile: null as { id: string; csrf_token: string } | null },
+}));
 vi.mock('../app/context', () => ({
-  useApp: () => ({ t: (key: string) => translate(key, 'en'), report, notify }),
+  useApp: () => ({ t: (key: string) => translate(key, 'en'), report, notify, profile: session.profile }),
 }));
 const clients: QueryClient[] = [];
 beforeEach(() => {
+  session.profile = null;
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -41,6 +46,33 @@ function renderOrder(admin = false) {
   return { ...view, client };
 }
 const response = (data: unknown) => new Response(JSON.stringify({ code: 'OK', data }), { status: 200 });
+
+it.each(['bob', 'alice'])('isolates owner details after switching credentials to %s', async (id) => {
+  session.profile = { id: 'alice', csrf_token: 'old-session' };
+  let requests = 0;
+  let oldSignal: AbortSignal | null | undefined;
+  vi.stubGlobal('fetch', async (_path: string, init?: RequestInit) => {
+    if (++requests === 1) return response({ ...order, ip: '192.0.2.17' });
+    if (requests === 2) oldSignal = init?.signal;
+    return new Promise<Response>(() => {});
+  });
+  const view = renderOrder();
+  await screen.findByText('192.0.2.17');
+  await act(async () => {
+    void view.client.invalidateQueries({ queryKey: ['order-detail'] });
+  });
+  await waitFor(() => expect(requests).toBe(2));
+  session.profile = { id, csrf_token: 'replacement-session' };
+  view.rerender(
+    <QueryClientProvider client={view.client}>
+      <div className="d-app">
+        <OrderDialog id="order-uuid" onClose={() => {}} />
+      </div>
+    </QueryClientProvider>,
+  );
+  expect(screen.queryByText('192.0.2.17')).not.toBeInTheDocument();
+  expect(oldSignal?.aborted).toBe(true);
+});
 
 it.each([false, true])(
   'preserves an order confirmation across automatic polling (delayed preview=%s)',
@@ -183,7 +215,9 @@ it.each([
     await client.invalidateQueries({ queryKey: ['order-detail'] });
   });
   await screen.findByText(translate(String(label), 'en'));
-  await waitFor(() => expect(client.getQueryData(['order-detail', false, 'order-uuid'])).toBeUndefined());
+  await waitFor(() =>
+    expect(client.getQueryData(['order-detail', false, 'order-uuid', 'guest'])).toBeUndefined(),
+  );
   expect(screen.queryByText('Admin')).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Continue payment' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Copy info' })).not.toBeInTheDocument();
@@ -205,7 +239,9 @@ it.each([false, true])(
       await client.invalidateQueries({ queryKey: ['order-detail'] });
     });
     await screen.findByText(translate('recordMissingError', 'en'));
-    await waitFor(() => expect(client.getQueryData(['order-detail', admin, 'order-uuid'])).toBeUndefined());
+    await waitFor(() =>
+      expect(client.getQueryData(['order-detail', admin, 'order-uuid', 'guest'])).toBeUndefined(),
+    );
     expect(screen.queryByText('Admin')).not.toBeInTheDocument();
     state = 'offline';
     await act(async () => {
