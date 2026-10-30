@@ -319,7 +319,7 @@ func (s *Service) lookupLocal(ip netip.Addr) (Location, error) {
 		Location struct {
 			Latitude  *float64 `maxminddb:"latitude"`
 			Longitude *float64 `maxminddb:"longitude"`
-			Accuracy  *float64 `maxminddb:"accuracy_radius"`
+			Accuracy  *uint16  `maxminddb:"accuracy_radius"`
 		} `maxminddb:"location"`
 		ISP          string `maxminddb:"isp"`
 		Organization string `maxminddb:"autonomous_system_organization"`
@@ -338,7 +338,11 @@ func (s *Service) lookupLocal(ip netip.Addr) (Location, error) {
 		}
 		return m["en"]
 	}
-	p := Location{Country: name(d.Country.Names), City: name(d.City.Names), ISP: d.ISP, Source: "mmdb", Version: s.local.Metadata.BuildTime().UTC().Format(time.RFC3339), QueriedAt: time.Now().UTC(), Latitude: d.Location.Latitude, Longitude: d.Location.Longitude, AccuracyRadius: d.Location.Accuracy}
+	p := Location{Country: name(d.Country.Names), City: name(d.City.Names), ISP: d.ISP, Source: "mmdb", Version: s.local.Metadata.BuildTime().UTC().Format(time.RFC3339), QueriedAt: time.Now().UTC(), Latitude: d.Location.Latitude, Longitude: d.Location.Longitude}
+	if d.Location.Accuracy != nil {
+		radius := float64(*d.Location.Accuracy)
+		p.AccuracyRadius = &radius
+	}
 	if len(d.Subdivisions) > 0 {
 		p.Province = name(d.Subdivisions[0].Names)
 	}
