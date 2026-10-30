@@ -24,6 +24,8 @@ V2 的[下单文档](https://github.com/maajiko/Epay/blob/a4d0f0421cfcbc573913c8
 
 ## 本项目的接入选择
 
+V2 请求实际使用 PHP 原生入口：POST `api.php?s=pay/create`、`api.php?s=pay/query`、`api.php?s=pay/close`，分别对应文档的 `/api/pay/*`，由同一个处理器执行。这样无需网关安装 URL 重写规则；支付参数仍在 POST 表单中，RSA 签名和验签不变。
+
 1. 默认 `EPAY_PROTOCOL=v2`，配置网关基址、pid、商户私钥、平台公钥。私钥从部署文件或环境变量读取，不放前端、源码或日志。优先采用服务端 `api/pay/create`、`method=jump`，验签成功后保存平台流水和跳转结果，再让浏览器跳往平台支付页；不增加本站扫码页 / JSAPI 流程。
 2. V1 由管理员部署时明确选择 `EPAY_PROTOCOL=v1`，使用 pid + key。以服务端构造的受控表单 POST 到 `submit.php` 跳转支付，查询调用传统 `api.php?act=order`。不假设它支持 POST 查单、请求头传 key 或某个二开新增接口。只有实际部署协议证实后才增加适配。
 3. 订单保存协议、商户配置标识、平台流水 `trade_no`，以及有实际返回时的支付渠道流水 `api_trade_no`；两种流水不混同。商户单号使用站内 ID 去横杠的 32 位十六进制编码，须通过实际部署的字符 / 长度约束测试。

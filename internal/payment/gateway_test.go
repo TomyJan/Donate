@@ -62,7 +62,7 @@ func TestV2QueryVerifiesPlatformAndPaymentState(t *testing.T) {
 	}
 	tamper := false
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/pay/query" || r.Method != "POST" {
+		if r.URL.Path != "/api.php" || r.URL.Query().Get("s") != "pay/query" || r.Method != "POST" {
 			t.Error("wrong API")
 		}
 		r.ParseForm()

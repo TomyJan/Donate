@@ -117,7 +117,12 @@ func (f *fixture) handler(w http.ResponseWriter, r *http.Request) {
 		write(w, map[string]any{"access_token": "fixture-access", "token_type": "Bearer", "expires_in": 3600, "id_token": f.jwt(g)})
 	case "/userinfo":
 		write(w, map[string]any{"sub": "admin", "name": "Fixture Admin"})
-	case "/api/pay/create", "/api/pay/query", "/api/pay/close":
+	case "/api.php":
+		action := r.URL.Query().Get("s")
+		if r.Method != http.MethodPost || action != "pay/create" && action != "pay/query" && action != "pay/close" {
+			http.NotFound(w, r)
+			return
+		}
 		_ = r.ParseForm()
 		values := map[string]string{}
 		for k := range r.PostForm {
@@ -133,7 +138,7 @@ func (f *fixture) handler(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		v := f.orders[no]
-		if strings.HasSuffix(r.URL.Path, "create") {
+		if action == "pay/create" {
 			if v == nil {
 				v = map[string]string{"pid": "1001", "out_trade_no": no, "trade_no": "fixture-" + no, "money": values["money"], "type": values["type"], "status": "0"}
 				f.orders[no] = v
@@ -148,7 +153,7 @@ func (f *fixture) handler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		out := map[string]string{"code": "0"}
-		if strings.HasSuffix(r.URL.Path, "query") {
+		if action == "pay/query" {
 			for k, value := range v {
 				out[k] = value
 			}

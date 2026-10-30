@@ -78,8 +78,13 @@ func (g *Gateway) call(ctx context.Context, path, protocol string, values map[st
 	if protocol == "v1" {
 		values["key"] = g.Config.EpayKey
 		method = "GET"
-	} else if e := g.sign(values, protocol); e != nil {
-		return nil, e
+	} else {
+		// This is the same V2 PHP handler used by /api/pay/*, without
+		// requiring the gateway's web server to install rewrite rules.
+		endpoint = g.Config.EpayURL + "/api.php?s=" + url.QueryEscape(strings.TrimPrefix(path, "api/"))
+		if e := g.sign(values, protocol); e != nil {
+			return nil, e
+		}
 	}
 	for k, v := range values {
 		form.Set(k, v)
