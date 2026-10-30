@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useApp } from '../app/context';
 import { APIError, api, query } from '../lib/api';
 import { clearPaymentReturn, paymentReturnTarget } from '../lib/payment-return';
@@ -6,29 +6,37 @@ import type { Order } from '../lib/types';
 
 type Phase = 'idle' | 'login' | 'checking' | 'pending' | 'error' | 'confirmed' | 'filing' | 'complete';
 type State = { phase: Phase; order?: Order; error?: unknown };
+const minimumStatusMs = 1000;
 
 export function usePaymentReturn() {
   const { profile, loading } = useApp();
   const [target, setTarget] = useState(paymentReturnTarget);
   const [dismissed, setDismissed] = useState(false);
   const [state, setState] = useState<State>({ phase: target.requested ? 'checking' : 'idle' });
+  const checkingSince = useRef<number | null>(target.requested ? performance.now() : null);
   const owner = profile?.id ?? '';
 
   useEffect(() => {
     if (!target.requested || dismissed || loading) return;
-    if (!target.id) {
-      setState({ phase: 'error', error: new APIError('PAYMENT_RETURN_MISSING', '', 0) });
-      return;
-    }
-    if (!owner) {
-      setState({ phase: 'login' });
-      return;
-    }
     const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout>;
+    if (target.id && owner) {
+      checkingSince.current ??= performance.now();
+      setState({ phase: 'checking' });
+    }
+    const startedAt = checkingSince.current;
+    const settle = (next: State) => {
+      const remaining = startedAt === null ? 0 : minimumStatusMs - (performance.now() - startedAt);
+      const publish = () => {
+        if (controller.signal.aborted) return;
+        checkingSince.current = null;
+        setState(next);
+      };
+      if (remaining <= 0) publish();
+      else timer = setTimeout(publish, Math.ceil(remaining));
+    };
     let failures = 0;
     const until = Date.now() + 45000;
-    setState({ phase: 'checking' });
     const check = async () => {
       try {
         const order = await api<Order>(
@@ -40,12 +48,12 @@ export function usePaymentReturn() {
         // Even admins must only celebrate their own payment; the locator is not authentication.
         if (order.id !== target.id || order.user_id !== owner) throw new APIError('FORBIDDEN', '', 403);
         if (order.status === 'paid') {
-          setState({ phase: 'confirmed', order });
+          settle({ phase: 'confirmed', order });
           return;
         }
         failures = 0;
         if (order.status === 'closed' || Date.now() >= until) {
-          setState({ phase: 'pending', order });
+          settle({ phase: 'pending', order });
           return;
         }
         timer = setTimeout(() => void check(), 2500);
@@ -58,10 +66,12 @@ export function usePaymentReturn() {
           ['NETWORK_ERROR', 'SERVER_UNAVAILABLE', 'REQUEST_TIMEOUT', 'INVALID_RESPONSE'].includes(code)
         ) {
           timer = setTimeout(() => void check(), 2500);
-        } else setState({ phase: code === 'UNAUTHORIZED' ? 'login' : 'error', error });
+        } else settle({ phase: code === 'UNAUTHORIZED' ? 'login' : 'error', error });
       }
     };
-    void check();
+    if (!target.id) settle({ phase: 'error', error: new APIError('PAYMENT_RETURN_MISSING', '', 0) });
+    else if (!owner) settle({ phase: 'login' });
+    else void check();
     return () => {
       controller.abort();
       clearTimeout(timer);
@@ -75,7 +85,7 @@ export function usePaymentReturn() {
         setState((previous) =>
           previous.phase === 'confirmed' ? { ...previous, phase: 'filing' } : previous,
         ),
-      1000,
+      minimumStatusMs,
     );
     return () => clearTimeout(timer);
   }, [state.phase]);
