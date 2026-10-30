@@ -737,6 +737,7 @@ export interface components {
             protocol: string;
             /** @description Province-level location safe for owner detail. Empty when unavailable; full IP/location remains restricted to the admin detail route. */
             province: string;
+            qq_number?: string;
             /** @description Admin detail only: all persisted distinct manual reconciliation requests, newest first. IDs are stored request UUIDs, not idempotency keys. Several requests may share a job; status/result reflect the currently linked job. Absent from ordinary owner detail and after physical deletion. */
             reconciliations?: {
                 /** Format: date-time */

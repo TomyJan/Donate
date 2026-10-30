@@ -62,9 +62,12 @@ type Order struct {
 	IP                string     `json:"-"`
 	SubmissionStatus  string     `json:"-"`
 	CheckoutURL       string     `json:"-"`
+	DonorNickname     string     `json:"-"`
+	DonorAvatarURL    string     `json:"-"`
+	DonorQQNumber     string     `json:"-"`
 }
 
-const Columns = "id,user_id,merchant_order_no,amount_fen,channel,message,status,close_reason,created_at,expires_at,paid_at,closed_at,protocol,merchant_id,gateway_id,trade_no,api_trade_no,gateway_status,last_checked_at,remote_close_status,hidden_order,hidden_message,request_ip,submission_status,checkout_url"
+const Columns = "id,user_id,merchant_order_no,amount_fen,channel,message,status,close_reason,created_at,expires_at,paid_at,closed_at,protocol,merchant_id,gateway_id,trade_no,api_trade_no,gateway_status,last_checked_at,remote_close_status,hidden_order,hidden_message,request_ip,submission_status,checkout_url,donor_nickname,donor_avatar_url,donor_qq_number"
 
 type scanner interface{ Scan(...any) error }
 
@@ -74,7 +77,7 @@ func Scan(row scanner) (Order, error) {
 	var created, expires int64
 	var paid, closed, checked sql.NullInt64
 	var trade sql.NullString
-	e := row.Scan(&id, &uid, &v.MerchantOrderNo, &v.AmountFen, &v.Channel, &v.Message, &v.Status, &v.CloseReason, &created, &expires, &paid, &closed, &v.Protocol, &v.MerchantID, &v.GatewayID, &trade, &v.APITradeNo, &v.GatewayStatus, &checked, &v.RemoteCloseStatus, &v.HiddenOrder, &v.HiddenMessage, &v.IP, &v.SubmissionStatus, &v.CheckoutURL)
+	e := row.Scan(&id, &uid, &v.MerchantOrderNo, &v.AmountFen, &v.Channel, &v.Message, &v.Status, &v.CloseReason, &created, &expires, &paid, &closed, &v.Protocol, &v.MerchantID, &v.GatewayID, &trade, &v.APITradeNo, &v.GatewayStatus, &checked, &v.RemoteCloseStatus, &v.HiddenOrder, &v.HiddenMessage, &v.IP, &v.SubmissionStatus, &v.CheckoutURL, &v.DonorNickname, &v.DonorAvatarURL, &v.DonorQQNumber)
 	v.ID, v.UserID = storage.IDString(id), storage.IDString(uid)
 	v.CreatedAt = time.Unix(created, 0).UTC()
 	v.ExpiresAt = time.Unix(expires, 0).UTC()

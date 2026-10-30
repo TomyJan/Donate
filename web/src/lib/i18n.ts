@@ -116,6 +116,7 @@ export const words = {
   close: ['关闭', 'Close'],
   alipay: ['支付宝', 'Alipay'],
   wxpay: ['微信', 'WeChat'],
+  qqpay: ['QQ 钱包', 'QQ Wallet'],
   channel: ['支付方式', 'Payment'],
   foot: ['付款后，留言将随捐赠记录公开。', 'Your message appears with the donation after payment.'],
   paid: ['已支付', 'Paid'],

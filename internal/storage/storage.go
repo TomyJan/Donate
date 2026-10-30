@@ -78,9 +78,33 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	if err != nil {
 		return fail(err)
 	}
-	if _, err = provider.Up(ctx); err != nil {
-		return fail(fmt.Errorf("数据库迁移失败: %w", err))
+
+	// Table rebuilds must not cascade-delete dependent rows. Startup has one
+	// connection and no serving requests; each Goose migration remains atomic.
+	if _, err = db.ExecContext(ctx, "PRAGMA foreign_keys=OFF"); err != nil {
+		return fail(err)
 	}
+	_, migrationErr := provider.Up(ctx)
+	if _, err = db.ExecContext(ctx, "PRAGMA foreign_keys=ON"); err != nil {
+		return fail(err)
+	}
+	if migrationErr != nil {
+		return fail(fmt.Errorf("数据库迁移失败: %w", migrationErr))
+	}
+	rows, err := db.QueryContext(ctx, "PRAGMA foreign_key_check")
+	if err != nil {
+		return fail(err)
+	}
+	invalid := rows.Next()
+	checkErr := rows.Err()
+	rows.Close()
+	if checkErr != nil {
+		return fail(checkErr)
+	}
+	if invalid {
+		return fail(fmt.Errorf("数据库迁移后外键校验失败"))
+	}
+
 	return &Store{DB: db}, nil
 }
 func (s *Store) Close() error { return s.DB.Close() }

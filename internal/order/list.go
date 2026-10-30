@@ -41,7 +41,7 @@ func (s *Service) List(ctx context.Context, userID string, mine bool, after stri
 		}
 	}
 	where := "o.status='paid' AND o.hidden_order=0"
-	date := "o.paid_at"
+	date := "COALESCE(o.paid_at,o.created_at)"
 	args := []any{}
 	if mine {
 		if len(uid) == 0 {
@@ -67,7 +67,7 @@ func (s *Service) List(ctx context.Context, userID string, mine bool, after stri
 		where += " AND (" + date + "<? OR (" + date + "=? AND o.id<?))"
 		args = append(args, c.At, c.At, id)
 	}
-	rows, e := s.Store.DB.QueryContext(ctx, "SELECT o.id,COALESCE(o.user_id=?,0),COALESCE(i.nickname,'捐赠者'),COALESCE(i.avatar_url,''),o.amount_fen,CASE WHEN o.user_id=? OR o.hidden_message=0 THEN o.message ELSE '' END,COALESCE(l.province,''),"+date+",o.status FROM orders o LEFT JOIN users u ON u.id=o.user_id LEFT JOIN identities i ON i.id=u.public_identity_id LEFT JOIN order_locations l ON l.order_id=o.id WHERE "+where+" ORDER BY "+date+" DESC,o.id DESC LIMIT 11", append([]any{uid, uid}, args...)...)
+	rows, e := s.Store.DB.QueryContext(ctx, "SELECT o.id,COALESCE(o.user_id=?,0),COALESCE(NULLIF(trim(o.donor_nickname, ' '||char(9)||char(10)||char(13)||char(12288)),''),i.nickname,'捐赠者'),COALESCE(NULLIF(o.donor_avatar_url,''),i.avatar_url,''),o.amount_fen,CASE WHEN o.user_id=? OR o.hidden_message=0 THEN o.message ELSE '' END,COALESCE(l.province,''),"+date+",o.status FROM orders o LEFT JOIN users u ON u.id=o.user_id LEFT JOIN identities i ON i.id=u.public_identity_id LEFT JOIN order_locations l ON l.order_id=o.id WHERE "+where+" ORDER BY "+date+" DESC,o.id DESC LIMIT 11", append([]any{uid, uid}, args...)...)
 	if e != nil {
 		return out, e
 	}

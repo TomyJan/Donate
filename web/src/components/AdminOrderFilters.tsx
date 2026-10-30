@@ -84,7 +84,7 @@ export function AdminOrderFilters({
           label={t('channel')}
           value={channel}
           onValue={onChannel}
-          options={['', 'alipay', 'wxpay'].map((key) => [key, t(key || 'allChannels')])}
+          options={['', 'alipay', 'wxpay', 'qqpay'].map((key) => [key, t(key || 'allChannels')])}
         />
       ),
     },

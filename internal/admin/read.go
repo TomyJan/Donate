@@ -58,7 +58,7 @@ func (s *Service) OrdersList(ctx context.Context, f Filter) (Page[OrderRow], err
 	if e = s.Store.DB.QueryRowContext(ctx, "SELECT count(*) FROM orders o LEFT JOIN users u ON u.id=o.user_id LEFT JOIN identities i ON i.id=u.public_identity_id WHERE "+where, args...).Scan(&out.Total); e != nil {
 		return out, e
 	}
-	allowed := map[string]string{"id": "o.id", "created_at": "o.created_at", "nickname": "i.nickname", "amount_fen": "o.amount_fen", "channel": "o.channel", "message": "o.message", "status": "o.status", "hidden_order": "o.hidden_order", "hidden_message": "o.hidden_message", "paid_at": "o.paid_at"}
+	allowed := map[string]string{"id": "o.id", "created_at": "o.created_at", "nickname": "COALESCE(NULLIF(trim(o.donor_nickname, ' '||char(9)||char(10)||char(13)||char(12288)),''),i.nickname)", "amount_fen": "o.amount_fen", "channel": "o.channel", "message": "o.message", "status": "o.status", "hidden_order": "o.hidden_order", "hidden_message": "o.hidden_message", "paid_at": "o.paid_at"}
 	col := allowed[f.Sort]
 	if col == "" {
 		col = "o.created_at"
@@ -68,7 +68,7 @@ func (s *Service) OrdersList(ctx context.Context, f Filter) (Page[OrderRow], err
 		dir = " ASC"
 	}
 	// Read IDs first and close rows before looking up orders: SQLite uses one bounded connection.
-	rows, e := s.Store.DB.QueryContext(ctx, "SELECT o.id,COALESCE(i.nickname,'捐赠者'),COALESCE(i.avatar_url,'') FROM orders o LEFT JOIN users u ON u.id=o.user_id LEFT JOIN identities i ON i.id=u.public_identity_id WHERE "+where+" ORDER BY "+col+dir+",o.id"+dir+" LIMIT ? OFFSET ?", append(args, size, (page-1)*size)...)
+	rows, e := s.Store.DB.QueryContext(ctx, "SELECT o.id,COALESCE(NULLIF(trim(o.donor_nickname, ' '||char(9)||char(10)||char(13)||char(12288)),''),i.nickname,'捐赠者'),COALESCE(NULLIF(o.donor_avatar_url,''),i.avatar_url,'') FROM orders o LEFT JOIN users u ON u.id=o.user_id LEFT JOIN identities i ON i.id=u.public_identity_id WHERE "+where+" ORDER BY "+col+dir+",o.id"+dir+" LIMIT ? OFFSET ?", append(args, size, (page-1)*size)...)
 	if e != nil {
 		return out, e
 	}
@@ -114,7 +114,7 @@ func orderWhere(f Filter) (string, []any, error) {
 		return "", nil, auth.ErrInvalid
 	}
 	if f.Search != "" {
-		where += " AND (lower(i.nickname) LIKE ? ESCAPE '\\' OR lower(hex(o.id)) LIKE ? ESCAPE '\\' OR o.merchant_order_no LIKE ? ESCAPE '\\' OR lower(hex(o.user_id)) LIKE ? ESCAPE '\\')"
+		where += " AND (lower(COALESCE(NULLIF(trim(o.donor_nickname, ' '||char(9)||char(10)||char(13)||char(12288)),''),i.nickname)) LIKE ? ESCAPE '\\' OR lower(hex(o.id)) LIKE ? ESCAPE '\\' OR o.merchant_order_no LIKE ? ESCAPE '\\' OR lower(hex(o.user_id)) LIKE ? ESCAPE '\\')"
 		q := strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(strings.ToLower(f.Search))
 		args = append(args, "%"+q+"%", "%"+strings.ReplaceAll(q, "-", "")+"%", "%"+q+"%", "%"+strings.ReplaceAll(q, "-", "")+"%")
 	}
@@ -126,7 +126,7 @@ func orderWhere(f Filter) (string, []any, error) {
 		args = append(args, f.Status)
 	}
 	if f.Channel != "" {
-		if f.Channel != "alipay" && f.Channel != "wxpay" {
+		if f.Channel != "alipay" && f.Channel != "wxpay" && f.Channel != "qqpay" {
 			return "", nil, auth.ErrInvalid
 		}
 		where += " AND o.channel=?"
@@ -180,6 +180,7 @@ type Detail struct {
 	Reconciliations []ReconciliationView `json:"reconciliations,omitempty"`
 	order.Order
 	IP        string        `json:"ip,omitempty"`
+	QQNumber  string        `json:"qq_number,omitempty"`
 	Nickname  string        `json:"nickname"`
 	AvatarURL string        `json:"avatar_url"`
 	Location  *geo.Location `json:"location,omitempty"`
@@ -211,10 +212,9 @@ func (s *Service) Detail(ctx context.Context, id string, full bool) (Detail, err
 	if e != nil {
 		return Detail{}, e
 	}
-	d := Detail{Order: o}
+	d := Detail{Order: o, Nickname: o.DonorNickname, AvatarURL: o.DonorAvatarURL}
 	oid, _ := storage.ParseID(id)
-	uid, _ := storage.ParseID(o.UserID)
-	e = s.Store.DB.QueryRowContext(ctx, "SELECT i.nickname,i.avatar_url FROM users u JOIN identities i ON i.id=u.public_identity_id WHERE u.id=?", uid).Scan(&d.Nickname, &d.AvatarURL)
+	e = s.Store.DB.QueryRowContext(ctx, "SELECT COALESCE(NULLIF(trim(o.donor_nickname, ' '||char(9)||char(10)||char(13)||char(12288)),''),i.nickname,'捐赠者'),COALESCE(NULLIF(o.donor_avatar_url,''),i.avatar_url,'') FROM orders o LEFT JOIN users u ON u.id=o.user_id LEFT JOIN identities i ON i.id=u.public_identity_id WHERE o.id=?", oid).Scan(&d.Nickname, &d.AvatarURL)
 	if e != nil && !errors.Is(e, sql.ErrNoRows) {
 		return d, e
 	}
@@ -231,6 +231,7 @@ func (s *Service) Detail(ctx context.Context, id string, full bool) (Detail, err
 		return d, nil
 	}
 	d.IP = o.IP
+	d.QQNumber = o.DonorQQNumber
 	if e == nil {
 		d.Location = &p
 	}
@@ -469,7 +470,7 @@ func (s *Service) OverviewRange(ctx context.Context, name, from, to string) (Ove
 		}
 		return " AND " + column + ">=? AND " + column + "<?", []any{ceil(*start), ceil(*end)}
 	}
-	paidWhere, paidArgs := window("paid_at")
+	paidWhere, paidArgs := window("COALESCE(paid_at,created_at)")
 	createdWhere, createdArgs := window("created_at")
 	// Keep cards and both series in the same read snapshot during concurrent writes.
 	tx, e := s.Store.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
@@ -488,7 +489,7 @@ func (s *Service) OverviewRange(ctx context.Context, name, from, to string) (Ove
 	for _, item := range []struct {
 		expr   string
 		target *[]Metric
-	}{{"strftime('%Y-%m-%d',paid_at,'unixepoch','+8 hours')", &out.Daily}, {"channel", &out.Channels}} {
+	}{{"strftime('%Y-%m-%d',COALESCE(paid_at,created_at),'unixepoch','+8 hours')", &out.Daily}, {"channel", &out.Channels}} {
 		rows, e := tx.QueryContext(ctx, "SELECT "+item.expr+",sum(amount_fen),count(*) FROM orders WHERE status='paid'"+paidWhere+" GROUP BY "+item.expr+" ORDER BY "+item.expr, paidArgs...)
 		if e != nil {
 			return out, e
@@ -537,7 +538,7 @@ func (s *Service) Audit(ctx context.Context, f Filter) (Page[Audit], error) {
 	if e := s.Store.DB.QueryRowContext(ctx, "SELECT count(*) FROM audit_events a WHERE "+where, args...).Scan(&out.Total); e != nil {
 		return out, e
 	}
-	col := map[string]string{"created_at": "a.created_at", "id": "a.id", "actor": "i.nickname", "action": "a.action", "target": "COALESCE(oi.nickname,ti.nickname,'')", "result": "a.result"}[f.Sort]
+	col := map[string]string{"created_at": "a.created_at", "id": "a.id", "actor": "i.nickname", "action": "a.action", "target": "COALESCE(NULLIF(trim(o.donor_nickname, ' '||char(9)||char(10)||char(13)||char(12288)),''),oi.nickname,ti.nickname,'')", "result": "a.result"}[f.Sort]
 	if col == "" {
 		col = "a.created_at"
 	}
@@ -545,7 +546,7 @@ func (s *Service) Audit(ctx context.Context, f Filter) (Page[Audit], error) {
 	if f.Direction == "asc" {
 		dir = " ASC"
 	}
-	rows, e := s.Store.DB.QueryContext(ctx, "SELECT a.id,a.actor_id,COALESCE(NULLIF(i.nickname,''),'system'),a.action,a.target_type,a.target_id,CASE WHEN a.target_type='order' THEN o.id IS NOT NULL WHEN a.target_type='user' THEN tu.id IS NOT NULL ELSE 0 END,CASE WHEN a.target_type='order' THEN COALESCE(oi.nickname,'') ELSE COALESCE(ti.nickname,'') END,o.amount_fen,a.result,a.created_at FROM audit_events a LEFT JOIN users u ON u.id=a.actor_id LEFT JOIN identities i ON i.id=u.public_identity_id LEFT JOIN orders o ON a.target_type='order' AND o.id=a.target_id LEFT JOIN users ou ON ou.id=o.user_id LEFT JOIN identities oi ON oi.id=ou.public_identity_id LEFT JOIN users tu ON a.target_type='user' AND tu.id=a.target_id LEFT JOIN identities ti ON ti.id=tu.public_identity_id WHERE "+where+" ORDER BY "+col+dir+",a.id"+dir+" LIMIT ? OFFSET ?", append(args, size, (page-1)*size)...)
+	rows, e := s.Store.DB.QueryContext(ctx, "SELECT a.id,a.actor_id,COALESCE(NULLIF(i.nickname,''),'system'),a.action,a.target_type,a.target_id,CASE WHEN a.target_type='order' THEN o.id IS NOT NULL WHEN a.target_type='user' THEN tu.id IS NOT NULL ELSE 0 END,CASE WHEN a.target_type='order' THEN COALESCE(NULLIF(trim(o.donor_nickname, ' '||char(9)||char(10)||char(13)||char(12288)),''),oi.nickname,'') ELSE COALESCE(ti.nickname,'') END,o.amount_fen,a.result,a.created_at FROM audit_events a LEFT JOIN users u ON u.id=a.actor_id LEFT JOIN identities i ON i.id=u.public_identity_id LEFT JOIN orders o ON a.target_type='order' AND o.id=a.target_id LEFT JOIN users ou ON ou.id=o.user_id LEFT JOIN identities oi ON oi.id=ou.public_identity_id LEFT JOIN users tu ON a.target_type='user' AND tu.id=a.target_id LEFT JOIN identities ti ON ti.id=tu.public_identity_id WHERE "+where+" ORDER BY "+col+dir+",a.id"+dir+" LIMIT ? OFFSET ?", append(args, size, (page-1)*size)...)
 	if e != nil {
 		return out, e
 	}

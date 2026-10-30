@@ -72,7 +72,11 @@ func TestFailedMigrationRollsBackItsSchemaChanges(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	fs := fstest.MapFS{"00001_init.sql": {Data: initial}, "00002_qq_identifiers.sql": {Data: identifiers}, "00003_failure.sql": {Data: []byte("-- +goose Up\nCREATE TABLE should_rollback(id INTEGER);\nINSERT INTO intentional_missing VALUES(1);\n-- +goose Down\nDROP TABLE should_rollback;\n")}}
+	legacy, e := migrations.ReadFile("migrations/00003_legacy_donors.sql")
+	if e != nil {
+		t.Fatal(e)
+	}
+	fs := fstest.MapFS{"00001_init.sql": {Data: initial}, "00002_qq_identifiers.sql": {Data: identifiers}, "00003_legacy_donors.sql": {Data: legacy}, "00004_failure.sql": {Data: []byte("-- +goose Up\nCREATE TABLE should_rollback(id INTEGER);\nINSERT INTO intentional_missing VALUES(1);\n-- +goose Down\nDROP TABLE should_rollback;\n")}}
 	provider, e := goose.NewProvider(goose.DialectSQLite3, s.DB, fs, goose.WithDisableGlobalRegistry(true))
 	if e != nil {
 		t.Fatal(e)

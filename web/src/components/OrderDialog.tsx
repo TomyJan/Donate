@@ -151,6 +151,7 @@ export function OrderDialog({
         ...(admin
           ? [
               [t('userId'), o.user_id || '—'],
+              ...(o.qq_number ? [[t('qq'), o.qq_number]] : []),
               [t('channelTrade'), o.api_trade_no || '—'],
               [t('ip'), o.ip || '—'],
               [
@@ -255,7 +256,7 @@ export function OrderDialog({
                     <CopyButton key={o.id} text={o.id} label={t('copy')} />
                     {confirmAction('export', t('export'), <Download />)}
                     <Button
-                      disabled={busy}
+                      disabled={busy || o.protocol === 'legacy'}
                       onClick={() =>
                         void run(async () => {
                           await api('admin/order/reconcile', {

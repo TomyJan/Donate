@@ -127,6 +127,9 @@ type Order struct {
 	CheckoutUrl          string
 	SubmissionLease      sql.NullString
 	SubmissionLeaseUntil sql.NullInt64
+	DonorNickname        string
+	DonorAvatarUrl       string
+	DonorQqNumber        string
 }
 
 type OrderLocation struct {
