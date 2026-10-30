@@ -54,18 +54,51 @@
   min-height: 170px;
   perspective: 1000px;
 }
-.receipt-destination::after {
-  content: "";
+#receipt-refinement .receipt-destination > .payment-arrival-stack {
   position: absolute;
-  inset: -8px;
-  border: 1px dashed var(--r-line);
-  border-radius: 6px;
-  opacity: 0;
+  inset: 0 0 auto;
+  visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.8s;
 }
-.receipt-destination[data-receiving="true"]::after {
-  opacity: 0.7;
+.payment-transfer-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  overflow: clip;
+  pointer-events: none;
+  perspective: 1400px;
+}
+.payment-transfer-world {
+  position: absolute;
+  inset: 0;
+}
+#receipt-refinement .payment-transfer-paper {
+  will-change: transform, width, height;
+  color: var(--r-ink);
+}
+.payment-transfer-compose {
+  position: absolute;
+  inset: 0 auto auto 0;
+}
+#receipt-refinement .payment-transfer-receipt {
+  inset: 0 0 auto;
+  margin: 0;
+  transform-origin: 18% 2%;
+}
+#receipt-refinement .payment-transfer-receipt::after {
+  display: none;
+}
+.payment-transfer-text {
+  position: absolute;
+  margin: 0;
+  padding: 0;
+  white-space: pre;
+  font-variant-numeric: tabular-nums;
+}
+.payment-transfer-note {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow: hidden;
 }
 @keyframes payment-spin {
   to {
@@ -75,8 +108,5 @@
 @media (prefers-reduced-motion: reduce) {
   .payment-spinner {
     animation: none;
-  }
-  .receipt-destination::after {
-    transition: none;
   }
 }

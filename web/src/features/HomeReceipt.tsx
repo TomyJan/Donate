@@ -15,7 +15,7 @@ type Props = {
 };
 
 export function HomeReceipt({ record, reduced, onHeight, onDetail }: Props) {
-  const { t, lang, report } = useApp();
+  const { lang } = useApp();
   const present = useIsPresent();
   const turn = usePresenceData() as Turn;
   const paper = useRef<HTMLElement>(null);
@@ -30,8 +30,6 @@ export function HomeReceipt({ record, reduced, onHeight, onDetail }: Props) {
     return () => observer.disconnect();
   }, [present, onHeight]);
   // Content and locale changes are also observed through the paper's intrinsic height.
-  const owned = record.is_mine;
-  const digits = money(record.amount_fen).length + 1;
   return (
     <motion.article
       ref={paper}
@@ -70,6 +68,17 @@ export function HomeReceipt({ record, reduced, onHeight, onDetail }: Props) {
       transition={{ duration: reduced ? 0 : 0.46, ease: [0.2, 0.75, 0.25, 1] }}
       lang={lang}
     >
+      <ReceiptBody record={record} onDetail={onDetail} />
+    </motion.article>
+  );
+}
+
+export function ReceiptBody({ record, onDetail }: Pick<Props, 'record' | 'onDetail'>) {
+  const { t, report } = useApp();
+  const owned = record.is_mine;
+  const digits = money(record.amount_fen).length + 1;
+  return (
+    <>
       <div className="r-person">
         <Avatar name={record.nickname} src={record.avatar_url} />
         <strong>{record.nickname}</strong>
@@ -104,6 +113,6 @@ export function HomeReceipt({ record, reduced, onHeight, onDetail }: Props) {
         <span className="r-province">{record.province || t('unknownRegion')}</span>
         <time>{dateTime(record.date)}</time>
       </div>
-    </motion.article>
+    </>
   );
 }

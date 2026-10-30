@@ -106,6 +106,10 @@ test('real payment create, RSA notification and own history through the embedded
   await page.getByRole('textbox', { name: '金额（元）' }).fill('0.01');
   await page.getByRole('textbox', { name: '留言（选填）' }).fill('浏览器支付验证\n第二行');
   await page.getByRole('button', { name: '捐赠 · 支付宝', exact: true }).click();
+  const composer = page.locator('.r-write .r-ticket');
+  await expect(composer).toHaveAttribute('data-payment-phase', 'filing', { timeout: 10000 });
+  await expect(page.locator('.r-index-row').filter({ hasText: '¥0.01' })).toHaveCount(0);
+  await expect(composer).toHaveAttribute('data-payment-phase', 'complete', { timeout: 8000 });
   await expect(page.locator('.r-index-row').filter({ hasText: '¥0.01' })).toBeVisible();
   await page.getByRole('button', { name: '只看我的', exact: true }).click();
   await expect(page.locator('.r-featured')).toContainText('浏览器支付验证');

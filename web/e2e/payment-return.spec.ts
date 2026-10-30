@@ -106,6 +106,136 @@ test('a verified payment pauses for a second, slowly files the receipt and resto
   await expect(page.locator('.r-write .r-ticket')).toHaveAttribute('data-payment-phase', 'idle');
 });
 
+test('the same opaque paper lands on the receipt before the paid row is revealed or refetched', async ({
+  page,
+}, info) => {
+  await prepare(page);
+  let listRequests = 0;
+  const record = {
+    id: orderID,
+    is_mine: true,
+    nickname: paidOrder.nickname,
+    avatar_url: '',
+    amount_fen: 888,
+    message: paidOrder.message,
+    province: '广东',
+    status: 'paid',
+    date: paidOrder.paid_at,
+  };
+  await page.route('**/api/v1/order/list?**', (route) => {
+    listRequests++;
+    return route.fulfill({
+      json: {
+        code: 'OK',
+        data: {
+          items: [
+            record,
+            {
+              ...record,
+              id: 'previous-order',
+              is_mine: false,
+              nickname: '先前捐赠者',
+              message: '原来的收据',
+            },
+          ],
+          next_cursor: '',
+        },
+      },
+    });
+  });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(`/?payment=returned&order=${orderID}`);
+  const ticket = page.locator('.r-write .r-ticket');
+  await expect(ticket).toHaveAttribute('data-payment-phase', 'confirmed');
+  await expect(page.locator('.r-index-row')).toHaveCount(1);
+  await expect(page.locator('.r-featured:not(.r-leaving):not(.payment-arrival)')).toContainText('原来的收据');
+  await expect(ticket).toHaveAttribute('data-payment-phase', 'filing');
+  const requestsBeforeLanding = listRequests;
+  const paper = page.locator('.payment-transfer-paper');
+  await expect(paper).toBeVisible();
+  const colors = await paper.evaluate((element) => ({
+    moving: getComputedStyle(element).backgroundColor,
+    destination: getComputedStyle(document.querySelector('.payment-arrival') as Element).backgroundColor,
+  }));
+  expect(colors.moving).not.toBe('rgba(0, 0, 0, 0)');
+  expect(colors.moving).toBe(colors.destination);
+  const grids = await paper.evaluate((element) => ({
+    source: getComputedStyle(document.querySelector('.r-write .r-presets') as Element).gridTemplateColumns,
+    moving: getComputedStyle(element.querySelector('.r-presets') as Element).gridTemplateColumns,
+  }));
+  const sourceColumns = grids.source.split(' ').map(Number.parseFloat);
+  const movingColumns = grids.moving.split(' ').map(Number.parseFloat);
+  expect(movingColumns).toHaveLength(sourceColumns.length);
+  for (let index = 0; index < sourceColumns.length; index++)
+    expect(Math.abs(movingColumns[index] - sourceColumns[index])).toBeLessThan(0.1);
+  const sampling = page.evaluate(async () => {
+    const values: {
+      opacity: number;
+      width: number;
+      left: number;
+      top: number;
+      height: number;
+      gap: number;
+    }[] = [];
+    while (document.querySelector('.r-write .r-ticket')?.getAttribute('data-payment-phase') === 'filing') {
+      const moving = document.querySelector('.payment-transfer-paper');
+      const arrival = document.querySelector('.payment-arrival');
+      if (moving && arrival) {
+        const a = moving.getBoundingClientRect(),
+          b = arrival.getBoundingClientRect();
+        values.push({
+          opacity: Number(getComputedStyle(moving).opacity),
+          width: a.width,
+          left: a.left,
+          top: a.top,
+          height: a.height,
+          gap: Math.max(
+            Math.abs(a.left - b.left),
+            Math.abs(a.top - b.top),
+            Math.abs(a.width - b.width),
+            Math.abs(a.height - b.height),
+          ),
+        });
+        if (values.length === 20) document.dispatchEvent(new Event('visibilitychange'));
+      }
+      await new Promise(requestAnimationFrame);
+    }
+    return values;
+  });
+  await expect
+    .poll(() => paper.evaluate((element) => Number(element.getAnimations()[0]?.currentTime ?? 0)))
+    .toBeGreaterThan(1500);
+  await page.screenshot({ path: info.outputPath('morph-midway.png') });
+  await expect
+    .poll(() => paper.evaluate((element) => Number(element.getAnimations()[0]?.currentTime ?? 0)))
+    .toBeGreaterThan(3000);
+  await page.screenshot({ path: info.outputPath('morph-arriving.png') });
+  const samples = await sampling;
+  expect(samples.length).toBeGreaterThan(40);
+  expect(samples.every((frame) => frame.opacity === 1 && frame.width > 200)).toBe(true);
+  expect(samples.at(-1)?.gap).toBeLessThan(1.5);
+  await expect(ticket).toHaveAttribute('data-payment-phase', 'complete');
+  await expect(page.locator('.r-index-row')).toHaveCount(2);
+  expect(listRequests).toBe(requestsBeforeLanding + 1);
+  await expect(page.locator('.payment-transfer-paper')).toHaveCount(0);
+  const landed = page.locator('.r-featured:not(.r-leaving)');
+  await expect(landed).toContainText(paidOrder.message);
+  const actual = await landed.boundingBox();
+  const last = samples.at(-1);
+  expect(actual).not.toBeNull();
+  expect(last).toBeDefined();
+  for (const key of ['left', 'top', 'width', 'height'] as const) {
+    const observed = key === 'left' ? actual?.x : key === 'top' ? actual?.y : actual?.[key];
+    expect(Math.abs((last?.[key] ?? -1000) - (observed ?? 1000))).toBeLessThan(2);
+  }
+  const state = await landed.evaluate((element) => ({
+    opacity: getComputedStyle(element).opacity,
+    animations: element.getAnimations().length,
+  }));
+  expect(state.opacity).toBe('1');
+  await expect(ticket).toHaveCSS('opacity', '1');
+});
+
 test('pending payment is not declared successful from return parameters and permits a later check', async ({
   page,
 }) => {
@@ -202,25 +332,28 @@ test('a phone receipt follows the document to the record without creating sidewa
   const ticket = page.locator('.r-write .r-ticket');
   await expect(ticket).toHaveAttribute('data-payment-phase', 'filing');
   const samples = await page.evaluate(async () => {
-    const frames: { overflow: number; top: number; transform: string }[] = [];
+    const frames: { overflow: number; top: number; transform: string; documentTop: number }[] = [];
     while (
       document.querySelector('.r-write .r-ticket')?.getAttribute('data-payment-phase') === 'filing' &&
       frames.length < 300
     ) {
-      const el = document.querySelector('.r-write .r-ticket');
+      const el = document.querySelector('.payment-transfer-paper');
       if (!el) break;
       frames.push({
         overflow: document.documentElement.scrollWidth - innerWidth,
         top: el.getBoundingClientRect().top,
         transform: getComputedStyle(el).transform,
+        documentTop: el.getBoundingClientRect().top + scrollY,
       });
       await new Promise(requestAnimationFrame);
     }
-    return frames;
+    const settled = document.querySelector('.r-featured:not(.r-leaving):not(.payment-arrival)');
+    return { frames, firstLandedTop: settled ? settled.getBoundingClientRect().top + scrollY : -1000 };
   });
-  expect(samples.length).toBeGreaterThan(30);
-  expect(Math.max(...samples.map((frame) => frame.overflow))).toBeLessThanOrEqual(0);
-  expect(new Set(samples.map((frame) => frame.transform)).size).toBeGreaterThan(20);
+  expect(samples.frames.length).toBeGreaterThan(30);
+  expect(Math.max(...samples.frames.map((frame) => frame.overflow))).toBeLessThanOrEqual(0);
+  expect(new Set(samples.frames.map((frame) => frame.transform)).size).toBeGreaterThan(20);
+  expect(Math.abs(samples.firstLandedTop - (samples.frames.at(-1)?.documentTop ?? -1000))).toBeLessThan(2);
   await expect(ticket).toHaveAttribute('data-payment-phase', 'complete');
   await expect(page.locator('.r-featured')).toContainText('这张收据会归入记录');
   await page.screenshot({ path: info.outputPath('phone-filed-dark.png') });

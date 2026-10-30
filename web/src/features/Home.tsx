@@ -13,7 +13,7 @@ import { acceptAmountEdit, amountFen } from '../lib/amount';
 import { api, money, query } from '../lib/api';
 import { errorMessage } from '../lib/errors';
 import type { Order, RecordItem, Records } from '../lib/types';
-import { HomeReceipt } from './HomeReceipt';
+import { HomeReceipt, ReceiptBody } from './HomeReceipt';
 import { HomeRecordIndex } from './HomeRecordIndex';
 import { PaymentReturnStatus } from './PaymentReturnStatus';
 import { usePaymentReturn } from './usePaymentReturn';
@@ -57,12 +57,29 @@ export function Home() {
   const [composerEpoch, setComposerEpoch] = useState(0);
   const [delivered, setDelivered] = useState<{ owner: string; item: RecordItem } | null>(null);
   const destination = useRef<HTMLDivElement>(null);
+  const arrival = useRef<HTMLElement>(null);
+  const incoming: RecordItem | null = payment.order
+    ? {
+        id: payment.order.id,
+        is_mine: true,
+        nickname: payment.order.nickname,
+        avatar_url: payment.order.avatar_url,
+        amount_fen: payment.order.amount_fen,
+        message: payment.order.message,
+        province: payment.order.province,
+        status: payment.order.status,
+        date: payment.order.paid_at ?? payment.order.created_at,
+      }
+    : null;
   const list = useInfiniteQuery({
     queryKey: ['records', profile?.id ?? 'guest', mine],
     queryFn: ({ pageParam }) =>
       api<Records>(`order/list?${query({ only_mine: mine ? 'true' : '', cursor: pageParam })}`),
     initialPageParam: '',
     getNextPageParam: (last) => last.next_cursor || undefined,
+    enabled: !app.loading,
+    refetchOnWindowFocus: !payment.locked,
+    refetchOnReconnect: !payment.locked,
   });
   const finishTransfer = () => {
     const order = payment.order;
@@ -94,9 +111,14 @@ export function Home() {
     reduced: !!reduced,
     composer,
     destination,
+    arrival,
     onComplete: finishTransfer,
   });
-  const fetchedPages = list.data?.pages ?? [];
+  // A callback can arrive after the public API already includes this payment. Keep that
+  // row out until the paper has landed, including the initial response and focus refetches.
+  const fetchedPages = (list.data?.pages ?? []).map((page) =>
+    payment.locked ? { ...page, items: page.items.filter((item) => item.id !== payment.id) } : page,
+  );
   const received =
     delivered && delivered.owner === profile?.id
       ? (fetchedPages.flatMap((page) => page.items).find((item) => item.id === delivered.item.id) ??
@@ -305,7 +327,12 @@ export function Home() {
         <div className="r-book-head">
           <div className="r-book-title">
             <h2>{t('records')}</h2>
-            <Button className="r-ghost r-filter" aria-pressed={mine} onClick={chooseMine}>
+            <Button
+              className="r-ghost r-filter"
+              aria-pressed={mine}
+              disabled={payment.phase === 'filing'}
+              onClick={chooseMine}
+            >
               {t('mine')}
             </Button>
           </div>
@@ -313,7 +340,7 @@ export function Home() {
             <Button
               className="d-icon d-ghost"
               aria-label={t('previous')}
-              disabled={selected <= 0}
+              disabled={selected <= 0 || payment.phase === 'filing'}
               onClick={() => selectRecord(selected - 1)}
             >
               <ArrowLeft />
@@ -321,7 +348,7 @@ export function Home() {
             <Button
               className="d-icon d-ghost"
               aria-label={t('next')}
-              disabled={selected >= records.length - 1}
+              disabled={selected >= records.length - 1 || payment.phase === 'filing'}
               onClick={() => selectRecord(selected + 1)}
             >
               <ArrowRight />
@@ -335,7 +362,11 @@ export function Home() {
               animate={{ height }}
               transition={{ duration: reduced ? 0 : 0.42, ease: [0.2, 0.75, 0.25, 1] }}
             >
-              <AnimatePresence initial={false} custom={{ direction, previousId }}>
+              <AnimatePresence
+                key={delivered?.item.id ?? 'initial'}
+                initial={false}
+                custom={{ direction, previousId }}
+              >
                 <HomeReceipt
                   key={current.id}
                   record={current}
@@ -350,6 +381,13 @@ export function Home() {
           ) : (
             <Empty text={list.isLoading ? t('loading') : t('empty')} />
           )}
+          {incoming && (payment.phase === 'confirmed' || payment.phase === 'filing') && (
+            <div className="r-stack payment-arrival-stack" aria-hidden="true" inert>
+              <article className="r-ticket r-featured payment-arrival" ref={arrival}>
+                <ReceiptBody record={incoming} onDetail={() => {}} />
+              </article>
+            </div>
+          )}
         </div>
         <HomeRecordIndex
           pages={pages}
@@ -358,12 +396,16 @@ export function Home() {
           selected={selected}
           reduced={!!reduced}
           busy={list.isFetching}
-          onSelect={selectRecord}
+          onSelect={(index) => {
+            if (payment.phase !== 'filing') selectRecord(index);
+          }}
         />
         <div className="r-more">
           <Button
             className="d-ghost"
-            disabled={list.isFetching || (!!profile && !list.hasNextPage && !list.error)}
+            disabled={
+              payment.phase === 'filing' || list.isFetching || (!!profile && !list.hasNextPage && !list.error)
+            }
             onClick={() => {
               if (!profile) {
                 app.setLoginOpen(true);
