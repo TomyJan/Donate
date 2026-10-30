@@ -8,6 +8,7 @@ import { translate } from '../lib/i18n';
 import { LEGAL_CONSENT_KEY, useLocalAcknowledgment } from '../lib/legal';
 import { paymentLoginReturnPath, paymentReturnTarget, rememberPayment } from '../lib/payment-return';
 import type { Profile, Site } from '../lib/types';
+import { useSessionRenewal } from './useSessionRenewal';
 
 type Toast = { id: string; text: string; error: boolean };
 type AppState = {
@@ -138,50 +139,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       window.removeEventListener('admin-forbidden', revokeAdmin);
     };
   }, [clearSession, client, notify, t]);
-  const currentUserID = current?.id;
-  useEffect(() => {
-    if (!currentUserID) return;
-    let lastRenew = 0,
-      lastActivity = Date.now(),
-      busy = false;
-    const renew = async (force = false) => {
-      if (
-        busy ||
-        document.hidden ||
-        (!force && (Date.now() - lastRenew < 300000 || Date.now() - lastActivity > 300000))
-      )
-        return;
-      busy = true;
-      try {
-        await api('user/session/renew', {});
-        lastRenew = Date.now();
-      } catch (e) {
-        report(e);
-      } finally {
-        busy = false;
-      }
-    };
-    const active = () => {
-      lastActivity = Date.now();
-      void renew();
-    };
-    const visibility = () => {
-      if (!document.hidden) {
-        lastActivity = Date.now();
-        void renew(true);
-      }
-    };
-    void renew(true);
-    const timer = setInterval(() => void renew(), 60000);
-    for (const type of ['pointerdown', 'keydown', 'touchstart'])
-      window.addEventListener(type, active, { passive: true });
-    document.addEventListener('visibilitychange', visibility);
-    return () => {
-      clearInterval(timer);
-      for (const type of ['pointerdown', 'keydown', 'touchstart']) window.removeEventListener(type, active);
-      document.removeEventListener('visibilitychange', visibility);
-    };
-  }, [currentUserID, report]);
+  useSessionRenewal(current, clearSession, report);
   const setLang = (v: Language) => {
     savePreference('donate-language', v);
     setLanguage(v);

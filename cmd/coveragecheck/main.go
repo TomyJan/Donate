@@ -12,6 +12,7 @@ import (
 var critical = []struct{ file, name string }{
 	{"internal/auth/session.go", "Resolve"},
 	{"internal/auth/session.go", "Renew"},
+	{"internal/auth/session.go", "RenewIfNeeded"},
 	{"internal/auth/session.go", "Logout"},
 	{"internal/auth/flow.go", "claimFlow"},
 	{"internal/order/order.go", "Create"},

@@ -103,12 +103,14 @@ func (s *Server) respond(w http.ResponseWriter, r *http.Request, status int, cod
 	st.Code = code
 	st.Status = status
 	if code == "OK" && r.Method == "POST" && st.Session != nil && !st.SessionRevoked && !strings.HasSuffix(r.URL.Path, "/logout") {
-		session, e := s.Auth.Renew(r.Context(), st.Token)
+		session, renewed, e := s.Auth.RenewIfNeeded(r.Context(), st.Token)
 		if e != nil {
 			s.failure(w, r, e)
 			return
 		}
-		s.setCookie(w, s.sessionName(), st.Token, session.ExpiresAt)
+		if renewed {
+			s.setCookie(w, s.sessionName(), st.Token, session.ExpiresAt)
+		}
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)

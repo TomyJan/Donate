@@ -27,7 +27,10 @@ var (
 	ErrUpstream     = errors.New("第三方服务暂不可用")
 )
 
-const IdleTTL = 30 * 24 * time.Hour
+const (
+	IdleTTL     = 30 * 24 * time.Hour
+	RenewWindow = 20 * 24 * time.Hour
+)
 
 type Identity struct {
 	ID        string    `json:"id"`
@@ -196,9 +199,23 @@ func (s *Service) Resolve(ctx context.Context, token string) (Session, error) {
 	return out, nil
 }
 func (s *Service) Renew(ctx context.Context, token string) (Session, error) {
-	now := s.Now().UTC()
+	session, _, err := s.RenewIfNeeded(ctx, token)
+	return session, err
+}
+
+// RenewIfNeeded reports whether this call extended the session's expiry.
+func (s *Service) RenewIfNeeded(ctx context.Context, token string) (Session, bool, error) {
+	session, e := s.Resolve(ctx, token)
+	if e != nil {
+		return Session{}, false, e
+	}
+	if session.ExpiresAt.Sub(s.Now()) > RenewWindow {
+		return session, false, nil
+	}
+	renewed := false
 	var sid []byte
-	e := s.Store.Write(ctx, func(tx *sql.Tx) error {
+	e = s.Store.Write(ctx, func(tx *sql.Tx) error {
+		now := s.Now().UTC()
 		var uid []byte
 		var expires int64
 		var revoked sql.NullInt64
@@ -216,17 +233,22 @@ func (s *Service) Renew(ctx context.Context, token string) (Session, error) {
 		if revoked.Valid || expires <= now.Unix() {
 			return ErrUnauthorized
 		}
+		// Another request may already have renewed while this transaction waited.
+		if time.Unix(expires, 0).Sub(now) > RenewWindow {
+			return nil
+		}
 		_, e = tx.ExecContext(ctx, "UPDATE sessions SET renewed_at=?,expires_at=? WHERE id=? AND revoked_at IS NULL", now.Unix(), now.Add(IdleTTL).Unix(), sid)
+		renewed = e == nil
 		return e
 	})
 	if e != nil {
-		return Session{}, e
+		return Session{}, false, e
 	}
-	session, e := s.Resolve(ctx, token)
-	if e == nil {
+	session, e = s.Resolve(ctx, token)
+	if e == nil && renewed {
 		s.Log.Info(fmt.Sprintf("用户 %s 的会话 %s 已续期至 %s", session.UserID, session.ID, session.ExpiresAt.Format(time.RFC3339)), "user_id", session.UserID, "session_id", session.ID, "expires_at", session.ExpiresAt)
 	}
-	return session, e
+	return session, renewed, e
 }
 func (s *Service) Logout(ctx context.Context, token string) error {
 	session, e := s.Resolve(ctx, token)
