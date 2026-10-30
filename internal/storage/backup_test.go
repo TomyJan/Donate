@@ -7,8 +7,60 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
+
+func TestRestoreRejectsSourceAliasingCurrentDatabase(t *testing.T) {
+	for _, alias := range []string{"same-path", "case", "hardlink", "symlink"} {
+		t.Run(alias, func(t *testing.T) {
+			ctx := context.Background()
+			dir := t.TempDir()
+			target := filepath.Join(dir, "donate.db")
+			s, err := Open(ctx, target)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = s.Close(); err != nil {
+				t.Fatal(err)
+			}
+			source := target
+			switch alias {
+			case "case":
+				source = filepath.Join(dir, "DONATE.DB")
+				if _, err = os.Stat(source); os.IsNotExist(err) {
+					t.Skip("filesystem is case-sensitive")
+				}
+			case "hardlink", "symlink":
+				source = filepath.Join(dir, "alias.db")
+				if alias == "hardlink" {
+					err = os.Link(target, source)
+				} else {
+					err = os.Symlink(target, source)
+				}
+				if err != nil {
+					t.Skipf("filesystem cannot create %s: %v", alias, err)
+				}
+			}
+			before, err := os.ReadFile(target)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = Restore(ctx, source, target); err == nil || !strings.Contains(err.Error(), "备份路径不能与当前数据库相同") {
+				t.Fatalf("restore accepted an alias of its current database: %v", err)
+			}
+			for _, path := range []string{source, target} {
+				after, err := os.ReadFile(path)
+				if err != nil || !bytes.Equal(before, after) {
+					t.Fatalf("rejected restore modified %s: %v", path, err)
+				}
+			}
+			if _, err = os.Stat(filepath.Join(dir, "backups")); !os.IsNotExist(err) {
+				t.Fatalf("same-file restore reached backup creation: %v", err)
+			}
+		})
+	}
+}
 
 func TestRestorePreservesOldestSourceDuringRetention(t *testing.T) {
 	for _, siblingDate := range []string{"20000101T000000Z", "99990101T000000Z"} {

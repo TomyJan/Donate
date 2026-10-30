@@ -105,6 +105,13 @@ func Restore(ctx context.Context, source, target string) error {
 	if !info.Mode().IsRegular() {
 		return errors.New("备份必须是普通文件")
 	}
+	if targetInfo, err := os.Stat(dst); err == nil {
+		if os.SameFile(info, targetInfo) {
+			return errors.New("备份路径不能与当前数据库相同")
+		}
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
 	open := func(path, mode string) (*sql.DB, error) {
 		u := url.URL{Scheme: "file", Path: "/" + strings.TrimPrefix(filepath.ToSlash(path), "/")}
 		q := u.Query()
