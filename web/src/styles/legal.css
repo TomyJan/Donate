@@ -17,12 +17,15 @@
 .login-agreement label { cursor: pointer; }
 .login-agreement .legal-links { display: inline; }
 .login-agreement .legal-link-separator { margin-inline: 4px; }
-.agreement-check { position: relative; display: inline-flex; flex: 0 0 18px; width: 18px; height: 18px; margin-top: 2px; }
-.agreement-check input { appearance: none; width: 18px; height: 18px; margin: 0; border: 1px solid var(--d-line); border-radius: 5px; background: var(--d-bg); cursor: pointer; transition: background-color .18s, border-color .18s; }
-.agreement-check input:checked { background: var(--d-ink); border-color: var(--d-ink); }
-.agreement-check input:focus-visible { outline: 2px solid var(--d-accent); outline-offset: 3px; }
-.d-app .agreement-check svg { position: absolute; width: 13px; height: 13px; inset: 2.5px; color: var(--d-paper); opacity: 0; scale: .65; pointer-events: none; transition: opacity .16s, scale .2s; }
-.agreement-check input:checked + svg { opacity: 1; scale: 1; }
+.agreement-check { position: relative; display: inline-grid; place-items: center; flex: 0 0 24px; width: 24px; height: 24px; }
+.agreement-check input { position: absolute; inset: 0; z-index: 1; appearance: none; width: 24px; height: 24px; margin: 0; border: 0; background: transparent; cursor: pointer; }
+.agreement-indicator { display: grid; place-items: center; width: 18px; height: 18px; border: 1px solid var(--d-line); border-radius: 5px; background: var(--d-bg); transition: background-color .18s, border-color .18s, box-shadow .18s; }
+.agreement-check input:hover + .agreement-indicator { border-color: var(--d-accent); }
+.agreement-check input:checked + .agreement-indicator { background: var(--d-accent); border-color: var(--d-accent); }
+:is(#receipt-refinement, #donate-admin) .login-agreement .agreement-check input:focus-visible { outline: none; }
+.agreement-check input:focus-visible + .agreement-indicator { outline: 2px solid var(--d-accent); outline-offset: 3px; }
+.d-app .login-agreement .agreement-check svg.lucide { display: block; width: 12px; height: 12px; color: var(--d-on); opacity: 0; scale: .65; pointer-events: none; stroke-width: 2.6; transition: opacity .16s, scale .2s; }
+.d-app .login-agreement .agreement-check input:checked + .agreement-indicator svg.lucide { opacity: 1; scale: 1; }
 .d-app .cookie-notice { position: fixed; z-index: 85; left: max(24px, env(safe-area-inset-left)); bottom: max(24px, env(safe-area-inset-bottom)); width: min(560px, calc(100vw - 48px)); max-height: calc(100dvh - 120px); overflow-y: auto; display: flex; align-items: center; gap: 24px; padding: 20px 22px; border: 1px solid var(--d-line); border-radius: var(--d-surface-radius); background: var(--d-paper); color: var(--d-ink); box-shadow: var(--d-shadow); font-size: 12px; line-height: 1.75; }
 .cookie-copy { flex: 1; min-width: 0; }
 .cookie-notice h2 { margin: 0 0 5px; font-size: 13px; font-weight: 600; }
@@ -57,5 +60,5 @@
   .d-app .d-footer { gap: 10px 16px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .agreement-check input, .d-app .agreement-check svg, .legal-heading nav a { transition: none; }
+  .agreement-indicator, .d-app .login-agreement .agreement-check svg.lucide, .legal-heading nav a { transition: none; }
 }

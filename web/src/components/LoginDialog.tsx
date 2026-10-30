@@ -42,7 +42,9 @@ export function LoginDialog() {
             checked={app.legalAccepted}
             onChange={(event) => app.setLegalAccepted(event.target.checked)}
           />
-          <Check aria-hidden="true" />
+          <span className="agreement-indicator" aria-hidden="true">
+            <Check />
+          </span>
         </span>
         <span>
           <label htmlFor={id}>{t('readAndAgree')}</label> <LegalLinks newTab />
