@@ -1,0 +1,32 @@
+.action-confirm.d-pop {
+  width: min(320px, calc(100vw - 24px));
+  padding: 16px;
+  z-index: 100;
+  font-family: inherit;
+}
+.action-confirm-title {
+  display: block;
+  font-size: 14px;
+  line-height: 1.5;
+}
+.action-confirm p {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.action-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.action-confirm-error {
+  color: var(--d-danger, #b42318);
+}
+@media (prefers-reduced-motion: reduce) {
+  .d-app .action-confirm.d-pop[data-state] {
+    animation: none;
+  }
+}

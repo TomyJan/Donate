@@ -147,7 +147,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** admin/overview */
+        /**
+         * admin/overview
+         * @description All cards and series use one read snapshot and the same selected [from,to) window. Revenue, paid count, daily and channels use paid_at; pending and closed use created_at and current status. Hidden orders count, physically deleted orders do not. Invalid ranges return the VALIDATION_FAILED business code.
+         */
         get: operations["admin_overview_get"];
         put?: never;
         post?: never;
@@ -519,14 +522,26 @@ export interface components {
     schemas: {
         Audit: {
             action: string;
+            /** @description Current actor nickname, or the stable system key when unavailable. */
             actor: string;
             actor_id: string;
             /** Format: date-time */
             created_at: string;
             id: string;
             result: string;
+            /** @description Readable current target summary; empty when the target no longer exists. Never an ID or a retained order snapshot. */
             target: string;
+            /**
+             * Format: int64
+             * @description Current order amount in fen. Absent for user targets and physically deleted orders.
+             */
+            target_amount_fen?: number | null;
+            /** @description Whether the target currently exists. Disable target details when false. */
+            target_exists: boolean;
             target_id: string;
+            /** @description Current target user nickname, or the current order owner's nickname when available. Absent for deleted targets. */
+            target_nickname?: string;
+            /** @description Target kind used to choose the order or user detail view. */
             target_type: string;
         };
         AuditPage: {
@@ -539,7 +554,11 @@ export interface components {
                 id: string;
                 result: string;
                 target: string;
+                /** Format: int64 */
+                target_amount_fen?: number | null;
+                target_exists: boolean;
                 target_id: string;
+                target_nickname?: string;
                 target_type: string;
             }[];
             /** Format: int64 */
@@ -1208,7 +1227,7 @@ export interface operations {
                 status?: string;
                 channel?: string;
                 visibility?: string;
-                sort?: string;
+                sort?: "id" | "created_at" | "nickname" | "amount_fen" | "channel" | "message" | "status" | "hidden_order" | "hidden_message" | "paid_at";
                 direction?: string;
                 action?: string;
                 user_id?: string;
@@ -1319,7 +1338,14 @@ export interface operations {
     };
     admin_overview_get: {
         parameters: {
-            query?: never;
+            query?: {
+                /** @description Shanghai calendar-day preset. Rolling presets include today and end at tomorrow's midnight; all is unbounded. */
+                range?: "today" | "yesterday" | "7d" | "30d" | "90d" | "all" | "custom";
+                /** @description Inclusive RFC3339 instant, required only for custom and forbidden for other ranges. */
+                from?: string;
+                /** @description Exclusive RFC3339 instant, required only for custom, later than from, and forbidden for other ranges. */
+                to?: string;
+            };
             header?: never;
             path?: never;
             cookie?: never;

@@ -10,14 +10,16 @@ export function SelectField({
   onValue,
   options,
   label,
+  onCloseAutoFocus,
 }: {
   value: string;
   onValue: (v: string) => void;
   options: [string, string][];
   label: string;
+  onCloseAutoFocus?: (event: Event) => void;
 }) {
   return (
-    <Select.Root value={value || 'all'} onValueChange={(v) => onValue(v === 'all' ? '' : v)}>
+    <Select.Root value={value || '__empty'} onValueChange={(v) => onValue(v === '__empty' ? '' : v)}>
       <Select.Trigger className="d-btn d-control a-btn a-select" aria-label={label}>
         <Select.Value />
         <Select.Icon>
@@ -25,10 +27,16 @@ export function SelectField({
         </Select.Icon>
       </Select.Trigger>
       <Select.Portal container={portal()}>
-        <Select.Content className="d-pop select-pop" position="popper" sideOffset={7} collisionPadding={12}>
+        <Select.Content
+          className="d-pop select-pop"
+          position="popper"
+          sideOffset={7}
+          collisionPadding={12}
+          onCloseAutoFocus={onCloseAutoFocus}
+        >
           <Select.Viewport>
             {options.map(([id, text]) => (
-              <Select.Item key={id} value={id || 'all'} className="d-option">
+              <Select.Item key={id} value={id || '__empty'} className="d-option">
                 <Select.ItemText>{text}</Select.ItemText>
                 <Select.ItemIndicator className="d-tick">
                   <Check />
@@ -69,7 +77,7 @@ export function DateTimeField({
   return (
     <Popover.Root open={open} onOpenChange={setOpen}>
       <Popover.Trigger asChild>
-        <Button className="a-btn a-select">
+        <Button className="a-btn a-select" aria-label={label}>
           <span>
             {value
               ? `${day?.toLocaleDateString()} ${String(b?.getUTCHours()).padStart(2, '0')}:${String(b?.getUTCMinutes()).padStart(2, '0')}`

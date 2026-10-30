@@ -1,0 +1,172 @@
+import * as Popover from '@radix-ui/react-popover';
+import {
+  cloneElement,
+  type ReactElement,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from 'react';
+import { useApp } from '../app/context';
+import { Button, portal } from './ui';
+import './ActionConfirm.css';
+
+export type ActionConfirmProps<T = undefined> = {
+  trigger: ReactElement<{ disabled?: boolean }>;
+  title: string;
+  description?: string;
+  prepare?: () => Promise<T>;
+  onConfirm: (prepared: T) => Promise<void>;
+  expiresAt?: (prepared: T) => string | number | undefined;
+  scopeKey?: string;
+  danger?: boolean;
+  children?: ReactNode;
+};
+
+export function ActionConfirm<T = undefined>({
+  trigger,
+  title,
+  description,
+  prepare,
+  onConfirm,
+  expiresAt,
+  scopeKey,
+  danger = false,
+  children,
+}: ActionConfirmProps<T>) {
+  const { t, report } = useApp();
+  const [open, setOpen] = useState(false);
+  const [preparing, setPreparing] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [prepared, setPrepared] = useState<{ value: T }>();
+  const [error, setError] = useState('');
+  const version = useRef(0);
+  const working = useRef(false);
+  const titleID = useId();
+  const descriptionID = useId();
+  const invalidate = useCallback(() => {
+    version.current += 1;
+    working.current = false;
+    setPrepared(undefined);
+    setPreparing(false);
+    setBusy(false);
+    setError('');
+  }, []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Changed scope revokes prepared credentials and pending preview results.
+  useEffect(() => {
+    setOpen(false);
+    invalidate();
+    return () => {
+      version.current += 1;
+    };
+  }, [scopeKey, invalidate]);
+  const prepareCurrent = async () => {
+    const current = ++version.current;
+    setPrepared(undefined);
+    setError('');
+    setPreparing(true);
+    working.current = true;
+    try {
+      const value = prepare ? await prepare() : (undefined as T);
+      if (current !== version.current) return false;
+      setPrepared({ value });
+      return true;
+    } catch (failure) {
+      if (current === version.current) {
+        setError(t('error'));
+        report(failure);
+      }
+      return false;
+    } finally {
+      if (current === version.current) {
+        setPreparing(false);
+        working.current = false;
+      }
+    }
+  };
+  const changeOpen = (value: boolean) => {
+    if (busy) return;
+    setOpen(value);
+    if (value) void prepareCurrent();
+    else invalidate();
+  };
+  const confirm = async () => {
+    if (!prepared || working.current) return;
+    const expiry = expiresAt?.(prepared.value);
+    const expiryTime = typeof expiry === 'string' ? Date.parse(expiry) : expiry;
+    if (expiryTime !== undefined && (!Number.isFinite(expiryTime) || expiryTime <= Date.now())) {
+      if (await prepareCurrent()) setError(t('confirmationExpired'));
+      return;
+    }
+    const current = version.current;
+    working.current = true;
+    setBusy(true);
+    setError('');
+    try {
+      await onConfirm(prepared.value);
+      if (current !== version.current) return;
+      setOpen(false);
+      invalidate();
+    } catch (failure) {
+      if (current === version.current) {
+        setError(t('error'));
+        report(failure);
+      }
+    } finally {
+      if (current === version.current) {
+        working.current = false;
+        setBusy(false);
+      }
+    }
+  };
+  return (
+    <Popover.Root open={open} onOpenChange={changeOpen}>
+      <Popover.Trigger asChild>
+        {cloneElement(trigger, { disabled: trigger.props.disabled || busy })}
+      </Popover.Trigger>
+      <Popover.Portal container={portal()}>
+        <Popover.Content
+          className="action-confirm d-pop"
+          sideOffset={8}
+          collisionPadding={12}
+          align="end"
+          aria-labelledby={titleID}
+          aria-describedby={description ? descriptionID : undefined}
+          onEscapeKeyDown={(event) => {
+            if (busy) event.preventDefault();
+          }}
+          onInteractOutside={(event) => {
+            if (busy) event.preventDefault();
+          }}
+        >
+          <strong id={titleID} className="action-confirm-title">
+            {title}
+          </strong>
+          {description && <p id={descriptionID}>{description}</p>}
+          {children}
+          {preparing && <p role="status">{t('loading')}</p>}
+          {error && (
+            <p role="alert" className="action-confirm-error">
+              {error}
+            </p>
+          )}
+          <div className="action-confirm-actions">
+            <Button disabled={busy} onClick={() => changeOpen(false)}>
+              {t('cancel')}
+            </Button>
+            <Button
+              disabled={preparing || busy || !prepared}
+              className={danger ? 'is-danger' : 'd-primary'}
+              aria-busy={busy}
+              onClick={() => void confirm()}
+            >
+              {busy ? t('loading') : t('confirm')}
+            </Button>
+          </div>
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
+}

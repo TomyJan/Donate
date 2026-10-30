@@ -1,9 +1,12 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
-import { ArrowLeft, ArrowRight, Check, X } from 'lucide-react';
+import * as Select from '@radix-ui/react-select';
+import { ArrowLeft, ArrowRight, Check, ChevronDown, X } from 'lucide-react';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { useState } from 'react';
 import { useApp } from '../app/context';
+import { AnimatedHeight } from './AnimatedHeight';
+import './shared-controls.css';
 export const portal = () => document.querySelector<HTMLElement>('.d-app');
 export function Button({ className = '', ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
   return <button type="button" className={`d-btn d-control ${className}`} {...props} />;
@@ -26,31 +29,41 @@ export function Modal({
   title,
   children,
   wide = false,
+  dismissible = true,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   title: string;
   children: ReactNode;
   wide?: boolean;
+  dismissible?: boolean;
 }) {
   const { t } = useApp();
   return (
-    <Dialog.Root open={open} onOpenChange={onOpenChange}>
+    <Dialog.Root open={open} onOpenChange={(value) => (value || dismissible) && onOpenChange(value)}>
       <Dialog.Portal container={portal()}>
         <Dialog.Overlay className="d-overlay" />
         <Dialog.Content
           className={`d-dialog d-dialog-frame ${wide ? 'dialog-wide' : ''}`}
           aria-describedby={undefined}
+          onEscapeKeyDown={(event) => {
+            if (!dismissible) event.preventDefault();
+          }}
+          onInteractOutside={(event) => {
+            if (!dismissible) event.preventDefault();
+          }}
         >
-          <div className="d-dialog-head">
-            <Dialog.Title>{title}</Dialog.Title>
-            <Dialog.Close asChild>
-              <Button className="d-icon d-ghost" aria-label={t('close')}>
-                <X />
-              </Button>
-            </Dialog.Close>
-          </div>
-          {children}
+          <AnimatedHeight>
+            <div className="d-dialog-head">
+              <Dialog.Title>{title}</Dialog.Title>
+              <Dialog.Close asChild>
+                <Button className="d-icon d-ghost" aria-label={t('close')} disabled={!dismissible}>
+                  <X />
+                </Button>
+              </Dialog.Close>
+            </div>
+            {children}
+          </AnimatedHeight>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
@@ -111,19 +124,52 @@ export function Pagination({
   total,
   size,
   onPage,
+  onSize,
 }: {
   page: number;
   total: number;
   size: number;
-  onPage: (v: number) => void;
+  onPage: (value: number) => void;
+  onSize?: (value: number) => void;
 }) {
   const { t } = useApp();
   const count = Math.max(1, Math.ceil(total / size));
   return (
     <div className="a-foot">
-      <span>
+      <span className="pagination-total">
         {t('total')} {total} {t('items')}
       </span>
+      <Select.Root
+        value={String(size)}
+        disabled={!onSize}
+        onValueChange={(value) => {
+          onSize?.(Number(value));
+          onPage(1);
+        }}
+      >
+        <Select.Trigger className="d-btn d-control pagination-size" aria-label={t('perPageCount')}>
+          <Select.Value />
+          <Select.Icon>
+            <ChevronDown />
+          </Select.Icon>
+        </Select.Trigger>
+        <Select.Portal container={portal()}>
+          <Select.Content className="d-pop select-pop" position="popper" sideOffset={7} collisionPadding={12}>
+            <Select.Viewport>
+              {[10, 20, 50, 100].map((value) => (
+                <Select.Item key={value} value={String(value)} className="d-option">
+                  <Select.ItemText>
+                    {value} {t('perPage')}
+                  </Select.ItemText>
+                  <Select.ItemIndicator className="d-tick">
+                    <Check />
+                  </Select.ItemIndicator>
+                </Select.Item>
+              ))}
+            </Select.Viewport>
+          </Select.Content>
+        </Select.Portal>
+      </Select.Root>
       <div className="a-pagination">
         <Button
           className="d-icon d-ghost"
@@ -133,7 +179,7 @@ export function Pagination({
         >
           <ArrowLeft />
         </Button>
-        <span>
+        <span aria-live="polite">
           {page} / {count}
         </span>
         <Button

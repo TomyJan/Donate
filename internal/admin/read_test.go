@@ -66,7 +66,7 @@ func TestCloseQueueSortExportAndCurrentAudit(t *testing.T) {
 		t.Fatal(e)
 	}
 	for _, event := range audit.Items {
-		if event.Target != "已删除" || strings.Contains(event.Target, "HYPERLINK") {
+		if event.TargetExists || event.Target != "" || event.TargetAmountFen != nil || event.TargetNickname != "" || strings.Contains(event.Target, "HYPERLINK") {
 			t.Fatal(event)
 		}
 	}

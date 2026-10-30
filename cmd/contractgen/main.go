@@ -81,6 +81,17 @@ func main() {
 	for name, t := range types {
 		schemas[name] = describe(t)
 	}
+	auditProps := schemas["Audit"].(schema)["properties"].(map[string]any)
+	for field, description := range map[string]string{
+		"actor":             "Current actor nickname, or the stable system key when unavailable.",
+		"target":            "Readable current target summary; empty when the target no longer exists. Never an ID or a retained order snapshot.",
+		"target_type":       "Target kind used to choose the order or user detail view.",
+		"target_exists":     "Whether the target currently exists. Disable target details when false.",
+		"target_nickname":   "Current target user nickname, or the current order owner's nickname when available. Absent for deleted targets.",
+		"target_amount_fen": "Current order amount in fen. Absent for user targets and physically deleted orders.",
+	} {
+		auditProps[field].(schema)["description"] = description
+	}
 	ref := func(name string) schema { return schema{"$ref": "#/components/schemas/" + name} }
 	schemas["Site"] = schema{"type": "object", "required": []string{"name", "logo", "version", "providers", "payment_enabled", "csrf_token"}, "properties": schema{"name": schema{"type": "string"}, "logo": schema{"type": "string"}, "version": ref("SiteVersion"), "providers": schema{"type": "array", "items": schema{"type": "string"}}, "payment_enabled": schema{"type": "boolean"}, "csrf_token": schema{"type": "string"}}}
 
@@ -139,6 +150,24 @@ func main() {
 		}
 		if r.path == "order/list" {
 			operation["parameters"] = []any{parameter("query", "only_mine", false, schema{"type": "boolean", "default": false}), parameter("query", "cursor", false, schema{"type": "string"})}
+		}
+		if r.path == "admin/overview" {
+			operation["description"] = "All cards and series use one read snapshot and the same selected [from,to) window. Revenue, paid count, daily and channels use paid_at; pending and closed use created_at and current status. Hidden orders count, physically deleted orders do not. Invalid ranges return the VALIDATION_FAILED business code."
+			rangeParam := parameter("query", "range", false, schema{"type": "string", "enum": []string{"today", "yesterday", "7d", "30d", "90d", "all", "custom"}, "default": "30d"})
+			rangeParam["description"] = "Shanghai calendar-day preset. Rolling presets include today and end at tomorrow's midnight; all is unbounded."
+			fromParam := parameter("query", "from", false, schema{"type": "string", "format": "date-time"})
+			fromParam["description"] = "Inclusive RFC3339 instant, required only for custom and forbidden for other ranges."
+			toParam := parameter("query", "to", false, schema{"type": "string", "format": "date-time"})
+			toParam["description"] = "Exclusive RFC3339 instant, required only for custom, later than from, and forbidden for other ranges."
+			operation["parameters"] = []any{rangeParam, fromParam, toParam}
+		}
+		if r.path == "admin/order/list" {
+			for _, value := range operation["parameters"].([]any) {
+				param := value.(schema)
+				if param["name"] == "sort" {
+					param["schema"] = schema{"type": "string", "enum": []string{"id", "created_at", "nickname", "amount_fen", "channel", "message", "status", "hidden_order", "hidden_message", "paid_at"}}
+				}
+			}
 		}
 		if r.path == "user/login/qq/complete" {
 			response["content"].(schema)["application/json"].(schema)["schema"].(schema)["properties"].(schema)["data"] = schema{"type": "object", "required": []string{"return_to"}, "properties": schema{"return_to": schema{"type": "string"}}}

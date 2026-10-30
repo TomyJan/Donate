@@ -15,16 +15,18 @@ import {
   X,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useApp } from '../app/context';
 import { AdminTable } from '../components/AdminTable';
 import { ConstrainedInput } from '../components/ConstrainedInput';
 import { DateTimeField, SelectField } from '../components/forms';
 import { OrderDialog } from '../components/OrderDialog';
-import { Avatar, Button, Empty, Menu, Modal, Pagination } from '../components/ui';
+import { type OverviewPeriod, OverviewRange } from '../components/OverviewRange';
+import { UserDialog } from '../components/UserDialog';
+import { Button, Empty, Menu, Modal, Pagination } from '../components/ui';
 import { acceptAmountEdit, amountFen } from '../lib/amount';
-import { api, dateTime, downloadExport, money, query } from '../lib/api';
+import { api, downloadExport, money, query } from '../lib/api';
 import type { Audit, Metric, Operation, Order, Overview, Page, User } from '../lib/types';
 
 type Tab = 'overview' | 'orders' | 'users' | 'audit';
@@ -32,8 +34,9 @@ type Sort = { key: string; direction: 'asc' | 'desc' };
 const bulkActions = ['close', 'hide_order', 'show_order', 'hide_message', 'show_message', 'delete'] as const;
 export function Admin() {
   const app = useApp(),
-    { t, profile, report, notify } = app;
+    { t, profile, report } = app;
   const client = useQueryClient();
+  const operationEpoch = useRef(0);
   const [tab, setTab] = useState<Tab>('overview'),
     [search, setSearch] = useState(''),
     [status, setStatus] = useState(''),
@@ -41,6 +44,9 @@ export function Admin() {
     [visibility, setVisibility] = useState(''),
     [action, setAction] = useState(''),
     [page, setPage] = useState(1),
+    [pageSize, setPageSize] = useState(20),
+    [userFilter, setUserFilter] = useState(''),
+    [period, setPeriod] = useState<OverviewPeriod>({ range: '30d' }),
     [advanced, setAdvanced] = useState(false),
     [from, setFrom] = useState(''),
     [to, setTo] = useState(''),
@@ -51,8 +57,7 @@ export function Admin() {
     [orderID, setOrderID] = useState<string | null>(null),
     [userID, setUserID] = useState<string | null>(null),
     [operation, setOperation] = useState<Operation | null>(null),
-    [busy, setBusy] = useState(false),
-    [banTarget, setBanTarget] = useState<User | null>(null);
+    [busy, setBusy] = useState(false);
   const filters = {
     search,
     status,
@@ -65,7 +70,8 @@ export function Admin() {
     sort: sort.key,
     direction: sort.direction,
     page,
-    page_size: 20,
+    page_size: pageSize,
+    user_id: userFilter,
     action,
   };
   const endpoint =
@@ -77,8 +83,8 @@ export function Admin() {
     retry: false,
   });
   const overview = useQuery({
-    queryKey: ['overview'],
-    queryFn: () => api<Overview>('admin/overview'),
+    queryKey: ['overview', period],
+    queryFn: () => api<Overview>(`admin/overview?${query(period)}`),
     enabled: !!profile?.admin && tab === 'overview',
   });
   const op = useQuery({
@@ -89,18 +95,36 @@ export function Admin() {
       q.state.data?.items.some((i) => i.status === 'ready' || i.status === 'running') ? 2000 : false,
   });
   const currentOp = op.data ?? operation;
+  const closeOperation = () => {
+    operationEpoch.current += 1;
+    setOperation(null);
+    client.removeQueries({ queryKey: ['operation'] });
+  };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a different administrator revokes the active operation.
+  useEffect(() => {
+    operationEpoch.current += 1;
+    setOperation(null);
+    setSelection(new Set());
+  }, [profile?.id]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: filter changes reset selection and pagination.
   useEffect(() => {
     setPage(1);
     setSelection(new Set());
-  }, [search, status, channel, visibility, from, to, minimum, maximum, action]);
+  }, [search, status, channel, visibility, from, to, minimum, maximum, action, pageSize, userFilter]);
   const navigate = (next: Tab) => {
+    closeOperation();
     setTab(next);
     setSearch('');
     setStatus('');
     setChannel('');
     setVisibility('');
     setAction('');
+    setFrom('');
+    setTo('');
+    setMinimum('');
+    setMaximum('');
+    setAdvanced(false);
+    setUserFilter('');
     setPage(1);
     setSelection(new Set());
     setSort({ key: 'created_at', direction: 'desc' });
@@ -117,16 +141,23 @@ export function Admin() {
     }
   };
   const preview = async (action: string, ids = [...selection]) => {
-    setOperation(await api<Operation>('admin/order/action/preview', { action, ids }));
+    const epoch = ++operationEpoch.current;
+    const prepared = await api<Operation>('admin/order/action/preview', { action, ids });
+    if (epoch === operationEpoch.current) setOperation(prepared);
   };
   const execute = async () => {
     if (!operation) return;
+    const epoch = operationEpoch.current;
     const result = await api<Operation>('admin/order/action/execute', { operation_id: operation.id });
-    setOperation(result);
+    if (epoch === operationEpoch.current) setOperation(result);
     await client.invalidateQueries();
     setSelection(new Set());
     if (result.action === 'export') await downloadExport(result.id);
   };
+  useEffect(() => {
+    if (list.data)
+      setPage((current) => Math.min(current, Math.max(1, Math.ceil(list.data.total / pageSize))));
+  }, [list.data, pageSize]);
   const rows = list.data?.items ?? [];
   const toggle = (id: string) =>
     setSelection((old) => {
@@ -185,6 +216,7 @@ export function Admin() {
         <div className="a-heading">
           <h1>{t(tab)}</h1>
           <div className="a-heading-actions">
+            {tab === 'overview' && <OverviewRange value={period} onChange={setPeriod} />}
             {tab === 'orders' && selection.size > 0 && (
               <>
                 <span className="a-selection-count">
@@ -233,12 +265,18 @@ export function Admin() {
           overview.error ? (
             <Empty text={t('unavailable')} />
           ) : overview.data ? (
-            <OverviewPanel data={overview.data} />
+            <OverviewPanel key={JSON.stringify(period)} data={overview.data} />
           ) : (
             <Empty text={t('loading')} />
           )
         ) : (
           <>
+            {tab === 'orders' && userFilter && (
+              <Button className="d-ghost user-filter" onClick={() => setUserFilter('')}>
+                {t('filteredUser')}
+                <X />
+              </Button>
+            )}
             <div className="a-tools">
               {tab !== 'audit' ? (
                 <label className="a-search">
@@ -388,18 +426,37 @@ export function Admin() {
                 onTarget={(kind, id) => (kind === 'order' ? setOrderID(id) : setUserID(id))}
               />
             )}
-            {list.data && <Pagination page={page} size={20} total={list.data.total} onPage={setPage} />}
+            {list.data && (
+              <Pagination
+                page={page}
+                size={pageSize}
+                total={list.data.total}
+                onPage={(next) => {
+                  setPage(next);
+                  setSelection(new Set());
+                }}
+                onSize={setPageSize}
+              />
+            )}
           </>
         )}
       </main>
       <OrderDialog id={orderID} onClose={() => setOrderID(null)} admin />
-      <UserDialog id={userID} onClose={() => setUserID(null)} onOrder={setOrderID} onBan={setBanTarget} />
+      <UserDialog
+        id={userID}
+        onClose={() => setUserID(null)}
+        onOrder={setOrderID}
+        onViewOrders={(id) => {
+          navigate('orders');
+          setUserFilter(id);
+        }}
+      />
       <Modal
         open={!!currentOp}
+        dismissible={!busy}
         onOpenChange={(v) => {
           if (!v) {
-            setOperation(null);
-            client.removeQueries({ queryKey: ['operation'] });
+            closeOperation();
           }
         }}
         title={
@@ -429,9 +486,9 @@ export function Admin() {
         </div>
         <div className="dialog-actions">
           <Button
+            disabled={busy}
             onClick={() => {
-              setOperation(null);
-              client.removeQueries({ queryKey: ['operation'] });
+              closeOperation();
               void client.invalidateQueries();
             }}
           >
@@ -448,33 +505,6 @@ export function Admin() {
           )}
         </div>
       </Modal>
-      <Modal
-        open={!!banTarget}
-        onOpenChange={(v) => !v && setBanTarget(null)}
-        title={t(banTarget?.status === 'banned' ? 'unban' : 'ban')}
-      >
-        <p>{t(banTarget?.status === 'banned' ? 'unbanHint' : 'banHint')}</p>
-        <div className="dialog-actions">
-          <Button onClick={() => setBanTarget(null)}>{t('cancel')}</Button>
-          <Button
-            className="d-primary"
-            disabled={busy}
-            onClick={() =>
-              void run(async () => {
-                if (!banTarget) return;
-                await api(`admin/user/${banTarget.status === 'banned' ? 'unban' : 'ban'}`, {
-                  id: banTarget.id,
-                });
-                setBanTarget(null);
-                notify(t('success'));
-                await client.invalidateQueries();
-              })
-            }
-          >
-            {t('confirm')}
-          </Button>
-        </div>
-      </Modal>
     </div>
   );
 }
@@ -482,7 +512,6 @@ function OverviewPanel({ data }: { data: Overview }) {
   const { t } = useApp();
   return (
     <>
-      <p className="a-muted a-small">{t('scope')}</p>
       <div className="overview-stats">
         {[
           ['totalPaid', `¥${money(data.paid_fen)}`],
@@ -509,6 +538,8 @@ function OverviewPanel({ data }: { data: Overview }) {
 }
 function MetricTable({ title, metrics }: { title: string; metrics: Metric[] }) {
   const { t } = useApp();
+  const [page, setPage] = useState(1);
+  const [size, setSize] = useState(10);
   const [sort, setSort] = useState<{ key: keyof Metric; asc: boolean }>({ key: 'label', asc: false });
   const columns: [keyof Metric, string][] = [
     ['label', title === 'daily' ? 'time' : 'channel'],
@@ -536,7 +567,10 @@ function MetricTable({ title, metrics }: { title: string; metrics: Metric[] }) {
                 <button
                   type="button"
                   className="a-sort text-button"
-                  onClick={() => setSort({ key, asc: sort.key === key ? !sort.asc : false })}
+                  onClick={() => {
+                    setSort({ key, asc: sort.key === key ? !sort.asc : false });
+                    setPage(1);
+                  }}
                 >
                   {t(label)}
                   {sort.key === key ? sort.asc ? <ArrowUp /> : <ArrowDown /> : <ArrowDownUp />}
@@ -546,7 +580,7 @@ function MetricTable({ title, metrics }: { title: string; metrics: Metric[] }) {
           </tr>
         </thead>
         <tbody>
-          {sorted.map((m) => (
+          {sorted.slice((page - 1) * size, page * size).map((m) => (
             <tr key={m.label}>
               <td>{title === 'channels' ? t(m.label) : m.label}</td>
               <td>¥{money(m.paid_fen)}</td>
@@ -555,102 +589,13 @@ function MetricTable({ title, metrics }: { title: string; metrics: Metric[] }) {
           ))}
         </tbody>
       </table>
-      {!metrics.length && <Empty />}
-    </section>
-  );
-}
-function UserDialog({
-  id,
-  onClose,
-  onOrder,
-  onBan,
-}: {
-  id: string | null;
-  onClose: () => void;
-  onOrder: (id: string) => void;
-  onBan: (u: User) => void;
-}) {
-  const { t, profile } = useApp();
-  const user = useQuery({
-    queryKey: ['admin-user', id],
-    queryFn: () => api<User>(`admin/user/detail?id=${id}`),
-    enabled: !!id,
-    retry: false,
-  });
-  const [page, setPage] = useState(1);
-  const history = useQuery({
-    queryKey: ['admin-user-orders', id, page],
-    queryFn: () => api<Page<Order>>(`admin/order/list?${query({ user_id: id ?? '', page, page_size: 10 })}`),
-    enabled: !!id,
-    retry: false,
-  });
-  const u = user.data;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a different user starts on their first history page.
-  useEffect(() => setPage(1), [id]);
-  return (
-    <Modal open={!!id} onOpenChange={(v) => !v && onClose()} title={t('userDetail')} wide>
-      {u ? (
-        <>
-          <div className="d-person">
-            <Avatar name={u.nickname} src={u.avatar_url} />
-            <div>
-              <strong>{u.nickname}</strong>
-              <span className="d-account-id">{u.id}</span>
-            </div>
-          </div>
-          <div className="user-properties">
-            {[
-              [t('status'), t(u.status)],
-              [t('role'), t(u.admin ? 'adminRole' : 'member')],
-              [t('bindings'), u.bindings.map((v) => v.provider.toUpperCase()).join(' · ')],
-              [t('lastLogin'), dateTime(u.last_login_at)],
-            ].map(([label, value]) => (
-              <div key={label}>
-                <span>{label}</span>
-                <strong>{value}</strong>
-              </div>
-            ))}
-          </div>
-          <div className="d-bindings">
-            {u.bindings.map((b) => (
-              <div key={b.id} className="d-bind">
-                <Avatar name={b.nickname} src={b.avatar_url} />
-                <div>
-                  <p>{b.provider.toUpperCase()}</p>
-                  <span className="d-secondary">{b.nickname}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-          <Button
-            disabled={u.id === profile?.id && u.status !== 'banned'}
-            onClick={() => onBan(u)}
-            className={u.status === 'banned' ? '' : 'is-danger'}
-          >
-            {t(u.status === 'banned' ? 'unban' : 'ban')}
-          </Button>
-          <section className="user-history">
-            <h3>{t('history')}</h3>
-            {history.data?.items.map((o) => (
-              <button
-                className="history-row text-button"
-                type="button"
-                key={o.id}
-                onClick={() => onOrder(o.id)}
-              >
-                <span>
-                  {dateTime(o.created_at)}
-                  <small>{t(o.status)}</small>
-                </span>
-                <strong>¥{money(o.amount_fen)}</strong>
-              </button>
-            ))}
-            {history.data && <Pagination page={page} total={history.data.total} size={10} onPage={setPage} />}
-          </section>
-        </>
+      {!metrics.length ? (
+        <Empty />
       ) : (
-        <Empty text={user.isLoading ? t('loading') : t('not_found')} />
+        metrics.length > 10 && (
+          <Pagination page={page} total={metrics.length} size={size} onPage={setPage} onSize={setSize} />
+        )
       )}
-    </Modal>
+    </section>
   );
 }

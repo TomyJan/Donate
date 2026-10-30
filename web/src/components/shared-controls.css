@@ -1,0 +1,74 @@
+.d-app .animated-height {
+  overflow: clip;
+  transition: height 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.d-app .animated-height-content {
+  display: flow-root;
+  min-width: 0;
+}
+.d-app .a-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 24px;
+  font-size: 12px;
+  min-width: 0;
+}
+.d-app .pagination-total {
+  color: var(--d-muted);
+  white-space: nowrap;
+}
+.d-app .a-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  white-space: nowrap;
+}
+.d-app .a-pagination > .d-btn {
+  width: 34px;
+  min-height: 34px;
+  padding: 7px;
+}
+.d-app .a-pagination > span {
+  min-width: 42px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.d-app .pagination-size {
+  min-width: 96px;
+  min-height: 34px;
+  padding: 6px 10px;
+  justify-content: space-between;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.d-app .pagination-size > span:last-child {
+  display: flex;
+  margin-left: 4px;
+}
+.d-app .d-bind {
+  min-width: 0;
+}
+.d-app .d-bind-info {
+  overflow-wrap: anywhere;
+}
+.d-app .d-bind-info p {
+  margin: 0;
+}
+@media (max-width: 440px) {
+  .d-app .a-foot {
+    gap: 8px;
+  }
+  .d-app .pagination-size {
+    min-width: 88px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .d-app .animated-height {
+    overflow: clip;
+    transition: none;
+  }
+}

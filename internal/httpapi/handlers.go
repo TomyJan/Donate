@@ -279,7 +279,12 @@ func (s *Server) user(w http.ResponseWriter, r *http.Request) {
 	s.ok(w, r, v)
 }
 func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
-	v, e := s.Admin.Overview(r.Context())
+	q := r.URL.Query()
+	if q.Get("range") != "custom" && (q.Has("from") || q.Has("to")) {
+		s.failure(w, r, auth.ErrInvalid)
+		return
+	}
+	v, e := s.Admin.OverviewRange(r.Context(), q.Get("range"), q.Get("from"), q.Get("to"))
 	if e != nil {
 		s.failure(w, r, e)
 		return

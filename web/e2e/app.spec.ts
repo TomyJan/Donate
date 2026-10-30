@@ -63,9 +63,7 @@ test('OIDC signs in, shared account and administration, confirm selected operati
   await expect(page.getByRole('dialog').getByText('用户 ID', { exact: true })).toBeVisible();
   await expect(page.getByRole('dialog').getByText('支付渠道流水', { exact: true })).toBeVisible();
   await page.getByRole('dialog').getByRole('button', { name: '导出', exact: true }).click();
-  const exportDialog = page
-    .getByRole('dialog')
-    .filter({ has: page.getByRole('heading', { name: '导出', exact: true }) });
+  const exportDialog = page.getByRole('dialog', { name: '导出', exact: true });
   await expect(exportDialog).toBeVisible();
   const downloadPromise = page.waitForEvent('download');
   await exportDialog.getByRole('button', { name: '确认', exact: true }).click();

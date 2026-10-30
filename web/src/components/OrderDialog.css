@@ -1,0 +1,33 @@
+.d-app .order-amount-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 22px 0;
+  min-width: 0;
+}
+.d-app .order-amount-row .order-amount {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.d-app .order-amount-row .copy-button {
+  min-height: 38px;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+@media (max-width: 440px) {
+  .d-app .order-amount-row {
+    gap: 8px;
+  }
+  .d-app .order-amount-row .order-amount {
+    font-size: clamp(22px, 6vw, 28px);
+  }
+  .d-app .order-amount-row .order-amount > span {
+    display: block;
+    margin-left: 0;
+  }
+  .d-app .order-amount-row .copy-button {
+    padding-inline: 9px;
+  }
+}

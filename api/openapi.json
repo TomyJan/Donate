@@ -7,6 +7,7 @@
             "type": "string"
           },
           "actor": {
+            "description": "Current actor nickname, or the stable system key when unavailable.",
             "type": "string"
           },
           "actor_id": {
@@ -23,12 +24,28 @@
             "type": "string"
           },
           "target": {
+            "description": "Readable current target summary; empty when the target no longer exists. Never an ID or a retained order snapshot.",
             "type": "string"
+          },
+          "target_amount_fen": {
+            "description": "Current order amount in fen. Absent for user targets and physically deleted orders.",
+            "format": "int64",
+            "nullable": true,
+            "type": "integer"
+          },
+          "target_exists": {
+            "description": "Whether the target currently exists. Disable target details when false.",
+            "type": "boolean"
           },
           "target_id": {
             "type": "string"
           },
+          "target_nickname": {
+            "description": "Current target user nickname, or the current order owner's nickname when available. Absent for deleted targets.",
+            "type": "string"
+          },
           "target_type": {
+            "description": "Target kind used to choose the order or user detail view.",
             "type": "string"
           }
         },
@@ -40,6 +57,7 @@
           "id",
           "result",
           "target",
+          "target_exists",
           "target_id",
           "target_type"
         ],
@@ -72,7 +90,18 @@
                 "target": {
                   "type": "string"
                 },
+                "target_amount_fen": {
+                  "format": "int64",
+                  "nullable": true,
+                  "type": "integer"
+                },
+                "target_exists": {
+                  "type": "boolean"
+                },
                 "target_id": {
+                  "type": "string"
+                },
+                "target_nickname": {
                   "type": "string"
                 },
                 "target_type": {
@@ -87,6 +116,7 @@
                 "id",
                 "result",
                 "target",
+                "target_exists",
                 "target_id",
                 "target_type"
               ],
@@ -1870,6 +1900,18 @@
             "name": "sort",
             "required": false,
             "schema": {
+              "enum": [
+                "id",
+                "created_at",
+                "nickname",
+                "amount_fen",
+                "channel",
+                "message",
+                "status",
+                "hidden_order",
+                "hidden_message",
+                "paid_at"
+              ],
               "type": "string"
             }
           },
@@ -2084,7 +2126,49 @@
     },
     "/api/v1/admin/overview": {
       "get": {
+        "description": "All cards and series use one read snapshot and the same selected [from,to) window. Revenue, paid count, daily and channels use paid_at; pending and closed use created_at and current status. Hidden orders count, physically deleted orders do not. Invalid ranges return the VALIDATION_FAILED business code.",
         "operationId": "admin_overview_get",
+        "parameters": [
+          {
+            "description": "Shanghai calendar-day preset. Rolling presets include today and end at tomorrow's midnight; all is unbounded.",
+            "in": "query",
+            "name": "range",
+            "required": false,
+            "schema": {
+              "default": "30d",
+              "enum": [
+                "today",
+                "yesterday",
+                "7d",
+                "30d",
+                "90d",
+                "all",
+                "custom"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "description": "Inclusive RFC3339 instant, required only for custom and forbidden for other ranges.",
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Exclusive RFC3339 instant, required only for custom, later than from, and forbidden for other ranges.",
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "content": {

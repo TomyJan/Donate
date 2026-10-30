@@ -82,9 +82,7 @@ for (const [width, english, dark] of [
       await detail.getByRole('button', { name: t('reconcile'), exact: true }).click();
       await expect(page.locator('.toast').filter({ hasText: t('queued') })).toBeVisible();
       await detail.getByRole('button', { name: t('delete'), exact: true }).click();
-      const confirmation = page
-        .getByRole('dialog')
-        .filter({ has: page.getByRole('heading', { name: t('delete'), exact: true }) });
+      const confirmation = page.getByRole('dialog', { name: t('delete'), exact: true });
       await fitsViewport(confirmation);
       await confirmation.getByRole('button', { name: t('cancel'), exact: true }).click();
       await detail
@@ -97,6 +95,10 @@ for (const [width, english, dark] of [
         .first()
         .click();
       await fitsViewport(page.getByRole('dialog'));
+      await page.screenshot({
+        path: `test-results/admin-user-${width}-${english ? 'en' : 'zh'}.png`,
+        fullPage: true,
+      });
       await page
         .getByRole('dialog')
         .getByRole('button', { name: t('close'), exact: true })

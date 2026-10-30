@@ -1,15 +1,17 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { ArrowLeft, ArrowRight, ChevronDown } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../app/context';
 import { ConstrainedInput } from '../components/ConstrainedInput';
 import { MessageInput } from '../components/MessageInput';
 import { checkout, OrderDialog } from '../components/OrderDialog';
-import { Avatar, Button, Empty, Menu } from '../components/ui';
+import { Button, Empty, Menu } from '../components/ui';
 import { acceptAmountEdit, amountFen } from '../lib/amount';
-import { api, dateTime, money, query } from '../lib/api';
+import { api, query } from '../lib/api';
 import type { Order, Records } from '../lib/types';
+import { HomeReceipt } from './HomeReceipt';
+import { HomeRecordIndex } from './HomeRecordIndex';
 
 type Draft = { amount: string; message: string; channel: string };
 function initialDraft(): Draft {
@@ -31,15 +33,18 @@ export function Home() {
     { t, profile, report } = app;
   const [draft, setDraft] = useState(initialDraft),
     [mine, setMine] = useState(false),
-    [selected, setSelected] = useState(0),
+    [{ selected, direction, previousId }, setSelection] = useState({
+      selected: 0,
+      direction: 1,
+      previousId: null as string | null,
+    }),
     [detail, setDetail] = useState<string | null>(null),
     [busy, setBusy] = useState(false),
     [open, setOpen] = useState(() => innerWidth > 680),
     [height, setHeight] = useState(180);
   const requestKey = useRef(crypto.randomUUID());
   const composer = useRef<HTMLElement>(null),
-    book = useRef<HTMLElement>(null),
-    receipt = useRef<HTMLElement>(null);
+    book = useRef<HTMLElement>(null);
   const reduced = useReducedMotion();
   const list = useInfiniteQuery({
     queryKey: ['records', profile?.id ?? 'guest', mine],
@@ -64,16 +69,13 @@ export function Home() {
       setMine(!!profile);
     }
   }, [app.notify, profile, t]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: remeasure when rendered receipt content or textarea changes.
-  useLayoutEffect(() => {
-    const el = receipt.current;
-    if (!el) return;
-    const measure = () => setHeight(el.offsetHeight);
-    measure();
-    const observer = new ResizeObserver(measure);
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [current?.id, current?.message, app.lang, mine]);
+  const selectRecord = (index: number) => {
+    setSelection((previous) => ({
+      selected: index,
+      direction: index >= previous.selected ? 1 : -1,
+      previousId: records[Math.min(previous.selected, records.length - 1)]?.id ?? null,
+    }));
+  };
   const pay = async () => {
     if (!profile) {
       app.setLoginOpen(true);
@@ -102,7 +104,7 @@ export function Home() {
       app.setLoginOpen(true);
       return;
     }
-    setSelected(0);
+    setSelection({ selected: 0, direction: 1, previousId: null });
     setMine((v) => !v);
   };
   const slip = (
@@ -194,7 +196,7 @@ export function Home() {
               className="d-icon d-ghost"
               aria-label={t('previous')}
               disabled={selected <= 0}
-              onClick={() => setSelected((v) => v - 1)}
+              onClick={() => selectRecord(selected - 1)}
             >
               <ArrowLeft />
             </Button>
@@ -202,104 +204,51 @@ export function Home() {
               className="d-icon d-ghost"
               aria-label={t('next')}
               disabled={selected >= records.length - 1}
-              onClick={() => setSelected((v) => v + 1)}
+              onClick={() => selectRecord(selected + 1)}
             >
               <ArrowRight />
             </Button>
           </div>
         </div>
         {current ? (
-          <motion.div className="r-stack" animate={{ height }} transition={{ duration: reduced ? 0 : 0.28 }}>
-            <AnimatePresence initial={false}>
-              {
-                <motion.article
-                  key={current.id}
-                  ref={receipt}
-                  className="r-ticket r-featured"
-                  initial={{ opacity: 0, x: reduced ? 0 : 15, rotate: reduced ? 0 : 0.6 }}
-                  animate={{ opacity: 1, x: 0, rotate: 0 }}
-                  exit={{ opacity: 0, x: reduced ? 0 : -18, rotate: reduced ? 0 : -0.6 }}
-                  transition={{ duration: reduced ? 0 : 0.24 }}
-                >
-                  <div className="r-person">
-                    <Avatar name={current.nickname} src={current.avatar_url} />
-                    <strong>{current.nickname}</strong>
-                    {mine && current.status !== 'paid' && (
-                      <span className="r-status">{t(current.status)}</span>
-                    )}
-                  </div>
-                  <div className="r-receipt-value">
-                    <div
-                      className="r-receipt-amount"
-                      style={{
-                        fontSize: `${Math.min(64, Math.floor((mine ? 220 : 360) / (money(current.amount_fen).length + 1)))}px`,
-                      }}
-                    >
-                      ¥{money(current.amount_fen)}
-                    </div>
-                    {mine && (
-                      <div className="r-receipt-action">
-                        <Button className="d-ghost" onClick={() => setDetail(current.id)}>
-                          {t('details')}
-                        </Button>
-                        {current.status === 'pending' && (
-                          <Button
-                            className="d-primary"
-                            onClick={() => void checkout(current.id).catch(report)}
-                          >
-                            {t('continue')}
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  {current.message && <p className="r-note">{current.message}</p>}
-                  <div className="r-meta">
-                    <span>{current.province}</span>
-                    <time>{dateTime(current.date)}</time>
-                  </div>
-                </motion.article>
-              }
+          <motion.div
+            className="r-stack"
+            animate={{ height }}
+            transition={{ duration: reduced ? 0 : 0.42, ease: [0.2, 0.75, 0.25, 1] }}
+          >
+            <AnimatePresence initial={false} custom={{ direction, previousId }}>
+              <HomeReceipt
+                key={current.id}
+                record={current}
+                mine={mine}
+                reduced={!!reduced}
+                onHeight={setHeight}
+                onDetail={setDetail}
+              />
             </AnimatePresence>
           </motion.div>
         ) : (
           <Empty text={list.isLoading ? t('loading') : list.error ? t('unavailable') : t('empty')} />
         )}
-        <div className="r-index">
-          {records.map((record, index) => (
-            <button
-              type="button"
-              key={record.id}
-              className="r-index-row"
-              aria-pressed={index === selected}
-              onClick={() => setSelected(index)}
-            >
-              <span className="r-index-label">
-                {mine ? (
-                  <time>{dateTime(record.date)}</time>
-                ) : (
-                  <>
-                    <span>{record.nickname}</span>
-                    <time className="r-index-time">{dateTime(record.date)}</time>
-                  </>
-                )}
-                {mine && record.status !== 'paid' && (
-                  <span className="r-index-status">{t(record.status)}</span>
-                )}
-              </span>
-              <span className="r-index-money">¥{money(record.amount_fen)}</span>
-            </button>
-          ))}
-        </div>
+        <HomeRecordIndex
+          pages={list.data?.pages ?? []}
+          scope={`${profile?.id ?? 'guest'}:${mine}`}
+          mine={mine}
+          selected={selected}
+          reduced={!!reduced}
+          busy={list.isFetching}
+          onSelect={selectRecord}
+        />
         <div className="r-more">
           <Button
             className="d-ghost"
-            disabled={!!profile && !list.hasNextPage && !list.error}
+            disabled={list.isFetching || (!!profile && !list.hasNextPage && !list.error)}
             onClick={() => {
               if (!profile) {
                 app.setLoginOpen(true);
                 return;
               }
+              if (list.isFetching) return;
               if (list.error) void list.refetch();
               else void list.fetchNextPage().catch(report);
             }}

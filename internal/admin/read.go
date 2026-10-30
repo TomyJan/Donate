@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	_ "time/tzdata"
 )
 
 type Filter struct {
@@ -57,7 +58,7 @@ func (s *Service) OrdersList(ctx context.Context, f Filter) (Page[OrderRow], err
 	if e = s.Store.DB.QueryRowContext(ctx, "SELECT count(*) FROM orders o LEFT JOIN users u ON u.id=o.user_id LEFT JOIN identities i ON i.id=u.public_identity_id WHERE "+where, args...).Scan(&out.Total); e != nil {
 		return out, e
 	}
-	allowed := map[string]string{"id": "o.id", "created_at": "o.created_at", "nickname": "i.nickname", "amount_fen": "o.amount_fen", "channel": "o.channel", "status": "o.status", "hidden_order": "o.hidden_order", "hidden_message": "o.hidden_message", "paid_at": "o.paid_at"}
+	allowed := map[string]string{"id": "o.id", "created_at": "o.created_at", "nickname": "i.nickname", "amount_fen": "o.amount_fen", "channel": "o.channel", "message": "o.message", "status": "o.status", "hidden_order": "o.hidden_order", "hidden_message": "o.hidden_message", "paid_at": "o.paid_at"}
 	col := allowed[f.Sort]
 	if col == "" {
 		col = "o.created_at"
@@ -354,20 +355,98 @@ type Overview struct {
 }
 
 func (s *Service) Overview(ctx context.Context) (Overview, error) {
+	return s.OverviewRange(ctx, "30d", "", "")
+}
+
+// overviewWindow resolves calendar presets in Shanghai and exact custom instants.
+// A nil bound represents the unbounded all-time window.
+func overviewWindow(name, from, to string, now time.Time) (*time.Time, *time.Time, error) {
+	if name == "" {
+		name = "30d"
+	}
+	if name != "custom" && (from != "" || to != "") {
+		return nil, nil, auth.ErrInvalid
+	}
+	if name == "custom" {
+		start, e := time.Parse(time.RFC3339, from)
+		if e != nil {
+			return nil, nil, auth.ErrInvalid
+		}
+		end, e := time.Parse(time.RFC3339, to)
+		if e != nil || !start.Before(end) {
+			return nil, nil, auth.ErrInvalid
+		}
+		return &start, &end, nil
+	}
+	if name == "all" {
+		return nil, nil, nil
+	}
+	zone, e := time.LoadLocation("Asia/Shanghai")
+	if e != nil {
+		return nil, nil, e
+	}
+	local := now.In(zone)
+	today := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, zone)
+	start, end := today, today.AddDate(0, 0, 1)
+	switch name {
+	case "today":
+	case "yesterday":
+		start, end = today.AddDate(0, 0, -1), today
+	case "7d":
+		start = today.AddDate(0, 0, -6)
+	case "30d":
+		start = today.AddDate(0, 0, -29)
+	case "90d":
+		start = today.AddDate(0, 0, -89)
+	default:
+		return nil, nil, auth.ErrInvalid
+	}
+	return &start, &end, nil
+}
+
+func (s *Service) OverviewRange(ctx context.Context, name, from, to string) (Overview, error) {
 	out := Overview{Daily: []Metric{}, Channels: []Metric{}}
-	e := s.Store.DB.QueryRowContext(ctx, "SELECT COALESCE(sum(CASE WHEN status='paid' THEN amount_fen ELSE 0 END),0),count(CASE WHEN status='paid' THEN 1 END),count(CASE WHEN status='pending' THEN 1 END),count(CASE WHEN status='closed' THEN 1 END) FROM orders").Scan(&out.PaidFen, &out.Paid, &out.Pending, &out.Closed)
+	start, end, e := overviewWindow(name, from, to, s.Now())
+	if e != nil {
+		return out, e
+	}
+	// Only fixed internal column names are used; all date bounds are bound parameters.
+	window := func(column string) (string, []any) {
+		if start == nil {
+			return "", nil
+		}
+		// Storage timestamps have second precision. Ceiling preserves exact custom
+		// [from,to) semantics even when RFC3339 values contain fractional seconds.
+		ceil := func(at time.Time) int64 {
+			second := at.Unix()
+			if at.Nanosecond() != 0 {
+				second++
+			}
+			return second
+		}
+		return " AND " + column + ">=? AND " + column + "<?", []any{ceil(*start), ceil(*end)}
+	}
+	paidWhere, paidArgs := window("paid_at")
+	createdWhere, createdArgs := window("created_at")
+	// Keep cards and both series in the same read snapshot during concurrent writes.
+	tx, e := s.Store.DB.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if e != nil {
+		return out, e
+	}
+	defer tx.Rollback()
+	e = tx.QueryRowContext(ctx, "SELECT COALESCE(sum(amount_fen),0),count(*) FROM orders WHERE status='paid'"+paidWhere, paidArgs...).Scan(&out.PaidFen, &out.Paid)
+	if e != nil {
+		return out, e
+	}
+	e = tx.QueryRowContext(ctx, "SELECT count(CASE WHEN status='pending' THEN 1 END),count(CASE WHEN status='closed' THEN 1 END) FROM orders WHERE status IN ('pending','closed')"+createdWhere, createdArgs...).Scan(&out.Pending, &out.Closed)
 	if e != nil {
 		return out, e
 	}
 	for _, item := range []struct {
-		expr, where string
-		target      *[]Metric
-	}{{"strftime('%Y-%m-%d',paid_at,'unixepoch','+8 hours')", " AND paid_at>=?", &out.Daily}, {"channel", "", &out.Channels}} {
-		args := []any{}
-		if item.where != "" {
-			args = append(args, s.Now().Add(-30*24*time.Hour).Unix())
-		}
-		rows, e := s.Store.DB.QueryContext(ctx, "SELECT "+item.expr+",sum(amount_fen),count(*) FROM orders WHERE status='paid'"+item.where+" GROUP BY "+item.expr+" ORDER BY "+item.expr, args...)
+		expr   string
+		target *[]Metric
+	}{{"strftime('%Y-%m-%d',paid_at,'unixepoch','+8 hours')", &out.Daily}, {"channel", &out.Channels}} {
+		rows, e := tx.QueryContext(ctx, "SELECT "+item.expr+",sum(amount_fen),count(*) FROM orders WHERE status='paid'"+paidWhere+" GROUP BY "+item.expr+" ORDER BY "+item.expr, paidArgs...)
 		if e != nil {
 			return out, e
 		}
@@ -385,19 +464,22 @@ func (s *Service) Overview(ctx context.Context) (Overview, error) {
 			return out, e
 		}
 	}
-	return out, nil
+	return out, tx.Commit()
 }
 
 type Audit struct {
-	ID         string    `json:"id"`
-	ActorID    string    `json:"actor_id"`
-	Actor      string    `json:"actor"`
-	Action     string    `json:"action"`
-	TargetType string    `json:"target_type"`
-	TargetID   string    `json:"target_id"`
-	Target     string    `json:"target"`
-	Result     string    `json:"result"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID              string    `json:"id"`
+	ActorID         string    `json:"actor_id"`
+	Actor           string    `json:"actor"`
+	Action          string    `json:"action"`
+	TargetType      string    `json:"target_type"`
+	TargetID        string    `json:"target_id"`
+	Target          string    `json:"target"`
+	TargetExists    bool      `json:"target_exists"`
+	TargetNickname  string    `json:"target_nickname,omitempty"`
+	TargetAmountFen *int64    `json:"target_amount_fen,omitempty"`
+	Result          string    `json:"result"`
+	CreatedAt       time.Time `json:"created_at"`
 }
 
 func (s *Service) Audit(ctx context.Context, f Filter) (Page[Audit], error) {
@@ -412,7 +494,7 @@ func (s *Service) Audit(ctx context.Context, f Filter) (Page[Audit], error) {
 	if e := s.Store.DB.QueryRowContext(ctx, "SELECT count(*) FROM audit_events a WHERE "+where, args...).Scan(&out.Total); e != nil {
 		return out, e
 	}
-	col := map[string]string{"created_at": "a.created_at", "id": "a.id", "actor": "i.nickname", "action": "a.action", "target": "COALESCE(o.merchant_order_no,ti.nickname,'')", "result": "a.result"}[f.Sort]
+	col := map[string]string{"created_at": "a.created_at", "id": "a.id", "actor": "i.nickname", "action": "a.action", "target": "COALESCE(oi.nickname,ti.nickname,'')", "result": "a.result"}[f.Sort]
 	if col == "" {
 		col = "a.created_at"
 	}
@@ -420,7 +502,7 @@ func (s *Service) Audit(ctx context.Context, f Filter) (Page[Audit], error) {
 	if f.Direction == "asc" {
 		dir = " ASC"
 	}
-	rows, e := s.Store.DB.QueryContext(ctx, "SELECT a.id,a.actor_id,COALESCE(i.nickname,'系统'),a.action,a.target_type,a.target_id,CASE WHEN a.target_type='order' THEN COALESCE(o.merchant_order_no,'已删除') ELSE COALESCE(ti.nickname,'已删除') END,a.result,a.created_at FROM audit_events a LEFT JOIN users u ON u.id=a.actor_id LEFT JOIN identities i ON i.id=u.public_identity_id LEFT JOIN orders o ON a.target_type='order' AND o.id=a.target_id LEFT JOIN users tu ON a.target_type='user' AND tu.id=a.target_id LEFT JOIN identities ti ON ti.id=tu.public_identity_id WHERE "+where+" ORDER BY "+col+dir+",a.id"+dir+" LIMIT ? OFFSET ?", append(args, size, (page-1)*size)...)
+	rows, e := s.Store.DB.QueryContext(ctx, "SELECT a.id,a.actor_id,COALESCE(NULLIF(i.nickname,''),'system'),a.action,a.target_type,a.target_id,CASE WHEN a.target_type='order' THEN o.id IS NOT NULL WHEN a.target_type='user' THEN tu.id IS NOT NULL ELSE 0 END,CASE WHEN a.target_type='order' THEN COALESCE(oi.nickname,'') ELSE COALESCE(ti.nickname,'') END,o.amount_fen,a.result,a.created_at FROM audit_events a LEFT JOIN users u ON u.id=a.actor_id LEFT JOIN identities i ON i.id=u.public_identity_id LEFT JOIN orders o ON a.target_type='order' AND o.id=a.target_id LEFT JOIN users ou ON ou.id=o.user_id LEFT JOIN identities oi ON oi.id=ou.public_identity_id LEFT JOIN users tu ON a.target_type='user' AND tu.id=a.target_id LEFT JOIN identities ti ON ti.id=tu.public_identity_id WHERE "+where+" ORDER BY "+col+dir+",a.id"+dir+" LIMIT ? OFFSET ?", append(args, size, (page-1)*size)...)
 	if e != nil {
 		return out, e
 	}
@@ -429,8 +511,21 @@ func (s *Service) Audit(ctx context.Context, f Filter) (Page[Audit], error) {
 		var a Audit
 		var id, actor, target []byte
 		var at int64
-		if e = rows.Scan(&id, &actor, &a.Actor, &a.Action, &a.TargetType, &target, &a.Target, &a.Result, &at); e != nil {
+		var amount sql.NullInt64
+		if e = rows.Scan(&id, &actor, &a.Actor, &a.Action, &a.TargetType, &target, &a.TargetExists, &a.TargetNickname, &amount, &a.Result, &at); e != nil {
 			return out, e
+		}
+		if a.TargetExists {
+			a.Target = a.TargetNickname
+			if a.TargetType == "order" && amount.Valid {
+				a.TargetAmountFen = &amount.Int64
+				price := fmt.Sprintf("¥%d.%02d", amount.Int64/100, amount.Int64%100)
+				if a.Target == "" {
+					a.Target = price
+				} else {
+					a.Target += " · " + price
+				}
+			}
 		}
 		a.ID = storage.IDString(id)
 		a.ActorID = storage.IDString(actor)

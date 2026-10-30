@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { useApp } from '../app/context';
 import { dateTime, money } from '../lib/api';
 import type { Audit, Order, User } from '../lib/types';
+import { MessagePreview } from './MessagePreview';
 import { Button } from './ui';
 
 type Kind = 'orders' | 'users' | 'audit';
@@ -25,6 +26,7 @@ const columns: Record<Kind, [string, string][]> = {
     ['amount_fen', 'amount'],
     ['channel', 'channel'],
     ['status', 'status'],
+    ['message', 'messageColumn'],
     ['hidden_order', 'orderVisible'],
     ['hidden_message', 'messageVisible'],
   ],
@@ -55,7 +57,7 @@ export function AdminTable({
   onDetails,
   onTarget,
 }: Props) {
-  const { t, notify, report } = useApp();
+  const { t } = useApp();
   const headers: [string, string][] = [['created_at', 'time'], ...columns[kind]];
   const cell = (field: string, label: string, content: ReactNode) => (
     <td key={field} data-field={field} data-label={t(label)}>
@@ -74,6 +76,7 @@ export function AdminTable({
           'status',
           <span className={`a-badge ${o.status === 'paid' ? 'a-paid' : 'a-muted'}`}>{t(o.status)}</span>,
         ),
+        cell('message', 'messageColumn', <MessagePreview message={o.message} />),
         cell('hidden_order', 'orderVisible', t(o.hidden_order ? 'yes' : 'no')),
         cell('hidden_message', 'messageVisible', t(o.hidden_message ? 'yes' : 'no')),
       ];
@@ -91,17 +94,30 @@ export function AdminTable({
     }
     const a = row as Audit;
     return [
-      cell('actor', 'actor', a.actor),
-      cell('action', 'action', a.action),
+      cell('actor', 'actor', a.actor === 'system' ? t('systemActor') : a.actor),
+      cell('action', 'action', t(`audit_${a.action.replaceAll('.', '_')}`)),
       cell(
         'target',
         'target',
-        <button type="button" className="text-button" onClick={() => onTarget(a.target_type, a.target_id)}>
-          {a.target}
-          <small className="a-sub">{a.target_id.slice(0, 8)}</small>
+        <button
+          type="button"
+          className="text-button audit-target"
+          disabled={!a.target_exists}
+          onClick={() => onTarget(a.target_type, a.target_id)}
+        >
+          {a.target_exists ? (
+            <>
+              <span>{a.target_nickname || t(a.target_type === 'order' ? 'orderTarget' : 'userTarget')}</span>
+              {a.target_type === 'order' && a.target_amount_fen != null && (
+                <small>¥{money(a.target_amount_fen)}</small>
+              )}
+            </>
+          ) : (
+            t(a.target_type === 'order' ? 'deletedOrder' : 'deletedUser')
+          )}
         </button>,
       ),
-      cell('result', 'result', t(a.result)),
+      cell('result', 'result', t(a.result === 'created' ? 'createdResult' : a.result)),
     ];
   }
   return (
@@ -148,9 +164,11 @@ export function AdminTable({
                 </button>
               </th>
             ))}
-            <th data-field="details">
-              <span className="d-sr">{t('details')}</span>
-            </th>
+            {kind !== 'audit' && (
+              <th data-field="details">
+                <span className="d-sr">{t('details')}</span>
+              </th>
+            )}
           </tr>
         </thead>
         <tbody>
@@ -169,30 +187,19 @@ export function AdminTable({
               )}
               <td data-field="created_at">
                 <time>{dateTime(row.created_at)}</time>
-                <button
-                  type="button"
-                  className="a-sub text-button"
-                  aria-label={`${t('copy')} ${row.id}`}
-                  onClick={() =>
-                    void navigator.clipboard
-                      .writeText(row.id)
-                      .then(() => notify(t('copied')))
-                      .catch(report)
-                  }
-                >
-                  {row.id.slice(0, 8)}
-                </button>
               </td>
               {fields(row)}
-              <td data-field="details">
-                <Button
-                  className="a-icon d-ghost"
-                  aria-label={`${t(kind === 'users' ? 'userDetail' : 'details')} ${row.id.slice(0, 8)}`}
-                  onClick={() => onDetails(row)}
-                >
-                  <Ellipsis />
-                </Button>
-              </td>
+              {kind !== 'audit' && (
+                <td data-field="details">
+                  <Button
+                    className="a-icon d-ghost"
+                    aria-label={`${t(kind === 'users' ? 'userDetail' : 'details')} ${row.id.slice(0, 8)}`}
+                    onClick={() => onDetails(row)}
+                  >
+                    <Ellipsis />
+                  </Button>
+                </td>
+              )}
             </tr>
           ))}
         </tbody>

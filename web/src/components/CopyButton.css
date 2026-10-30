@@ -1,0 +1,49 @@
+.copy-button {
+  position: relative;
+  flex-shrink: 0;
+}
+.copy-button-content {
+  display: grid;
+}
+.copy-button-default,
+.copy-button-success {
+  grid-area: 1 / 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+  transition:
+    opacity 150ms ease,
+    transform 150ms ease;
+}
+.copy-button-success {
+  opacity: 0;
+  transform: translateY(5px) scale(0.95);
+}
+.copy-button[data-copied="true"] .copy-button-default {
+  opacity: 0;
+  transform: translateY(-5px) scale(0.95);
+}
+.copy-button[data-copied="true"] .copy-button-success {
+  opacity: 1;
+  transform: none;
+}
+.copy-button-announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+@media (prefers-reduced-motion: reduce) {
+  .copy-button .copy-button-default,
+  .copy-button .copy-button-success,
+  .copy-button[data-copied="true"] .copy-button-default,
+  .copy-button[data-copied="true"] .copy-button-success {
+    transition: none;
+    transform: none;
+  }
+}

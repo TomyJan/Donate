@@ -1,0 +1,45 @@
+.d-app {
+  --site-header-height: 104px;
+}
+.d-app .d-top {
+  position: sticky;
+  top: 0;
+  z-index: 60;
+  flex: 0 0 var(--site-header-height);
+  height: var(--site-header-height);
+  min-height: var(--site-header-height);
+  max-height: var(--site-header-height);
+  background: color-mix(in srgb, var(--d-bg) 94%, transparent);
+  backdrop-filter: blur(16px);
+  will-change: transform;
+}
+.d-app .d-nickname {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.d-app .back-to-top {
+  position: fixed;
+  bottom: max(24px, env(safe-area-inset-bottom));
+  right: 24px;
+  z-index: 80;
+}
+.d-app .back-to-top .d-btn {
+  box-shadow: var(--d-shadow);
+  background: var(--d-paper);
+}
+@media (max-width: 680px) {
+  .d-app {
+    --site-header-height: 90px;
+  }
+  .d-app .back-to-top {
+    right: 16px;
+    bottom: max(16px, env(safe-area-inset-bottom));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .d-app .d-top {
+    will-change: auto;
+  }
+}

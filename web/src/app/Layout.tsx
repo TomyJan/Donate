@@ -2,6 +2,8 @@ import { Check, Languages, LogOut, Monitor, Moon, Settings, Sun, UserRound, X } 
 import { AnimatePresence, motion } from 'motion/react';
 import { Suspense, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router';
+import { IdentityBindings } from '../components/IdentityBindings';
+import { BackToTop, ScrollHeader } from '../components/ScrollChrome';
 import type { MenuItem } from '../components/ui';
 import { Avatar, Button, Menu, Modal } from '../components/ui';
 import { useApp } from './context';
@@ -47,7 +49,7 @@ export function Layout() {
         lang={app.lang}
         style={{ colorScheme: app.theme === 'system' ? 'light dark' : app.theme }}
       >
-        <header className="d-top" data-component="site-header">
+        <ScrollHeader>
           <div className="d-identity">
             <Link className="d-brand" to="/">
               <img
@@ -118,7 +120,7 @@ export function Layout() {
               </Button>
             )}
           </nav>
-        </header>
+        </ScrollHeader>
         <Suspense fallback={<main className="a-main">{t('loading')}</main>}>
           <Outlet />
         </Suspense>
@@ -155,36 +157,7 @@ export function Layout() {
                   <span className="d-account-id">{profile.id}</span>
                 </div>
               </div>
-              <div className="d-bindings">
-                {['qq', 'oidc'].map((provider) => {
-                  const identity = profile.bindings.find((v) => v.provider === provider);
-                  return (
-                    <div className="d-bind" key={provider}>
-                      {identity ? (
-                        <Avatar name={identity.nickname} src={identity.avatar_url} />
-                      ) : (
-                        <span className="d-avatar">{provider === 'qq' ? 'Q' : 'O'}</span>
-                      )}
-                      <div className="d-bind-info">
-                        <p>{provider.toUpperCase()}</p>
-                        <span className="d-secondary">{identity?.nickname ?? t('unbound')}</span>
-                      </div>
-                      <div className="d-bind-action">
-                        {identity ? (
-                          t('bound')
-                        ) : (
-                          <Button
-                            disabled={!site?.providers.includes(provider)}
-                            onClick={() => setBinding(provider)}
-                          >
-                            {t('bind')}
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+              <IdentityBindings bindings={profile.bindings} available={site?.providers} onBind={setBinding} />
             </>
           )}
         </Modal>
@@ -197,6 +170,7 @@ export function Layout() {
             </Button>
           </div>
         </Modal>
+        <BackToTop />
         <section className="toast-stack" aria-label={app.lang === 'en' ? 'Notifications' : '消息通知'}>
           <AnimatePresence initial={false}>
             {app.toasts.map((toast) => (
