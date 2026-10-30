@@ -1,8 +1,9 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useApp } from '../app/context';
 import { APIError, api, query } from '../lib/api';
 import { clearPaymentReturn, paymentReturnTarget } from '../lib/payment-return';
-import type { Order } from '../lib/types';
+import type { Order, Profile } from '../lib/types';
 
 type Phase = 'idle' | 'login' | 'checking' | 'pending' | 'error' | 'confirmed' | 'filing' | 'complete';
 type State = { phase: Phase; order?: Order; error?: unknown };
@@ -10,15 +11,22 @@ const minimumStatusMs = 1000;
 
 export function usePaymentReturn() {
   const { profile, loading } = useApp();
+  const client = useQueryClient();
   const [target, setTarget] = useState(paymentReturnTarget);
   const [dismissed, setDismissed] = useState(false);
   const [state, setState] = useState<State>({ phase: target.requested ? 'checking' : 'idle' });
   const checkingSince = useRef<number | null>(target.requested ? performance.now() : null);
   const owner = profile?.id ?? '';
+  const csrfToken = profile?.csrf_token;
 
   useEffect(() => {
     if (!target.requested || dismissed || loading) return;
     const controller = new AbortController();
+    // A cached identity can change before React cleans up this effect.
+    const isCurrent = () => {
+      const live = client.getQueryData<Profile | null>(['profile']);
+      return (live?.id ?? '') === owner && live?.csrf_token === csrfToken;
+    };
     let timer: ReturnType<typeof setTimeout>;
     if (target.id && owner) {
       checkingSince.current ??= performance.now();
@@ -28,7 +36,7 @@ export function usePaymentReturn() {
     const settle = (next: State) => {
       const remaining = startedAt === null ? 0 : minimumStatusMs - (performance.now() - startedAt);
       const publish = () => {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || !isCurrent()) return;
         checkingSince.current = null;
         setState(next);
       };
@@ -43,8 +51,9 @@ export function usePaymentReturn() {
           `order/detail?${query({ id: target.id })}`,
           undefined,
           controller.signal,
+          isCurrent,
         );
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || !isCurrent()) return;
         // Even admins must only celebrate their own payment; the locator is not authentication.
         if (order.id !== target.id || order.user_id !== owner) throw new APIError('FORBIDDEN', '', 403);
         if (order.status === 'paid') {
@@ -58,7 +67,7 @@ export function usePaymentReturn() {
         }
         timer = setTimeout(() => void check(), 2500);
       } catch (error) {
-        if (controller.signal.aborted) return;
+        if (controller.signal.aborted || !isCurrent()) return;
         const code = error instanceof APIError ? error.code : '';
         if (
           ++failures < 3 &&
@@ -76,7 +85,7 @@ export function usePaymentReturn() {
       controller.abort();
       clearTimeout(timer);
     };
-  }, [target, dismissed, loading, owner]);
+  }, [target, dismissed, loading, owner, csrfToken, client]);
 
   useEffect(() => {
     if (state.phase !== 'confirmed') return;

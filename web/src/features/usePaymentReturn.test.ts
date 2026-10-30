@@ -1,10 +1,19 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, renderHook } from '@testing-library/react';
+import { createElement, type ReactNode } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { Order } from '../lib/types';
 import { usePaymentReturn } from './usePaymentReturn';
 
 const app = vi.hoisted(() => ({ profile: { id: 'return-user' } as { id: string } | null, loading: false }));
+let client: QueryClient;
 vi.mock('../app/context', () => ({ useApp: () => app }));
+function renderReturn() {
+  return renderHook(() => usePaymentReturn(), {
+    wrapper: ({ children }: { children: ReactNode }) =>
+      createElement(QueryClientProvider, { client }, children),
+  });
+}
 
 const order: Order = {
   id: '68f15e68-143e-4b30-a2a9-87c0df4c5479',
@@ -43,9 +52,12 @@ beforeEach(() => {
   history.replaceState(null, '', `/?payment=returned&order=${order.id}`);
   app.profile = { id: order.user_id };
   app.loading = false;
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(['profile'], app.profile);
 });
 afterEach(() => {
   cleanup();
+  client.clear();
   vi.useRealTimers();
   vi.unstubAllGlobals();
   history.replaceState(null, '', '/');
@@ -58,7 +70,7 @@ it.each([
   ['UNAUTHORIZED', 'paid', 'login'],
 ])('keeps checking visible for a full second before a fast %s/%s result', async (code, status, phase) => {
   vi.stubGlobal('fetch', async () => response(code, status));
-  const { result } = renderHook(() => usePaymentReturn());
+  const { result } = renderReturn();
   await act(async () => {});
   expect(result.current.phase).toBe('checking');
   await advance(999);
@@ -83,7 +95,7 @@ it('counts request time toward the minimum instead of delaying a slow success an
         resolve = done;
       }),
   );
-  const { result } = renderHook(() => usePaymentReturn());
+  const { result } = renderReturn();
   await advance(1500);
   expect(result.current.phase).toBe('checking');
   await act(async () => {
@@ -101,9 +113,10 @@ it('does not restart the visible checking time when a slow HTTP 401 clears the s
         resolve = done;
       }),
   );
-  const { result, rerender } = renderHook(() => usePaymentReturn());
+  const { result, rerender } = renderReturn();
   const clearSession = () => {
     app.profile = null;
+    client.setQueryData(['profile'], null);
     rerender();
   };
   window.addEventListener('session-invalid', clearSession);
@@ -122,7 +135,7 @@ it('does not restart the visible checking time when a slow HTTP 401 clears the s
 it('applies the same minimum to a manual retry without keeping an old failure', async () => {
   let recovered = false;
   vi.stubGlobal('fetch', async () => response(recovered ? 'OK' : 'ORDER_NOT_FOUND'));
-  const { result } = renderHook(() => usePaymentReturn());
+  const { result } = renderReturn();
   await advance(1000);
   expect(result.current.phase).toBe('error');
   recovered = true;
@@ -136,7 +149,7 @@ it('applies the same minimum to a manual retry without keeping an old failure', 
 
 it('cancels a delayed result when the visitor chooses to check later', async () => {
   vi.stubGlobal('fetch', async () => response());
-  const { result } = renderHook(() => usePaymentReturn());
+  const { result } = renderReturn();
   await advance(500);
   act(() => result.current.leave());
   await advance(3000);
@@ -147,9 +160,10 @@ it('cancels a delayed result when the visitor chooses to check later', async () 
 
 it('discards a scheduled success if the signed-in account changes', async () => {
   vi.stubGlobal('fetch', async () => response());
-  const { result, rerender } = renderHook(() => usePaymentReturn());
+  const { result, rerender } = renderReturn();
   await advance(500);
   app.profile = { id: 'different-user' };
+  client.setQueryData(['profile'], app.profile);
   rerender();
   await advance(499);
   expect(result.current.phase).toBe('checking');

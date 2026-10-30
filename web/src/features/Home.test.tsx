@@ -130,6 +130,7 @@ function renderHome(
     defaultOptions: { queries: { retry: false, staleTime: Infinity } },
   });
   clients.push(client);
+  client.setQueryData(['profile'], app.profile);
   const seed = (owner: string, mine: boolean, items: RecordItem[] = []) =>
     client.setQueryData(['records', owner, mine], {
       pages: [{ items, next_cursor: '' }],
@@ -154,7 +155,16 @@ function renderHome(
     </QueryClientProvider>
   );
   const view = render(node());
-  return { ...view, client, seed, listRequests, rerenderHome: () => view.rerender(node()) };
+  return {
+    ...view,
+    client,
+    seed,
+    listRequests,
+    rerenderHome: () => {
+      client.setQueryData(['profile'], app.profile);
+      view.rerender(node());
+    },
+  };
 }
 function receipt(container: HTMLElement) {
   return container.querySelector('.receipt-destination > .r-stack:not(.payment-arrival-stack) .r-featured');
