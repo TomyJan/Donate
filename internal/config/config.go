@@ -41,7 +41,11 @@ func env(name, fallback string) string {
 }
 
 func Load() (Config, error) {
-	values, err := godotenv.Read(".env")
+	data, err := os.ReadFile(".env")
+	var values map[string]string
+	if err == nil {
+		values, err = parseEnv(data)
+	}
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return Config{}, errors.New("读取 .env 失败，请检查文件格式与权限")
 	}
@@ -144,6 +148,48 @@ func Load() (Config, error) {
 	}
 	c.DataDir, err = filepath.Abs(c.DataDir)
 	return c, err
+}
+
+// godotenv treats an empty unquoted assignment's trailing comment as its value.
+// Normalize whitespace-separated comments only, preserving literal hashes,
+// quoted/multiline content and the library's KEY: value syntax.
+func parseEnv(data []byte) (map[string]string, error) {
+	var normalized strings.Builder
+	var quote byte
+	for _, line := range strings.SplitAfter(string(data), "\n") {
+		value := line
+		if quote == 0 {
+			if strings.HasPrefix(strings.TrimLeft(line, " \t"), "#") {
+				normalized.WriteString(line)
+				continue
+			}
+			separator := strings.IndexAny(line, "=:")
+			if separator < 0 {
+				normalized.WriteString(line)
+				continue
+			}
+			tail := line[separator+1:]
+			value = strings.TrimLeft(tail, " \t")
+			if len(value) < len(tail) && strings.HasPrefix(value, "#") {
+				normalized.WriteString(line[:len(line)-len(value)])
+				normalized.WriteString("\"\" " + value)
+				continue
+			}
+			if len(value) == 0 || value[0] != '\'' && value[0] != '"' {
+				normalized.WriteString(line)
+				continue
+			}
+			quote, value = value[0], value[1:]
+		}
+		for i := range len(value) {
+			if value[i] == quote && (i == 0 || value[i-1] != '\\') {
+				quote = 0
+				break
+			}
+		}
+		normalized.WriteString(line)
+	}
+	return godotenv.Unmarshal(normalized.String())
 }
 
 // The public ID is a routing identifier. Stored OIDC identity keys remain issuer + subject.

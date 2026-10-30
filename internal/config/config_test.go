@@ -1,12 +1,100 @@
 package config
 
 import (
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 )
+
+func TestLoadAcceptsEmptyAdminIDsWithInlineComment(t *testing.T) {
+	for _, value := range []string{"", "   ", "   # 登录后再填写", "\"\" # 登录后再填写"} {
+		t.Run(value, func(t *testing.T) {
+			t.Chdir(t.TempDir())
+			t.Setenv("APP_ENV", "development")
+			t.Setenv("PUBLIC_URL", "http://127.0.0.1:8080")
+			t.Setenv("ADMIN_USER_IDS", "")
+			if err := os.Unsetenv("ADMIN_USER_IDS"); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(".env", []byte("ADMIN_USER_IDS="+value+"\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			c, err := Load()
+			if err != nil || len(c.AdminIDs) != 0 {
+				t.Fatalf("empty admin list must allow bootstrap: admins=%d error=%v", len(c.AdminIDs), err)
+			}
+		})
+	}
+}
+
+func TestExampleEnvironmentBootsWithEmptyOptionalSettings(t *testing.T) {
+	contents, err := os.ReadFile("../../.env.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Chdir(t.TempDir())
+	for _, line := range strings.Split(string(contents), "\n") {
+		key, _, ok := strings.Cut(line, "=")
+		if ok {
+			t.Setenv(strings.TrimSpace(key), "")
+			if err := os.Unsetenv(strings.TrimSpace(key)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	t.Setenv("APP_SECRET", base64.StdEncoding.EncodeToString(make([]byte, 32)))
+	if err := os.WriteFile(".env", contents, 0600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(c.AdminIDs) != 0 || c.OIDCissuer != "" || c.QQappID != "" || c.EpayURL != "" || c.RealIPHeader != "" {
+		t.Fatal("empty optional settings became non-empty")
+	}
+}
+
+func TestLoadPreservesQuotedHashesAndMultilineValues(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("PUBLIC_URL", "http://127.0.0.1:8080")
+	for _, key := range []string{"ADMIN_USER_IDS", "OIDC_NAME", "EPAY_PRIVATE_KEY"} {
+		t.Setenv(key, "")
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatal(err)
+		}
+	}
+	contents := "ADMIN_USER_IDS= # optional\nOIDC_NAME=\"Campus # login\" # comment\nEPAY_PRIVATE_KEY=\"first\nINSIDE= # literal content\nlast\"\n"
+	if err := os.WriteFile(".env", []byte(contents), 0600); err != nil {
+		t.Fatal(err)
+	}
+	c, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.OIDCname != "Campus # login" || c.EpayPrivateKey != "first\nINSIDE= # literal content\nlast" {
+		t.Fatal("quoted environment values were modified")
+	}
+}
+
+func TestParseEnvPreservesLiteralHashAndYAMLMultilineValues(t *testing.T) {
+	newline, quote := string(rune(10)), string(rune(34))
+	for _, tc := range []struct{ name, input, key, want string }{
+		{"literal hash", "OIDC_CLIENT_SECRET=#literal", "OIDC_CLIENT_SECRET", "#literal"},
+		{"YAML multiline", strings.Join([]string{"OIDC_NAME: " + quote + "first", "INSIDE= # literal", "last" + quote}, newline), "OIDC_NAME", strings.Join([]string{"first", "INSIDE= # literal", "last"}, newline)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			values, err := parseEnv([]byte(tc.input))
+			if err != nil || values[tc.key] != tc.want {
+				t.Fatalf("value = %q, error = %v", values[tc.key], err)
+			}
+		})
+	}
+}
 
 func TestLoadDefaultsToWorkingDirectory(t *testing.T) {
 	t.Chdir(t.TempDir())
