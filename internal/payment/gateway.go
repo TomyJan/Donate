@@ -19,12 +19,6 @@ import (
 
 var ErrUnavailable = errors.New("易支付暂不可用或返回未知结果")
 
-type retryError struct{ wait time.Duration }
-
-func (e *retryError) Error() string             { return ErrUnavailable.Error() }
-func (e *retryError) Unwrap() error             { return ErrUnavailable }
-func (e *retryError) RetryAfter() time.Duration { return e.wait }
-
 func retryDelay(value string, now time.Time) time.Duration {
 	var wait time.Duration
 	if seconds, e := strconv.ParseInt(value, 10, 32); e == nil {
@@ -71,6 +65,9 @@ func (g *Gateway) account(o order.Order) error {
 	return nil
 }
 func (g *Gateway) call(ctx context.Context, path, protocol string, values map[string]string) (map[string]string, error) {
+	failure := func(stage string, status int, base error) *gatewayFailure {
+		return &gatewayFailure{operation: path, stage: stage, status: status, code: "missing", reason: stage, base: base}
+	}
 	values["pid"] = g.Config.EpayPID
 	form := url.Values{}
 	method := "POST"
@@ -103,26 +100,27 @@ func (g *Gateway) call(ctx context.Context, path, protocol string, values map[st
 	req.Header.Set("Accept", "application/json")
 	r, e := g.HTTP.Do(req)
 	if e != nil {
-		return nil, ErrUnavailable
+		f := failure("transport", 0, ErrUnavailable)
+		f.reason = transportReason(e)
+		return nil, f
 	}
 	defer r.Body.Close()
 	if r.StatusCode != 200 {
-		if wait := retryDelay(r.Header.Get("Retry-After"), g.Now()); wait > 0 {
-			return nil, &retryError{wait: wait}
-		}
-		return nil, ErrUnavailable
+		f := failure("http_status", r.StatusCode, ErrUnavailable)
+		f.wait = retryDelay(r.Header.Get("Retry-After"), g.Now())
+		return nil, f
 	}
 	b, e := io.ReadAll(io.LimitReader(r.Body, 64*1024+1))
 	if e != nil || len(b) > 64*1024 {
-		return nil, ErrProtocol
+		return nil, failure("response_body", r.StatusCode, ErrProtocol)
 	}
 	var raw map[string]json.RawMessage
 	decoder := json.NewDecoder(bytes.NewReader(b))
 	if e = decoder.Decode(&raw); e != nil || raw == nil {
-		return nil, ErrProtocol
+		return nil, failure("response_json", r.StatusCode, ErrProtocol)
 	}
 	if decoder.Decode(&struct{}{}) != io.EOF {
-		return nil, ErrProtocol
+		return nil, failure("response_json", r.StatusCode, ErrProtocol)
 	}
 	out := map[string]string{}
 	for k, v := range raw {
@@ -142,18 +140,25 @@ func (g *Gateway) call(ctx context.Context, path, protocol string, values map[st
 		if len(v) > 0 && (v[0] == '[' || v[0] == '{') {
 			continue
 		}
-		return nil, ErrProtocol
+		return nil, failure("response_field_type", r.StatusCode, ErrProtocol)
 	}
 	code := out["code"]
+	if protocol == "v2" && code != "0" || protocol == "v1" && code != "1" {
+		f := failure("upstream_rejected", r.StatusCode, ErrUnavailable)
+		f.code, f.reason = diagnosticCode(code), rejectionReason(out["msg"])
+		return nil, f
+	}
 	if protocol == "v2" {
-		if code != "0" {
-			return nil, ErrUnavailable
-		}
 		if e = g.verify(out, protocol); e != nil {
-			return nil, e
+			f := failure("response_signature", r.StatusCode, ErrProtocol)
+			f.code = diagnosticCode(code)
+			if out["sign_type"] != "RSA" {
+				f.reason = "response_signature_type"
+			} else if at, err := strconv.ParseInt(out["timestamp"], 10, 64); err != nil || at < g.Now().Unix()-300 || at > g.Now().Unix()+300 {
+				f.reason = "response_timestamp"
+			}
+			return nil, f
 		}
-	} else if code != "1" {
-		return nil, ErrUnavailable
 	}
 	return out, nil
 }
@@ -182,7 +187,13 @@ func (g *Gateway) Create(ctx context.Context, o order.Order) (Checkout, string, 
 		return Checkout{}, "", e
 	}
 	if out["trade_no"] == "" || out["pay_type"] != "jump" || !g.validRedirect(out["pay_info"]) {
-		return Checkout{}, "", ErrProtocol
+		reason := "checkout_redirect_not_allowed"
+		if out["trade_no"] == "" {
+			reason = "checkout_trade_missing"
+		} else if out["pay_type"] != "jump" {
+			reason = "checkout_type_unsupported"
+		}
+		return Checkout{}, "", &gatewayFailure{operation: "api/pay/create", stage: "checkout", status: 200, code: "0", reason: reason, base: ErrProtocol}
 	}
 	return Checkout{Mode: "redirect", URL: out["pay_info"]}, out["trade_no"], nil
 }

@@ -84,7 +84,9 @@ func (s *Service) Start(ctx context.Context, id, userID string) (Checkout, error
 		obs, err := s.Gateway.Query(ctx, o)
 		if err != nil {
 			release("unknown")
-			return Checkout{}, ErrUnavailable
+			reason := Diagnostic(err)
+			s.Orders.Log.Warn(fmt.Sprintf("订单 %s 的支付提交 %s 恢复查单失败：%s，保留原单号等待核验", id, lease, reason), "order_id", id, "request_id", lease, "error", reason)
+			return Checkout{}, err
 		}
 		obs.Source = "submission_recovery"
 		obs.RequestID = lease
@@ -100,7 +102,8 @@ func (s *Service) Start(ctx context.Context, id, userID string) (Checkout, error
 	checkout, trade, e := s.Gateway.Create(ctx, o)
 	if e != nil {
 		release("unknown")
-		s.Orders.Log.Warn(fmt.Sprintf("订单 %s 的支付提交 %s 结果未知，保留原单号等待核验", id, lease), "order_id", id, "request_id", lease)
+		reason := Diagnostic(e)
+		s.Orders.Log.Warn(fmt.Sprintf("订单 %s 的支付提交 %s 结果未知：%s，保留原单号等待核验", id, lease, reason), "order_id", id, "request_id", lease, "error", reason)
 		return Checkout{}, e
 	}
 	e = s.Orders.Store.Write(ctx, func(tx *sql.Tx) error {

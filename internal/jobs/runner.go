@@ -11,6 +11,7 @@ import (
 
 	"github.com/TomyJan/Donate/internal/geo"
 	"github.com/TomyJan/Donate/internal/order"
+	"github.com/TomyJan/Donate/internal/payment"
 	"github.com/TomyJan/Donate/internal/storage"
 )
 
@@ -158,7 +159,7 @@ func (r *Runner) Execute(parent context.Context, j Job) {
 	queryCancel()
 	r.health(e)
 	if e != nil {
-		r.retry(ctx, j, o, "query_failed")
+		r.retry(ctx, j, o, "query_failed", e)
 		return
 	}
 	obs.JobID = j.ID
@@ -205,7 +206,11 @@ func (r *Runner) finish(ctx context.Context, j Job, status, result string, next 
 		r.Queue.Log.Info(fmt.Sprintf("订单 %s 的任务 %s 本次结果 %s，任务状态 %s", j.OrderID, j.ID, result, status), "order_id", j.OrderID, "job_id", j.ID, "result", result, "next_at", next)
 	}
 }
-func (r *Runner) retry(ctx context.Context, j Job, o order.Order, result string) {
+func (r *Runner) retry(ctx context.Context, j Job, o order.Order, result string, causes ...error) {
+	reason := ""
+	if len(causes) > 0 {
+		reason = payment.Diagnostic(causes[0])
+	}
 	now := r.Queue.Now()
 	delays := []time.Duration{time.Minute, 2 * time.Minute, 5 * time.Minute, 10 * time.Minute}
 	next := now.Add(delays[min(j.Attempts-1, 3)] + time.Duration(rand.IntN(15))*time.Second)
@@ -216,7 +221,7 @@ func (r *Runner) retry(ctx context.Context, j Job, o order.Order, result string)
 	r.mu.Unlock()
 	if j.Kind == "payment" {
 		if !now.Before(o.CreatedAt.Add(24 * time.Hour)) {
-			r.Queue.Log.Error(fmt.Sprintf("订单 %s 的任务 %s 在自动窗口结束时仍无法核验，需手动补单", o.ID, j.ID), "order_id", o.ID, "job_id", j.ID, "result", result)
+			r.Queue.Log.Error(fmt.Sprintf("订单 %s 的任务 %s 在自动窗口结束时仍无法核验，需手动补单，原因 %s", o.ID, j.ID, reason), "order_id", o.ID, "job_id", j.ID, "result", result, "error", reason)
 			r.finish(ctx, j, "failed", result, time.Time{})
 			return
 		}
@@ -228,7 +233,11 @@ func (r *Runner) retry(ctx context.Context, j Job, o order.Order, result string)
 		r.finish(ctx, j, "failed", result, time.Time{})
 		return
 	}
-	r.Queue.Log.Warn(fmt.Sprintf("订单 %s 的任务 %s 第 %d 次执行结果 %s，将于 %s 重试", o.ID, j.ID, j.Attempts, result, next.Format(time.RFC3339)), "order_id", o.ID, "job_id", j.ID, "attempt", j.Attempts, "next_at", next)
+	message := fmt.Sprintf("订单 %s 的任务 %s 第 %d 次执行结果 %s，将于 %s 重试", o.ID, j.ID, j.Attempts, result, next.Format(time.RFC3339))
+	if reason != "" {
+		message += "，原因 " + reason
+	}
+	r.Queue.Log.Warn(message, "order_id", o.ID, "job_id", j.ID, "attempt", j.Attempts, "next_at", next, "error", reason)
 	r.finish(ctx, j, "ready", result, next)
 }
 func (r *Runner) close(ctx context.Context, j Job, o order.Order, obs order.Observation) {
@@ -247,7 +256,7 @@ func (r *Runner) close(ctx context.Context, j Job, o order.Order, obs order.Obse
 		cancel()
 		r.health(e)
 		if e != nil {
-			r.retry(ctx, j, o, "close_unknown")
+			r.retry(ctx, j, o, "close_unknown", e)
 			return
 		}
 		confirmed = true
@@ -274,7 +283,7 @@ func (r *Runner) close(ctx context.Context, j Job, o order.Order, obs order.Obse
 		cancel()
 		r.health(e)
 		if e != nil {
-			r.retry(ctx, j, o, "final_query_failed")
+			r.retry(ctx, j, o, "final_query_failed", e)
 			return
 		}
 		final.JobID, final.LeaseToken = j.ID, j.LeaseToken
