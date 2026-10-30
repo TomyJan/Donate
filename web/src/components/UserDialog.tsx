@@ -6,6 +6,7 @@ import type { Profile, User } from '../lib/types';
 import { ActionConfirm } from './ActionConfirm';
 import { AdminLoading } from './AdminLoading';
 import { CopyButton } from './CopyButton';
+import { DialogActions } from './DialogActions';
 import { IdentityBindings } from './IdentityBindings';
 import { RequestError } from './RequestError';
 import { Avatar, Button, Empty, Modal } from './ui';
@@ -76,7 +77,7 @@ export function UserDialog({
             bindings={u.bindings}
             onUnbind={(identityID) => unbind(u.id, identityID)}
           />
-          <div className="dialog-actions user-actions">
+          <DialogActions className="user-actions">
             <CopyButton text={u.id} label={t('copy')} />
             <Button
               onClick={() => {
@@ -105,7 +106,7 @@ export function UserDialog({
                 await client.invalidateQueries();
               }}
             />
-          </div>
+          </DialogActions>
         </>
       ) : user.isLoading ? (
         <AdminLoading kind="detail" />

@@ -23,6 +23,7 @@ import { AdminLoading } from '../components/AdminLoading';
 import { AdminOrderFilters } from '../components/AdminOrderFilters';
 import { AdminTable } from '../components/AdminTable';
 import { AnimatedHeight } from '../components/AnimatedHeight';
+import { DialogActions } from '../components/DialogActions';
 import { SelectField } from '../components/forms';
 import { OrderDialog } from '../components/OrderDialog';
 import { type OverviewPeriod, OverviewRange } from '../components/OverviewRange';
@@ -400,7 +401,7 @@ export function Admin() {
             </div>
           ))}
         </div>
-        <div className="dialog-actions">
+        <DialogActions>
           <Button
             disabled={busy}
             onClick={() => {
@@ -419,7 +420,7 @@ export function Admin() {
               {t('confirm')}
             </Button>
           )}
-        </div>
+        </DialogActions>
       </Modal>
     </div>
   );

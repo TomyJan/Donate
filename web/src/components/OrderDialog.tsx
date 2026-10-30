@@ -8,6 +8,7 @@ import type { Operation, Order } from '../lib/types';
 import { ActionConfirm } from './ActionConfirm';
 import { AdminLoading } from './AdminLoading';
 import { CopyButton } from './CopyButton';
+import { DialogActions } from './DialogActions';
 import { RequestError } from './RequestError';
 import { Avatar, Button, Modal } from './ui';
 import './OrderDialog.css';
@@ -263,7 +264,7 @@ export function OrderDialog({
               </div>
             )}
             {(admin || canContinue) && (
-              <div className="detail-actions">
+              <DialogActions className="detail-actions">
                 {admin ? (
                   <>
                     <CopyButton key={o.id} text={o.id} label={t('copy')} />
@@ -308,7 +309,7 @@ export function OrderDialog({
                     </Button>
                   )
                 )}
-              </div>
+              </DialogActions>
             )}
           </div>
         )

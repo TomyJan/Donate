@@ -4,6 +4,7 @@ import { Suspense, useState } from 'react';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router';
 import { AdminLoading } from '../components/AdminLoading';
 import { CookieNotice } from '../components/CookieNotice';
+import { DialogActions } from '../components/DialogActions';
 import { IdentityBindings } from '../components/IdentityBindings';
 import { LegalLinks } from '../components/LegalLinks';
 import { LoginDialog } from '../components/LoginDialog';
@@ -164,12 +165,12 @@ export function Layout() {
         </Modal>
         <Modal open={!!binding} onOpenChange={(v) => !v && setBinding('')} title={t('confirmBind')}>
           <p>{t('bindHint')}</p>
-          <div className="dialog-actions">
+          <DialogActions>
             <Button onClick={() => setBinding('')}>{t('cancel')}</Button>
             <Button className="d-primary" onClick={() => void app.login(binding, true)}>
               {t('confirm')}
             </Button>
-          </div>
+          </DialogActions>
         </Modal>
         <BackToTop />
         <section className="toast-stack" aria-label={app.lang === 'en' ? 'Notifications' : '消息通知'}>

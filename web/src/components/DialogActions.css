@@ -1,0 +1,14 @@
+.d-app .dialog-action-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  width: 100%;
+  gap: 7px;
+}
+
+.d-app .dialog-action-row > .d-btn {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  justify-content: center;
+}
