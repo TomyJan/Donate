@@ -88,3 +88,54 @@ it('renews using session CSRF even while site information is still loading', asy
   await waitFor(() => expect(header).toBe('session-csrf'));
   client.clear();
 });
+
+function ObservedAccount() {
+  const { profile, logout } = useApp();
+  return profile ? (
+    <button type="button" onClick={() => void logout()}>
+      Sign out
+    </button>
+  ) : (
+    <p>Signed out</p>
+  );
+}
+
+it('immediately clears the observed account and protected data after a successful logout', async () => {
+  let signedOut = false;
+  const ok = (data: unknown) => new Response(JSON.stringify({ code: 'OK', data }));
+  vi.stubGlobal('fetch', async (path: string) => {
+    if (path.endsWith('/user/logout')) {
+      signedOut = true;
+      return ok(null);
+    }
+    if (path.endsWith('/site/info')) return ok({ csrf_token: 'guest-csrf', providers: ['oidc'] });
+    if (path.endsWith('/user/profile'))
+      return signedOut
+        ? new Response(JSON.stringify({ code: 'UNAUTHORIZED', data: null }), { status: 401 })
+        : ok({ id: 'administrator', nickname: 'Admin', admin: true, csrf_token: 'csrf', bindings: [] });
+    if (path.endsWith('/user/session/renew')) return ok(null);
+    throw new Error(`Unexpected request: ${path}`);
+  });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 15000 } } });
+  client.setQueryData(['admin-user', 'private-user'], { nickname: 'Private user' });
+  client.setQueryData(['overview', '30d'], { paid_fen: 123 });
+  try {
+    render(
+      <QueryClientProvider client={client}>
+        <AppProvider>
+          <ObservedAccount />
+        </AppProvider>
+      </QueryClientProvider>,
+    );
+    const button = await screen.findByRole('button', { name: 'Sign out' });
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    fireEvent.click(button);
+    await screen.findByText('Signed out');
+    expect(signedOut).toBe(true);
+    expect(client.getQueryData(['profile'])).toBeNull();
+    expect(client.getQueryData(['admin-user', 'private-user'])).toBeUndefined();
+    expect(client.getQueryData(['overview', '30d'])).toBeUndefined();
+  } finally {
+    client.clear();
+  }
+});

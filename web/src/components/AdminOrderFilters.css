@@ -1,0 +1,58 @@
+#donate-admin .a-order-filters .a-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 14px;
+  padding: 18px;
+  margin-bottom: 20px;
+  background: var(--d-soft);
+  border-radius: 9px;
+}
+#donate-admin .a-order-filters .a-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1 1 160px;
+  min-width: 0;
+  max-width: 220px;
+}
+#donate-admin .a-order-filters .a-field > span {
+  font-size: 12px;
+  color: var(--d-muted);
+}
+#donate-admin .a-order-filters .a-field > :is(.d-btn, .a-input) {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  min-height: 40px;
+  justify-content: space-between;
+}
+#donate-admin .a-order-filters .a-filter-pair {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  flex: 2 1 334px;
+  min-width: min(100%, 334px);
+  max-width: 454px;
+}
+#donate-admin .a-order-filters .a-filter-pair .a-field {
+  flex-basis: 0;
+}
+#donate-admin .a-order-filters .a-filter-bottom {
+  flex-basis: 100%;
+}
+@media (max-width: 680px) {
+  #donate-admin .a-order-filters .a-filters {
+    padding: 14px;
+    gap: 12px;
+  }
+  #donate-admin .a-order-filters .a-filter-pair {
+    gap: 12px;
+  }
+}
+@media (pointer: coarse) {
+  #donate-admin .a-order-filters .a-field > :is(.d-btn, .a-input) {
+    height: 44px;
+    min-height: 44px;
+  }
+}

@@ -8,6 +8,15 @@ async function login(page: Page) {
   await expect(page.getByRole('button', { name: '账号信息', exact: true })).toBeVisible();
 }
 test('guest scope, input, preferences and responsive shared header', async ({ page }) => {
+  const blockedFonts: string[] = [];
+  page.on('console', (message) => {
+    if (
+      message.type() === 'error' &&
+      message.text().includes('font-src') &&
+      message.text().includes('violates')
+    )
+      blockedFonts.push(message.text());
+  });
   await page.goto('/');
   await expect(page.locator('.r-index-row')).toHaveCount(10);
   const list = await (await page.request.get('/api/v1/order/list?limit=999&cursor=anything')).json();
@@ -34,6 +43,7 @@ test('guest scope, input, preferences and responsive shared header', async ({ pa
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
   await page.screenshot({ path: 'test-results/home-dark-en.png', fullPage: true });
+  expect(blockedFonts.slice(0, 3)).toEqual([]);
 });
 test('OIDC signs in, shared account and administration, confirm selected operations', async ({ page }) => {
   await login(page);

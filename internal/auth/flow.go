@@ -256,8 +256,18 @@ func (s *Service) Callback(ctx context.Context, provider, state, code, cookie st
 				return FlowResult{}, e
 			}
 			e = s.Store.Write(ctx, func(tx *sql.Tx) error {
-				_, e := tx.ExecContext(ctx, "UPDATE auth_flows SET stage='qq_number',secret=? WHERE id=? AND stage='processing'", b, f.ID)
-				return e
+				r, e := tx.ExecContext(ctx, "UPDATE auth_flows SET stage='qq_number',secret=? WHERE id=? AND stage='processing' AND consumed_at IS NULL AND expires_at>?", b, f.ID, s.Now().Unix())
+				if e != nil {
+					return e
+				}
+				n, e := r.RowsAffected()
+				if e != nil {
+					return e
+				}
+				if n != 1 {
+					return ErrUnauthorized
+				}
+				return nil
 			})
 			return FlowResult{ReturnTo: f.Secret.ReturnTo, NeedQQ: true}, e
 		}

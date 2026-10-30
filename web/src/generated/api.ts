@@ -194,6 +194,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/user/identity/unbind": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * admin/user/identity/unbind
+         * @description Administrator only. Removes the matched user's OAuth identity atomically, invalidates all credentials using it and cancels the user's outstanding binding flows. At least one login method must remain. Business failures LAST_IDENTITY_FORBIDDEN, NOT_FOUND and VALIDATION_FAILED use HTTP 200; inspect code. Success clears the cookie if the current session used the removed identity.
+         */
+        post: operations["admin_user_identity_unbind_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/user/list": {
         parameters: {
             query?: never;
@@ -592,6 +612,12 @@ export interface components {
         };
         Identity: {
             avatar_url: string;
+            /**
+             * Format: date-time
+             * @description Original binding instant from identities.created_at; signing in again does not change it.
+             */
+            bound_at: string;
+            /** Format: uuid */
             id: string;
             nickname: string;
             provider: string;
@@ -818,6 +844,8 @@ export interface components {
             avatar_url: string;
             bindings: {
                 avatar_url: string;
+                /** Format: date-time */
+                bound_at: string;
                 id: string;
                 nickname: string;
                 provider: string;
@@ -881,11 +909,19 @@ export interface components {
             tag: string;
             version: string;
         };
+        UnbindIdentityInput: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            identity_id: string;
+        };
         User: {
             admin: boolean;
             avatar_url: string;
             bindings: {
                 avatar_url: string;
+                /** Format: date-time */
+                bound_at: string;
                 id: string;
                 nickname: string;
                 provider: string;
@@ -908,6 +944,8 @@ export interface components {
                 avatar_url: string;
                 bindings: {
                     avatar_url: string;
+                    /** Format: date-time */
+                    bound_at: string;
                     id: string;
                     nickname: string;
                     provider: string;
@@ -1483,6 +1521,59 @@ export interface operations {
                     "application/json": {
                         code: string;
                         data: components["schemas"]["User"];
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description Missing or invalid session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden, banned, or CSRF refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Infrastructure failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admin_user_identity_unbind_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnbindIdentityInput"];
+            };
+        };
+        responses: {
+            /** @description Business response; inspect code. Basic authentication failures use 401/403. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        /** @enum {unknown|null} */
+                        data: null;
                         message: string;
                         request_id: string;
                     };

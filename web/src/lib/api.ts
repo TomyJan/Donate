@@ -12,6 +12,12 @@ let csrf = '';
 export function setCSRF(v: string) {
   csrf = v;
 }
+function signalAccessFailure(path: string, status: number, code: string) {
+  if ((status === 401 || code === 'ACCOUNT_BANNED') && path !== 'site/info' && path !== 'user/profile')
+    window.dispatchEvent(new CustomEvent('session-invalid', { detail: code }));
+  else if (status === 403 && code === 'FORBIDDEN' && path.startsWith('admin/'))
+    window.dispatchEvent(new Event('admin-forbidden'));
+}
 export async function api<T>(path: string, body?: unknown): Promise<T> {
   const r = await fetch(`/api/v1/${path}`, {
     method: body === undefined ? 'GET' : 'POST',
@@ -26,8 +32,7 @@ export async function api<T>(path: string, body?: unknown): Promise<T> {
     throw new APIError('NETWORK_ERROR', '服务暂不可用', r.status);
   }
   if (!r.ok || v.code !== 'OK') {
-    if ((r.status === 401 || v.code === 'ACCOUNT_BANNED') && path !== 'site/info' && path !== 'user/profile')
-      window.dispatchEvent(new CustomEvent('session-invalid', { detail: v.code }));
+    signalAccessFailure(path, r.status, v.code);
     throw new APIError(v.code, v.message, r.status, v.request_id);
   }
   return v.data;
@@ -41,6 +46,7 @@ export async function downloadExport(id: string) {
   });
   if (!r.ok || !r.headers.get('Content-Type')?.includes('text/csv')) {
     const v = await r.json();
+    signalAccessFailure('admin/order/export', r.status, v.code);
     throw new APIError(v.code, v.message, r.status, v.request_id);
   }
   const url = URL.createObjectURL(await r.blob());

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { translate } from '../lib/i18n';
 import type { Order } from '../lib/types';
@@ -258,4 +258,31 @@ it('refuses a preview credential that belongs to a different order', async () =>
   expect(screen.getByRole('button', { name: 'Confirm' })).toBeDisabled();
   expect(executed).toEqual([]);
   expect(report).toHaveBeenCalledOnce();
+});
+
+it.each([false, true])(
+  'shows active visibility flags beside the amount as noninteractive statuses (admin=%s)',
+  async (admin) => {
+    vi.stubGlobal('fetch', async () => response({ ...order, hidden_order: true, hidden_message: true }));
+    renderOrder(admin);
+    await screen.findByText('Admin');
+    const amountRow = document.querySelector('.order-amount-row') as HTMLElement;
+    const statuses = within(amountRow).getByRole('group', { name: 'Visibility' });
+    expect(within(statuses).getByText('Order hidden')).toBeInTheDocument();
+    expect(within(statuses).getByText('Message hidden')).toBeInTheDocument();
+    expect(within(statuses).queryByRole('button')).not.toBeInTheDocument();
+    expect(within(statuses).queryByRole('tab')).not.toBeInTheDocument();
+    if (!admin) expect(within(amountRow).getByRole('button', { name: 'Copy info' })).toBeInTheDocument();
+  },
+);
+
+it('does not add false visibility flags or an empty status group', async () => {
+  vi.stubGlobal('fetch', async () => response(order));
+  renderOrder(true);
+  await screen.findByText('Admin');
+  expect(
+    within(document.querySelector('.order-amount-row') as HTMLElement).queryByRole('group', {
+      name: 'Visibility',
+    }),
+  ).not.toBeInTheDocument();
 });

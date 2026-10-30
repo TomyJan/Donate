@@ -62,6 +62,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
         UPSTREAM_UNAVAILABLE: 'unavailable',
         VALIDATION_FAILED: 'amountRule',
         SELF_BAN_FORBIDDEN: 'forbidden',
+        LAST_IDENTITY_FORBIDDEN: 'lastIdentityHint',
       };
       notify(labels[key] ? t(labels[key]) : e instanceof Error ? e.message : t('network'), true);
     },
@@ -94,17 +95,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
     await client.invalidateQueries({ queryKey: ['site'] });
     await client.invalidateQueries({ queryKey: ['records'] });
   }, [client]);
+  const clearSession = useCallback(() => {
+    void client.cancelQueries({ queryKey: ['profile'] });
+    client.setQueryData(['profile'], null);
+    client.removeQueries({ predicate: (q) => q.queryKey[0] !== 'site' && q.queryKey[0] !== 'profile' });
+    setAccountOpen(false);
+  }, [client]);
   useEffect(() => {
     const invalidate = (event: Event) => {
-      client.setQueryData(['profile'], null);
-      client.removeQueries({ predicate: (q) => q.queryKey[0] !== 'site' && q.queryKey[0] !== 'profile' });
-      setAccountOpen(false);
+      clearSession();
       if ((event as CustomEvent).detail === 'ACCOUNT_BANNED') notify(t('banned'), true);
       void client.invalidateQueries({ queryKey: ['site'] });
     };
     window.addEventListener('session-invalid', invalidate);
-    return () => window.removeEventListener('session-invalid', invalidate);
-  }, [client, notify, t]);
+    const revokeAdmin = () => {
+      client.setQueryData<Profile | null>(['profile'], (value) =>
+        value ? { ...value, admin: false } : value,
+      );
+      client.removeQueries({
+        predicate: (q) =>
+          String(q.queryKey[0]).startsWith('admin-') ||
+          q.queryKey[0] === 'overview' ||
+          q.queryKey[0] === 'operation' ||
+          (q.queryKey[0] === 'order-detail' && q.queryKey[1] === true),
+      });
+      void client.invalidateQueries({ queryKey: ['profile'] });
+    };
+    window.addEventListener('admin-forbidden', revokeAdmin);
+    return () => {
+      window.removeEventListener('session-invalid', invalidate);
+      window.removeEventListener('admin-forbidden', revokeAdmin);
+    };
+  }, [clearSession, client, notify, t]);
   const currentUserID = current?.id;
   useEffect(() => {
     if (!currentUserID) return;
@@ -171,8 +193,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     try {
       await api('user/logout', {});
-      setAccountOpen(false);
-      client.clear();
+      clearSession();
       await refresh();
     } catch (e) {
       report(e);

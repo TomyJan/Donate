@@ -59,7 +59,7 @@ SQLite 启用 WAL、外键、5 秒 busy timeout 和 `synchronous=FULL`。写连�
 1. 前端通过 `POST /api/v1/user/login` 或 `identity/bind` 创建 10 分钟有效的授权流程，返回允许的授权 URL。state、nonce、PKCE 独立生成；绑定流程固定当前用户及会话，禁止回调参数指定另一个用户。
 2. 回调验证 state、流程 Cookie、意图、有效期与一次性消费。OIDC 校验 issuer、audience、签名、到期和 nonce，以 `issuer + sub` 识别；QQ 以应用范围 OpenID 识别。只允许预设回调和站内返回地址。
 3. QQ 首次登录 / 绑定进入号码检查阶段，号码仅接受 5–12 位且首位非零。按私有参考仓库的同尺寸头像比较逻辑以 Go 重写；网络失败允许在流程期限内重试，比较失败拒绝完成，每流程最多 5 次。阈值用样本验证后固定，不能伪称头像比较是强认证。已完成号码检查的 QQ 身份以后正常登录不重复填写。
-4. 登录首次创建用户及身份；绑定只允许当前用户尚未绑定的 provider，身份已归属其他用户返回冲突，不合并、不解绑。最终事务再次检查封禁、身份唯一性和绑定会话仍有效；事务成功才创建正式会话 / 完成绑定。
+4. 登录首次创建用户及身份；绑定只允许当前用户尚未绑定的 provider，身份已归属其他用户返回冲突，不合并、不开放用户自助解绑。管理员通过独立管理接口解绑，事务内检查目标身份属于该用户且至少还有另一种登录方式，撤销该身份会话和未完成绑定流程；如果移除公开展示身份，则改用剩余身份。最终事务再次检查封禁、身份唯一性和绑定会话仍有效；事务成功才创建正式会话 / 完成绑定。
 5. 用户当前会话的昵称头像取本次登录身份。用户公开身份指向最近一次成功登录的身份，用于公开捐赠列表；绑定不切换二者。另一设备登录不会改写现有会话的身份指针。
 
 OAuth 凭据只为当前流程短期使用；不请求 offline access，不持久保存 refresh token。必须暂存的 QQ token / PKCE verifier 使用部署密钥加密，流程完成 / 到期后清理。拉取头像仅在内存，限制固定可信域、体积、解码尺寸与超时，不接受用户提供任意 URL。普通退出仅退出本站，不注销 OIDC 提供方的其他站点会话。
@@ -99,7 +99,8 @@ OAuth 凭据只为当前流程短期使用；不请求 offline access，不持�
 | `POST /admin/order/action/preview`、`/admin/order/action/execute` | 选择项确认、关闭 / 隐藏 / 恢复 / 删除 / 导出；不含批量补单 |
 | `POST /admin/order/reconcile` | 单笔手动补单，返回任务 ID 或当前进行中的任务 |
 | `GET /admin/operation/detail` | 查询执行进度及逐项状态；必须管理员，防止操作 ID 越权 |
-| `GET /admin/user/list`、`/admin/user/detail` | 用户与绑定、历史；按字段白名单排序 |
+| `GET /admin/user/list`、`/admin/user/detail` | 用户与绑定时间、捐赠金额；按字段白名单排序 |
+| `POST /admin/user/identity/unbind` | 管理员确认后解绑用户指定身份；至少保留一种登录方式，撤销相关会话与绑定流程并审计 |
 | `POST /admin/user/ban`、`/admin/user/unban` | 封禁 / 解禁；禁止封禁当前管理员 |
 | `GET /admin/overview`、`/admin/audit/list` | 全部现存订单统计 / 审计；隐藏不排除，到账只算 paid |
 

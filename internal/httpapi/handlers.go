@@ -8,6 +8,7 @@ import (
 	"github.com/TomyJan/Donate/internal/auth"
 	"github.com/TomyJan/Donate/internal/order"
 	"github.com/TomyJan/Donate/internal/payment"
+	"github.com/TomyJan/Donate/internal/storage"
 	"github.com/go-chi/chi/v5"
 	"net/http"
 	"time"
@@ -371,6 +372,27 @@ func (s *Server) reconcile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.ok(w, r, map[string]string{"job_id": id})
+}
+func (s *Server) unbindIdentity(w http.ResponseWriter, r *http.Request) {
+	var in UnbindIdentityInput
+	if e := decode(r, &in); e != nil {
+		s.failure(w, r, e)
+		return
+	}
+	st := state(r)
+	if e := s.Admin.UnbindIdentity(r.Context(), st.Session.UserID, in.ID, in.IdentityID); e != nil {
+		s.failure(w, r, e)
+		return
+	}
+	uid, _ := storage.ParseID(in.ID)
+	iid, _ := storage.ParseID(in.IdentityID)
+	if storage.IDString(uid) == st.Session.UserID && storage.IDString(iid) == st.Session.IdentityID {
+		// The mutation already removed this credential. Do not turn its success
+		// into a renewal error or issue the revoked cookie again.
+		st.SessionRevoked = true
+		s.setCookie(w, s.sessionName(), "", time.Unix(0, 0))
+	}
+	s.ok(w, r, nil)
 }
 func (s *Server) export(w http.ResponseWriter, r *http.Request) {
 	var in OperationInput

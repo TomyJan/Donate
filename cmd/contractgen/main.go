@@ -81,6 +81,9 @@ func main() {
 	for name, t := range types {
 		schemas[name] = describe(t)
 	}
+	identityProps := schemas["Identity"].(schema)["properties"].(map[string]any)
+	identityProps["id"].(schema)["format"] = "uuid"
+	identityProps["bound_at"].(schema)["description"] = "Original binding instant from identities.created_at; signing in again does not change it."
 	recordProps := schemas["RecordItem"].(schema)["properties"].(map[string]any)
 	recordProps["is_mine"].(schema)["description"] = "Whether this record belongs to the effective authenticated session. Always false for guests; no owner user ID is exposed. Public feeds still contain only paid, non-hidden orders."
 	recordProps["province"].(schema)["description"] = "Stored province-level location only, or an empty string when lookup data is unavailable."
@@ -108,6 +111,10 @@ func main() {
 	for name, t := range requestTypes {
 		schemas[name] = describe(t)
 	}
+	schemas["UnbindIdentityInput"] = describe(reflect.TypeFor[httpapi.UnbindIdentityInput]())
+	for _, name := range []string{"id", "identity_id"} {
+		schemas["UnbindIdentityInput"].(schema)["properties"].(map[string]any)[name].(schema)["format"] = "uuid"
+	}
 	schemas["OrderBase"] = describe(reflect.TypeFor[order.Order]())
 	schemas["LoginStart"] = describe(reflect.TypeFor[auth.FlowStart]())
 
@@ -115,7 +122,7 @@ func main() {
 	routes := []struct {
 		method, path, result string
 		auth                 bool
-	}{{"get", "site/info", "Site", false}, {"get", "user/profile", "Profile", true}, {"post", "user/login", "", false}, {"get", "user/login/status", "FlowStatus", false}, {"post", "user/login/qq/complete", "", false}, {"post", "user/identity/bind", "", true}, {"post", "user/session/renew", "", true}, {"post", "user/logout", "", true}, {"get", "order/list", "Records", false}, {"get", "order/detail", "Order", true}, {"post", "order/create", "Order", true}, {"post", "order/payment/start", "Checkout", true}, {"get", "admin/order/list", "OrderPage", true}, {"get", "admin/order/detail", "Order", true}, {"post", "admin/order/action/preview", "Operation", true}, {"post", "admin/order/action/execute", "Operation", true}, {"post", "admin/order/reconcile", "", true}, {"get", "admin/operation/detail", "Operation", true}, {"get", "admin/user/list", "UserPage", true}, {"get", "admin/user/detail", "User", true}, {"post", "admin/user/ban", "", true}, {"post", "admin/user/unban", "", true}, {"get", "admin/overview", "Overview", true}, {"get", "admin/audit/list", "AuditPage", true}}
+	}{{"get", "site/info", "Site", false}, {"get", "user/profile", "Profile", true}, {"post", "user/login", "", false}, {"get", "user/login/status", "FlowStatus", false}, {"post", "user/login/qq/complete", "", false}, {"post", "user/identity/bind", "", true}, {"post", "user/session/renew", "", true}, {"post", "user/logout", "", true}, {"get", "order/list", "Records", false}, {"get", "order/detail", "Order", true}, {"post", "order/create", "Order", true}, {"post", "order/payment/start", "Checkout", true}, {"get", "admin/order/list", "OrderPage", true}, {"get", "admin/order/detail", "Order", true}, {"post", "admin/order/action/preview", "Operation", true}, {"post", "admin/order/action/execute", "Operation", true}, {"post", "admin/order/reconcile", "", true}, {"get", "admin/operation/detail", "Operation", true}, {"get", "admin/user/list", "UserPage", true}, {"get", "admin/user/detail", "User", true}, {"post", "admin/user/ban", "", true}, {"post", "admin/user/unban", "", true}, {"post", "admin/user/identity/unbind", "", true}, {"get", "admin/overview", "Overview", true}, {"get", "admin/audit/list", "AuditPage", true}}
 	for _, r := range routes {
 		data := schema{}
 		if r.result != "" {
@@ -131,6 +138,7 @@ func main() {
 		}
 
 		bodies := map[string]string{"user/login": "LoginInput", "user/identity/bind": "LoginInput", "user/login/qq/complete": "QQInput", "order/create": "CreateOrderInput", "order/payment/start": "IDInput", "admin/order/action/preview": "PreviewInput", "admin/order/action/execute": "OperationInput", "admin/order/reconcile": "ReconcileInput", "admin/user/ban": "IDInput", "admin/user/unban": "IDInput"}
+		bodies["admin/user/identity/unbind"] = "UnbindIdentityInput"
 		if body := bodies[r.path]; r.method == "post" && body != "" {
 			operation["requestBody"] = schema{"required": true, "content": schema{"application/json": schema{"schema": ref(body)}}}
 		}
@@ -183,6 +191,10 @@ func main() {
 		}
 		if r.path == "admin/order/reconcile" {
 			response["content"].(schema)["application/json"].(schema)["schema"].(schema)["properties"].(schema)["data"] = schema{"type": "object", "required": []string{"job_id"}, "properties": schema{"job_id": schema{"type": "string", "format": "uuid"}}}
+		}
+		if r.path == "admin/user/identity/unbind" {
+			operation["description"] = "Administrator only. Removes the matched user's OAuth identity atomically, invalidates all credentials using it and cancels the user's outstanding binding flows. At least one login method must remain. Business failures LAST_IDENTITY_FORBIDDEN, NOT_FOUND and VALIDATION_FAILED use HTTP 200; inspect code. Success clears the cookie if the current session used the removed identity."
+			response["content"].(schema)["application/json"].(schema)["schema"].(schema)["properties"].(schema)["data"] = schema{"nullable": true, "enum": []any{nil}}
 		}
 		paths["/api/v1/"+r.path] = schema{r.method: operation}
 	}

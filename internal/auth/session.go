@@ -30,13 +30,14 @@ var (
 const IdleTTL = 30 * 24 * time.Hour
 
 type Identity struct {
-	ID        string `json:"id"`
-	Provider  string `json:"provider"`
-	Issuer    string `json:"-"`
-	Subject   string `json:"-"`
-	Nickname  string `json:"nickname"`
-	AvatarURL string `json:"avatar_url"`
-	QQNumber  string `json:"-"`
+	ID        string    `json:"id"`
+	Provider  string    `json:"provider"`
+	Issuer    string    `json:"-"`
+	Subject   string    `json:"-"`
+	Nickname  string    `json:"nickname"`
+	AvatarURL string    `json:"avatar_url"`
+	QQNumber  string    `json:"-"`
+	BoundAt   time.Time `json:"bound_at"`
 }
 type Session struct {
 	ID, UserID, IdentityID, Nickname, AvatarURL, Provider, CSRF string
@@ -237,7 +238,7 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 func (s *Service) Profile(ctx context.Context, session Session) (Profile, error) {
 	out := Profile{ID: session.UserID, Nickname: session.Nickname, AvatarURL: session.AvatarURL, Provider: session.Provider, Admin: session.Admin, CSRF: session.CSRF, ExpiresAt: session.ExpiresAt, Bindings: []Identity{}}
 	uid, _ := storage.ParseID(session.UserID)
-	rows, e := s.Store.DB.QueryContext(ctx, "SELECT id,provider,nickname,avatar_url FROM identities WHERE user_id=? ORDER BY provider", uid)
+	rows, e := s.Store.DB.QueryContext(ctx, "SELECT id,provider,nickname,avatar_url,created_at FROM identities WHERE user_id=? ORDER BY provider", uid)
 	if e != nil {
 		return out, e
 	}
@@ -245,10 +246,12 @@ func (s *Service) Profile(ctx context.Context, session Session) (Profile, error)
 	for rows.Next() {
 		var p Identity
 		var id []byte
-		if e = rows.Scan(&id, &p.Provider, &p.Nickname, &p.AvatarURL); e != nil {
+		var created int64
+		if e = rows.Scan(&id, &p.Provider, &p.Nickname, &p.AvatarURL, &created); e != nil {
 			return out, e
 		}
 		p.ID = storage.IDString(id)
+		p.BoundAt = time.Unix(created, 0).UTC()
 		out.Bindings = append(out.Bindings, p)
 	}
 	return out, rows.Err()

@@ -1,0 +1,19 @@
+.d-app .d-bind-time {
+  display: block;
+  margin-top: 4px;
+  color: var(--d-muted);
+  font-size: 11px;
+}
+.d-app .d-bind-time time {
+  display: inline-block;
+  white-space: nowrap;
+}
+.d-app .d-bind-info .d-secondary {
+  overflow-wrap: anywhere;
+}
+.d-app .d-bind-action:has(.is-danger) {
+  flex-basis: auto;
+}
+.d-app .d-bind-action .is-danger {
+  white-space: nowrap;
+}

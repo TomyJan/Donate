@@ -7,6 +7,7 @@ import { AdminUserFilter } from './AdminUserFilter';
 import { ConstrainedInput } from './ConstrainedInput';
 import { DateTimeField, SelectField } from './forms';
 import { Button } from './ui';
+import './AdminOrderFilters.css';
 
 export type AdvancedOrderFilters = {
   from: string;
@@ -166,31 +167,43 @@ export function AdminOrderFilters({
               />
             </div>
           ))}
-          {(['minimum', 'maximum'] as const).map((key) => (
-            <label className="a-field" key={key} htmlFor={`filter-${key}`}>
-              <span>{t(key)}</span>
+          <label className="a-field" htmlFor="filter-minimum">
+            <span>{t('minimum')}</span>
+            <ConstrainedInput
+              id="filter-minimum"
+              className="a-input"
+              aria-label={t('minimum')}
+              inputMode="decimal"
+              accept={acceptAmountEdit}
+              value={draft.minimum}
+              onValue={(next) => setDraft((current) => ({ ...current, minimum: next }))}
+            />
+          </label>
+          <div className="a-filter-pair">
+            <label className="a-field" htmlFor="filter-maximum">
+              <span>{t('maximum')}</span>
               <ConstrainedInput
-                id={`filter-${key}`}
+                id="filter-maximum"
                 className="a-input"
-                aria-label={t(key)}
+                aria-label={t('maximum')}
                 inputMode="decimal"
                 accept={acceptAmountEdit}
-                value={draft[key]}
-                onValue={(next) => setDraft((current) => ({ ...current, [key]: next }))}
+                value={draft.maximum}
+                onValue={(next) => setDraft((current) => ({ ...current, maximum: next }))}
               />
             </label>
-          ))}
-          <div className="a-field">
-            <span>{t('visibility')}</span>
-            <SelectField
-              label={t('visibility')}
-              value={draft.visibility}
-              onValue={(next) => setDraft((current) => ({ ...current, visibility: next }))}
-              options={['', 'public', 'hidden_order', 'hidden_message'].map((key) => [
-                key,
-                t(key || 'allVisibility'),
-              ])}
-            />
+            <div className="a-field">
+              <span>{t('visibility')}</span>
+              <SelectField
+                label={t('visibility')}
+                value={draft.visibility}
+                onValue={(next) => setDraft((current) => ({ ...current, visibility: next }))}
+                options={['', 'public', 'hidden_order', 'hidden_message'].map((key) => [
+                  key,
+                  t(key || 'allVisibility'),
+                ])}
+              />
+            </div>
           </div>
           <div className="a-filter-bottom">
             <Button

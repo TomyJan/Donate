@@ -364,7 +364,7 @@ func (s *Service) User(ctx context.Context, id string) (User, error) {
 		at := time.Unix(last.Int64, 0).UTC()
 		out.LastLogin = &at
 	}
-	rows, e := s.Store.DB.QueryContext(ctx, "SELECT id,provider,nickname,avatar_url FROM identities WHERE user_id=? ORDER BY provider", uid)
+	rows, e := s.Store.DB.QueryContext(ctx, "SELECT id,provider,nickname,avatar_url,created_at FROM identities WHERE user_id=? ORDER BY provider", uid)
 	if e != nil {
 		return out, e
 	}
@@ -372,10 +372,12 @@ func (s *Service) User(ctx context.Context, id string) (User, error) {
 	for rows.Next() {
 		var p auth.Identity
 		var id []byte
-		if e = rows.Scan(&id, &p.Provider, &p.Nickname, &p.AvatarURL); e != nil {
+		var bound int64
+		if e = rows.Scan(&id, &p.Provider, &p.Nickname, &p.AvatarURL, &bound); e != nil {
 			return out, e
 		}
 		p.ID = storage.IDString(id)
+		p.BoundAt = time.Unix(bound, 0).UTC()
 		out.Bindings = append(out.Bindings, p)
 	}
 	return out, rows.Err()

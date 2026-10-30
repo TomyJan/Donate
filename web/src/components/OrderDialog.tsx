@@ -213,6 +213,13 @@ export function OrderDialog({
                 <span>{t(o.channel)}</span>
               </div>
               {!admin && <CopyButton key={o.id} text={orderCopyText(o, t)} label={t('copyInfo')} />}
+              {(o.hidden_order || o.hidden_message) && (
+                // biome-ignore lint/a11y/useSemanticElements: These are grouped visibility statuses, not form fields.
+                <div className="order-visibility" role="group" aria-label={t('visibility')}>
+                  {o.hidden_order && <span className="a-badge a-muted">{t('hidden_order')}</span>}
+                  {o.hidden_message && <span className="a-badge a-muted">{t('hidden_message')}</span>}
+                </div>
+              )}
             </div>
             <dl className="detail-grid">
               {fields.map(([label, value]) => (

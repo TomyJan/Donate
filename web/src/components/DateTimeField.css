@@ -1,0 +1,68 @@
+.d-app .date-time-pop {
+  width: 302px;
+  max-width: calc(100vw - 24px);
+}
+.date-time-pop .rdp-month_caption {
+  height: auto;
+  margin-bottom: 8px;
+}
+.date-time-pop .date-calendar-heading {
+  display: grid;
+  grid-template-columns: 30px minmax(64px, 0.8fr) minmax(82px, 1.2fr) 30px;
+  align-items: center;
+  gap: 3px;
+}
+.d-app .date-time-pop .date-calendar-heading .d-btn {
+  min-width: 0;
+  width: 100%;
+  min-height: 32px;
+  padding: 5px 6px;
+  gap: 3px;
+  border-color: transparent;
+  background: transparent;
+  border-radius: 7px;
+  font-size: 12px;
+}
+.d-app .date-time-pop .date-calendar-heading .date-calendar-arrow {
+  justify-content: center;
+  padding: 5px;
+}
+.d-app .date-time-pop .date-calendar-heading .d-btn:hover,
+.d-app .date-time-pop .date-calendar-heading .d-btn[data-state="open"] {
+  background: var(--d-soft);
+}
+.d-app .date-time-pop .date-calendar-heading .d-btn:active {
+  background: color-mix(in srgb, var(--d-ink) 12%, var(--d-paper));
+}
+.date-time-pop .date-calendar-heading .d-btn:focus-visible,
+.date-time-pop .rdp-day_button:focus-visible {
+  outline: 2px solid var(--d-accent);
+  outline-offset: 1px;
+}
+.date-time-pop .date-calendar-heading svg.lucide {
+  width: 14px;
+  height: 14px;
+}
+.date-time-pop .date-calendar-announcement {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.d-app .date-time-pop .d-row .a-select {
+  min-width: 0;
+}
+.date-time-pop .rdp-month_grid {
+  width: 100%;
+  table-layout: fixed;
+}
+@media (prefers-reduced-motion: reduce) {
+  .d-app .date-time-pop,
+  .d-app .date-time-pop .d-btn,
+  .d-app .date-time-pop .d-btn svg {
+    animation: none;
+    transition: none;
+  }
+}

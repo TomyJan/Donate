@@ -17,6 +17,8 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useApp } from '../app/context';
+import { AccessState } from '../components/AccessState';
+import { AdminHeading } from '../components/AdminHeading';
 import { AdminOrderFilters } from '../components/AdminOrderFilters';
 import { AdminTable } from '../components/AdminTable';
 import { AnimatedHeight } from '../components/AnimatedHeight';
@@ -85,7 +87,7 @@ export function Admin() {
   const op = useQuery({
     queryKey: ['operation', operation?.id],
     queryFn: () => api<Operation>(`admin/operation/detail?id=${operation?.id}`),
-    enabled: !!operation?.confirmed,
+    enabled: !!profile?.admin && !!operation?.confirmed,
     refetchInterval: (q) =>
       q.state.data?.items.some((i) => i.status === 'ready' || i.status === 'running') ? 2000 : false,
   });
@@ -95,12 +97,14 @@ export function Admin() {
     setOperation(null);
     client.removeQueries({ queryKey: ['operation'] });
   };
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a different administrator revokes the active operation.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: A changed user or permission revokes administrative dialogs and operations.
   useEffect(() => {
     operationEpoch.current += 1;
     setOperation(null);
     setSelection(new Set());
-  }, [profile?.id]);
+    setOrderID(null);
+    setUserID(null);
+  }, [profile?.id, profile?.admin]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: filter changes reset selection and pagination.
   useEffect(() => {
     setPage(1);
@@ -170,16 +174,7 @@ export function Admin() {
         <Empty text={t('loading')} />
       </main>
     );
-  if (!profile?.admin)
-    return (
-      <main className="a-main">
-        <Empty text={profile ? t('forbidden') : t('unauthorized')} />
-        {!profile && <Button onClick={() => app.setLoginOpen(true)}>{t('login')}</Button>}
-        <Link to="/" className="d-btn d-ghost">
-          {t('home')}
-        </Link>
-      </main>
-    );
+  if (!profile?.admin) return <AccessState signedIn={!!profile} onLogin={() => app.setLoginOpen(true)} />;
   return (
     <div className="a-layout">
       <nav className="a-side" aria-label={t('admin')}>
@@ -207,10 +202,8 @@ export function Admin() {
         </Link>
       </nav>
       <main className="a-main">
-        <div className="a-heading">
-          <h1>{t(tab)}</h1>
-          <div className="a-heading-actions">
-            {tab === 'overview' && <OverviewRange value={period} onChange={setPeriod} />}
+        {tab !== 'overview' && (
+          <AdminHeading title={t(tab)}>
             {tab === 'orders' && selection.size > 0 && (
               <>
                 <span className="a-selection-count">
@@ -253,10 +246,10 @@ export function Admin() {
                 />
               </>
             )}
-          </div>
-        </div>
+          </AdminHeading>
+        )}
         {tab === 'overview' ? (
-          <OverviewSection period={period} />
+          <OverviewSection period={period} onChange={setPeriod} />
         ) : (
           <>
             {tab === 'orders' ? (
@@ -430,7 +423,13 @@ export function Admin() {
     </div>
   );
 }
-function OverviewSection({ period }: { period: OverviewPeriod }) {
+function OverviewSection({
+  period,
+  onChange,
+}: {
+  period: OverviewPeriod;
+  onChange: (value: OverviewPeriod) => void;
+}) {
   const { t, notify } = useApp();
   const [lastSuccess, setLastSuccess] = useState<Overview>();
   const overview = useQuery({
@@ -447,8 +446,9 @@ function OverviewSection({ period }: { period: OverviewPeriod }) {
   }, [overview.error, notify, t]);
   const displayed = overview.data ?? lastSuccess;
   return (
-    <section className="overview-panel" aria-busy={overview.isFetching}>
-      <div className="overview-controls">
+    <>
+      <AdminHeading title={t('overview')}>
+        <OverviewRange value={period} onChange={onChange} />
         <Button
           className="d-ghost d-icon overview-refresh"
           aria-label={t('refreshOverview')}
@@ -458,18 +458,20 @@ function OverviewSection({ period }: { period: OverviewPeriod }) {
         >
           <RefreshCw />
         </Button>
-      </div>
-      {overview.isFetching && (
-        <div className="overview-progress" role="progressbar" aria-label={t('loading')} />
-      )}
-      <AnimatedHeight>
-        {displayed ? (
-          <OverviewPanel data={displayed} />
-        ) : (
-          <Empty text={t(overview.error ? 'unavailable' : 'loading')} />
+      </AdminHeading>
+      <section className="overview-panel" aria-busy={overview.isFetching}>
+        {overview.isFetching && (
+          <div className="overview-progress" role="progressbar" aria-label={t('loading')} />
         )}
-      </AnimatedHeight>
-    </section>
+        <AnimatedHeight>
+          {displayed ? (
+            <OverviewPanel data={displayed} />
+          ) : (
+            <Empty text={t(overview.error ? 'unavailable' : 'loading')} />
+          )}
+        </AnimatedHeight>
+      </section>
+    </>
   );
 }
 function OverviewPanel({ data }: { data: Overview }) {

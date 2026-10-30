@@ -1,0 +1,63 @@
+.d-app .access-page {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  min-width: 0;
+  padding: clamp(32px, 7vw, 80px) 20px;
+}
+.d-app .access-card {
+  width: min(100%, 420px);
+  padding: 32px;
+  border: 1px solid var(--d-line);
+  border-radius: 14px;
+  background: var(--d-paper);
+  box-shadow: 0 12px 36px color-mix(in srgb, var(--d-ink) 5%, transparent);
+}
+.d-app .access-symbol {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin-bottom: 24px;
+  border: 1px solid var(--d-line);
+  border-radius: 12px;
+  background: var(--d-soft);
+  color: var(--d-accent);
+}
+.d-app .access-context {
+  margin: 0;
+  color: var(--d-muted);
+  font-size: 12px;
+}
+.d-app .access-card h1 {
+  margin: 8px 0 10px;
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1.35;
+}
+.d-app .access-hint {
+  margin: 0;
+  color: var(--d-muted);
+  font-size: 13px;
+  line-height: 1.8;
+}
+.d-app .access-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: 26px;
+}
+.d-app .access-actions .d-btn {
+  min-height: 40px;
+  padding: 9px 14px;
+  font-size: 13px;
+}
+@media (max-width: 440px) {
+  .d-app .access-page {
+    padding-inline: 16px;
+  }
+  .d-app .access-card {
+    padding: 26px 24px;
+  }
+}

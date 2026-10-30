@@ -16,6 +16,13 @@
   padding: 8px 12px;
   font-size: 12px;
 }
+.d-app .order-visibility {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-left: auto;
+}
 .d-app .order-detail .detail-message {
   border-bottom: 0;
   padding-bottom: 0;
@@ -42,5 +49,22 @@
   }
   .d-app .order-amount-row .copy-button {
     padding-inline: 9px;
+  }
+  .d-app .order-visibility {
+    flex-direction: column;
+    align-items: flex-end;
+  }
+  .d-app .order-amount-row:has(.copy-button) {
+    flex-wrap: wrap;
+  }
+  .d-app .order-amount-row:has(.copy-button) .order-amount {
+    flex: 1 1 0;
+  }
+  .d-app .order-amount-row .copy-button {
+    flex-shrink: 0;
+  }
+  .d-app .order-amount-row:has(.copy-button) .order-visibility {
+    flex-basis: 100%;
+    flex-direction: row;
   }
 }

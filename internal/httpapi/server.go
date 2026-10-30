@@ -49,11 +49,12 @@ type Server struct {
 	limits   limiter
 }
 type requestState struct {
-	ID          string
-	Session     *auth.Session
-	Token, Code string
-	AuthError   error
-	Status      int
+	ID             string
+	Session        *auth.Session
+	Token, Code    string
+	AuthError      error
+	Status         int
+	SessionRevoked bool
 }
 type stateKey struct{}
 
@@ -101,7 +102,7 @@ func (s *Server) respond(w http.ResponseWriter, r *http.Request, status int, cod
 	st := state(r)
 	st.Code = code
 	st.Status = status
-	if code == "OK" && r.Method == "POST" && st.Session != nil && !strings.HasSuffix(r.URL.Path, "/logout") {
+	if code == "OK" && r.Method == "POST" && st.Session != nil && !st.SessionRevoked && !strings.HasSuffix(r.URL.Path, "/logout") {
 		session, e := s.Auth.Renew(r.Context(), st.Token)
 		if e != nil {
 			s.failure(w, r, e)
@@ -141,6 +142,8 @@ func (s *Server) failure(w http.ResponseWriter, r *http.Request, e error) {
 		code, message = "UPSTREAM_UNAVAILABLE", "第三方服务暂不可用"
 	case errors.Is(e, admin.ErrSelfBan):
 		code, message = "SELF_BAN_FORBIDDEN", e.Error()
+	case errors.Is(e, admin.ErrLastIdentity):
+		code, message = "LAST_IDENTITY_FORBIDDEN", e.Error()
 	default:
 		status = 500
 		s.Log.Error(fmt.Sprintf("请求 %s 无法完成，路由 %s", state(r).ID, chi.RouteContext(r.Context()).RoutePattern()), "request_id", state(r).ID, "error", e)
@@ -250,6 +253,7 @@ func (s *Server) Handler() http.Handler {
 		m.Get("/admin/user/detail", s.route(s.user, 2))
 		m.Post("/admin/user/ban", s.route(s.ban, 2))
 		m.Post("/admin/user/unban", s.route(s.ban, 2))
+		m.Post("/admin/user/identity/unbind", s.route(s.unbindIdentity, 2))
 		m.Get("/admin/overview", s.route(s.overview, 2))
 		m.Get("/admin/audit/list", s.route(s.audit, 2))
 	})
@@ -279,7 +283,7 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 		w.Header().Set("Cache-Control", "no-store")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://cdn.amoe.cc; font-src 'self' https://cdn.amoe.cc data:; img-src 'self' https: data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self' "+s.Config.EpayURL)
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://cdn.amoe.cc; font-src 'self' https://cdn.amoe.cc https://font.sec.miui.com https://cdn-file.hyperos.mi.com https://registry.npmmirror.com/@fontsource/source-code-pro/ data:; img-src 'self' https: data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self' "+s.Config.EpayURL)
 		if !s.Config.Development {
 			w.Header().Set("Strict-Transport-Security", "max-age=31536000")
 		}

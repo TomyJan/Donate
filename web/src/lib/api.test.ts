@@ -41,3 +41,25 @@ it('sends same-origin credentials and session-bound CSRF on writes', async () =>
     headers: { 'X-CSRF-Token': 'csrf' },
   });
 });
+it('signals revoked admin access only for an admin permission denial', async () => {
+  const denied = vi.fn();
+  window.addEventListener('admin-forbidden', denied);
+  const error = (code: string) => new Response(JSON.stringify({ code, data: null }), { status: 403 });
+  vi.stubGlobal(
+    'fetch',
+    vi
+      .fn()
+      .mockResolvedValueOnce(error('CSRF_FAILED'))
+      .mockResolvedValueOnce(error('FORBIDDEN'))
+      .mockResolvedValueOnce(error('FORBIDDEN')),
+  );
+  try {
+    await expect(api('admin/overview')).rejects.toMatchObject({ code: 'CSRF_FAILED' });
+    await expect(api('order/detail?id=other')).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(denied).not.toHaveBeenCalled();
+    await expect(api('admin/overview')).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(denied).toHaveBeenCalledTimes(1);
+  } finally {
+    window.removeEventListener('admin-forbidden', denied);
+  }
+});

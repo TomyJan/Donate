@@ -35,7 +35,7 @@ const columns: Record<Kind, [string, string][]> = {
     ['status', 'status'],
     ['bindings', 'bindings'],
     ['order_count', 'orders'],
-    ['paid_fen', 'totalPaid'],
+    ['paid_fen', 'donationAmount'],
     ['last_login_at', 'lastLogin'],
   ],
   audit: [
@@ -58,7 +58,8 @@ export function AdminTable({
   onTarget,
 }: Props) {
   const { t } = useApp();
-  const headers: [string, string][] = [['created_at', 'time'], ...columns[kind]];
+  const timeLabel = kind === 'users' ? 'registeredAt' : 'time';
+  const headers: [string, string][] = [['created_at', timeLabel], ...columns[kind]];
   const cell = (field: string, label: string, content: ReactNode) => (
     <td key={field} data-field={field} data-label={t(label)}>
       {content}
@@ -88,7 +89,7 @@ export function AdminTable({
         cell('status', 'status', <span className="a-badge">{t(u.status)}</span>),
         cell('bindings', 'bindings', u.bindings.map((v) => v.provider.toUpperCase()).join(' · ')),
         cell('order_count', 'orders', u.order_count),
-        cell('paid_fen', 'totalPaid', `¥${money(u.paid_fen)}`),
+        cell('paid_fen', 'donationAmount', `¥${money(u.paid_fen)}`),
         cell('last_login_at', 'lastLogin', dateTime(u.last_login_at)),
       ];
     }
@@ -117,7 +118,11 @@ export function AdminTable({
           )}
         </button>,
       ),
-      cell('result', 'result', t(a.result === 'created' ? 'createdResult' : a.result)),
+      cell(
+        'result',
+        'result',
+        t(a.result === 'created' ? 'createdResult' : a.result === 'unbound' ? 'unboundResult' : a.result),
+      ),
     ];
   }
   return (
@@ -185,7 +190,7 @@ export function AdminTable({
                   />
                 </td>
               )}
-              <td data-field="created_at">
+              <td data-field="created_at" data-label={t(timeLabel)}>
                 <time>{dateTime(row.created_at)}</time>
               </td>
               {fields(row)}

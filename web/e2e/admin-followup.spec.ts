@@ -196,6 +196,21 @@ test('changing overview range and refreshing retain cards and metric pagination 
   }
 });
 
+test('overview range and refresh share one heading row at every viewport width', async ({ page }) => {
+  await admin(page);
+  for (const width of [320, 390, 768, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    const actions = page.locator('.a-heading-actions');
+    await expect(actions.locator('.overview-refresh')).toBeVisible();
+    const range = await actions.getByRole('combobox', { name: '时间范围', exact: true }).boundingBox();
+    const refresh = await actions.locator('.overview-refresh').boundingBox();
+    if (!range || !refresh) throw new Error('Missing overview controls');
+    expect(Math.abs(range.y + range.height / 2 - refresh.y - refresh.height / 2)).toBeLessThan(1);
+    expect(refresh.x + refresh.width).toBeLessThanOrEqual(width);
+    await expect(page.locator('.overview-controls')).toHaveCount(0);
+  }
+});
+
 test('view donations uses the regular user filter without an extra toolbar row', async ({ page }) => {
   const control = await admin(page);
   await page.locator('.a-side').getByRole('button', { name: '用户', exact: true }).click();
@@ -288,4 +303,90 @@ test('user search and responsive filter movement retain one controlled filter wi
   await expect(user).toHaveCount(1);
   await expect(page.getByRole('combobox', { name: '状态', exact: true })).toHaveCount(1);
   await expect(page.getByRole('combobox', { name: '状态', exact: true })).toContainText('已支付');
+});
+
+test('order visibility badges stay beside the amount without overflowing narrow dialogs', async ({
+  page,
+}) => {
+  await admin(page);
+  await page.route('**/api/v1/admin/order/detail?**', (route) =>
+    route.fulfill({
+      json: {
+        code: 'OK',
+        data: { ...orders[0], amount_fen: 10000000, hidden_order: true, hidden_message: true },
+      },
+    }),
+  );
+  await page.locator('.a-side').getByRole('button', { name: '订单', exact: true }).click();
+  await page
+    .getByRole('button', { name: /^订单详情 / })
+    .first()
+    .click();
+  const dialog = page.getByRole('dialog', { name: '订单详情', exact: true });
+  for (const width of [320, 390, 768, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(dialog.locator('.order-visibility')).toHaveText('订单隐藏留言隐藏');
+    const positions = await dialog.locator('.order-amount-row').evaluate((row) => {
+      const amount = row.querySelector('.order-amount')?.getBoundingClientRect();
+      const flags = row.querySelector('.order-visibility')?.getBoundingClientRect();
+      return { amount, flags, overflow: row.scrollWidth > row.clientWidth + 1 };
+    });
+    expect(positions.overflow).toBe(false);
+    expect(positions.flags?.left).toBeGreaterThanOrEqual(positions.amount?.right ?? 0);
+    expect(await dialog.evaluate((el) => el.scrollWidth > el.clientWidth + 1)).toBe(false);
+  }
+  await page.screenshot({ path: 'test-results/admin-order-visibility.png' });
+});
+
+test('user details show registration, donation amount and binding times with managed unbinding', async ({
+  page,
+}) => {
+  await admin(page);
+  let bindings = ['qq', 'oidc'].map((provider, index) => ({
+    id: `identity-${index}`,
+    provider,
+    nickname: `${provider} account`,
+    avatar_url: '',
+    bound_at: `2026-10-${index ? '29' : '28'}T08:00:00Z`,
+  }));
+  const requests: unknown[] = [];
+  await page.route('**/api/v1/admin/user/detail?**', (route) =>
+    route.fulfill({ json: { code: 'OK', data: { ...users[0], bindings } } }),
+  );
+  await page.route('**/api/v1/admin/user/identity/unbind', (route) => {
+    const body = route.request().postDataJSON();
+    requests.push(body);
+    bindings = bindings.filter((binding) => binding.id !== body.identity_id);
+    return route.fulfill({ json: { code: 'OK', data: null } });
+  });
+  await page.locator('.a-side').getByRole('button', { name: '用户', exact: true }).click();
+  await expect(page.getByRole('button', { name: '注册时间', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: '捐赠金额', exact: true })).toBeVisible();
+  await page.setViewportSize({ width: 320, height: 900 });
+  await expect(page.locator('tbody tr').first().locator('[data-field=created_at]')).toHaveAttribute(
+    'data-label',
+    '注册时间',
+  );
+  await page
+    .getByRole('button', { name: /^用户详情 / })
+    .first()
+    .click();
+  const dialog = page.getByRole('dialog', { name: '用户详情', exact: true });
+  await expect(dialog.locator('.user-properties')).toContainText('捐赠金额¥4.00');
+  await expect(dialog.locator('.d-bind-time time')).toHaveCount(2);
+  await expect(dialog.locator('.d-bind-time time').first()).toHaveAttribute(
+    'datetime',
+    '2026-10-28T08:00:00Z',
+  );
+  for (const width of [320, 390, 768, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await dialog.evaluate((el) => el.scrollWidth > el.clientWidth + 1)).toBe(false);
+    await expect(dialog.getByRole('button', { name: '解绑 QQ', exact: true })).toBeVisible();
+  }
+  await page.screenshot({ path: 'test-results/admin-user-bindings.png' });
+  await dialog.getByRole('button', { name: '解绑 QQ', exact: true }).click();
+  await page.locator('.action-confirm').getByRole('button', { name: '确认', exact: true }).click();
+  await expect.poll(() => requests).toEqual([{ id: users[0].id, identity_id: 'identity-0' }]);
+  await expect(dialog.locator('.d-bind-time time')).toHaveCount(1);
+  await expect(dialog.getByRole('button', { name: '解绑 OIDC', exact: true })).toBeDisabled();
 });

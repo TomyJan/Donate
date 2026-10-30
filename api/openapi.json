@@ -225,7 +225,13 @@
           "avatar_url": {
             "type": "string"
           },
+          "bound_at": {
+            "description": "Original binding instant from identities.created_at; signing in again does not change it.",
+            "format": "date-time",
+            "type": "string"
+          },
           "id": {
+            "format": "uuid",
             "type": "string"
           },
           "nickname": {
@@ -237,6 +243,7 @@
         },
         "required": [
           "avatar_url",
+          "bound_at",
           "id",
           "nickname",
           "provider"
@@ -992,6 +999,10 @@
                 "avatar_url": {
                   "type": "string"
                 },
+                "bound_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
                 "id": {
                   "type": "string"
                 },
@@ -1004,6 +1015,7 @@
               },
               "required": [
                 "avatar_url",
+                "bound_at",
                 "id",
                 "nickname",
                 "provider"
@@ -1231,6 +1243,23 @@
         ],
         "type": "object"
       },
+      "UnbindIdentityInput": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "identity_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "identity_id"
+        ],
+        "type": "object"
+      },
       "User": {
         "properties": {
           "admin": {
@@ -1245,6 +1274,10 @@
                 "avatar_url": {
                   "type": "string"
                 },
+                "bound_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
                 "id": {
                   "type": "string"
                 },
@@ -1257,6 +1290,7 @@
               },
               "required": [
                 "avatar_url",
+                "bound_at",
                 "id",
                 "nickname",
                 "provider"
@@ -1322,6 +1356,10 @@
                       "avatar_url": {
                         "type": "string"
                       },
+                      "bound_at": {
+                        "format": "date-time",
+                        "type": "string"
+                      },
                       "id": {
                         "type": "string"
                       },
@@ -1334,6 +1372,7 @@
                     },
                     "required": [
                       "avatar_url",
+                      "bound_at",
                       "id",
                       "nickname",
                       "provider"
@@ -2407,6 +2446,82 @@
           }
         ],
         "summary": "admin/user/detail"
+      }
+    },
+    "/api/v1/admin/user/identity/unbind": {
+      "post": {
+        "description": "Administrator only. Removes the matched user's OAuth identity atomically, invalidates all credentials using it and cancels the user's outstanding binding flows. At least one login method must remain. Business failures LAST_IDENTITY_FORBIDDEN, NOT_FOUND and VALIDATION_FAILED use HTTP 200; inspect code. Success clears the cookie if the current session used the removed identity.",
+        "operationId": "admin_user_identity_unbind_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UnbindIdentityInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "enum": [
+                        null
+                      ],
+                      "nullable": true
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "admin/user/identity/unbind"
       }
     },
     "/api/v1/admin/user/list": {

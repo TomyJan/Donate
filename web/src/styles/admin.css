@@ -28,10 +28,6 @@
 #donate-admin .a-select { min-width:120px; max-width:100%; justify-content:space-between; padding-right:14px; }
 #donate-admin .a-input { width:100%; min-width:0; min-height:40px; border:1px solid var(--d-line); border-radius:9px; background:var(--d-paper); color:var(--d-ink); padding:8px 10px; font:inherit; }
 #donate-admin .a-filter-wrap { overflow:hidden; min-width:0; }
-#donate-admin .a-filters { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; padding:18px; margin-bottom:20px; background:var(--d-soft); border-radius:9px; }
-#donate-admin .a-field { display:flex; flex-direction:column; gap:6px; min-width:0; }
-#donate-admin .a-field>span { font-size:12px; color:var(--d-muted); }
-#donate-admin .a-field .d-btn { width:100%; min-width:0; justify-content:space-between; }
 #donate-admin .a-filter-bottom { grid-column:1/-1; display:flex; align-items:center; justify-content:space-between; gap:12px; }
 #donate-admin .a-filters [role=alert] { grid-column:1/-1; margin:0; font-size:12px; color:var(--d-danger); }
 #donate-admin .table-scroll { min-width:0; max-width:100%; overflow-x:auto; scrollbar-width:thin; overscroll-behavior-inline:contain; }
@@ -66,9 +62,8 @@
 #donate-admin .overview-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:32px; }
 #donate-admin .overview-grid>section { min-width:0; }
 #donate-admin .overview-panel { position:relative; min-width:0; }
-#donate-admin .overview-controls { display:flex; justify-content:flex-end; min-height:36px; }
 #donate-admin .overview-refresh { width:36px; min-height:36px; padding:8px; }
-#donate-admin .overview-progress { position:absolute; top:39px; inset-inline:0; height:2px; background:var(--d-accent); border-radius:9px; }
+#donate-admin .overview-progress { position:absolute; top:0; inset-inline:0; height:2px; background:var(--d-accent); border-radius:9px; }
 #donate-admin .a-summary-table { table-layout:fixed; }
 #donate-admin .a-summary-table th { padding-inline:4px; }
 #donate-admin .a-summary-table td { padding-inline:4px; font-variant-numeric:tabular-nums; }
@@ -117,8 +112,6 @@
   #donate-admin .a-side .d-btn { font-size:12px; padding:8px 4px; gap:6px; }
   #donate-admin .a-search { flex-basis:100%; }
   #donate-admin .a-tools>.a-select { flex:1 1 120px; min-width:120px; }
-  #donate-admin .a-filters { padding:14px; gap:12px; }
-  #donate-admin .a-field { grid-column:1/-1; }
   #donate-admin .overview-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
   #donate-admin .overview-stats>div { padding:16px; border-bottom:1px solid var(--d-line); }
   #donate-admin .overview-stats>div:first-child { padding-left:16px; }

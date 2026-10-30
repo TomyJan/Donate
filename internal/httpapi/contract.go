@@ -17,6 +17,10 @@ type CreateOrderInput struct {
 type IDInput struct {
 	ID string `json:"id"`
 }
+type UnbindIdentityInput struct {
+	ID         string `json:"id"`
+	IdentityID string `json:"identity_id"`
+}
 type OperationInput struct {
 	ID string `json:"operation_id"`
 }
