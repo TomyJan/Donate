@@ -14,7 +14,6 @@ import {
   Users,
   X,
 } from 'lucide-react';
-import { motion, useReducedMotion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useApp } from '../app/context';
@@ -27,6 +26,7 @@ import { AnimatedHeight } from '../components/AnimatedHeight';
 import { SelectField } from '../components/forms';
 import { OrderDialog } from '../components/OrderDialog';
 import { type OverviewPeriod, OverviewRange } from '../components/OverviewRange';
+import { SelectionButton, SelectionGroup } from '../components/SelectionGroup';
 import { UserDialog } from '../components/UserDialog';
 import { Button, Empty, Menu, Modal, Pagination } from '../components/ui';
 import { amountFen } from '../lib/amount';
@@ -40,7 +40,6 @@ export function Admin() {
   const app = useApp(),
     { t, profile, report } = app;
   const client = useQueryClient();
-  const reduced = useReducedMotion();
   const operationEpoch = useRef(0);
   const [tab, setTab] = useState<Tab>('overview'),
     [search, setSearch] = useState(''),
@@ -176,7 +175,7 @@ export function Admin() {
   if (!profile?.admin) return <AccessState signedIn={!!profile} onLogin={() => app.setLoginOpen(true)} />;
   return (
     <div className="a-layout">
-      <nav className="a-side" aria-label={t('admin')}>
+      <SelectionGroup as="nav" className="a-side" aria-label={t('admin')}>
         {(
           [
             ['overview', ChartNoAxesColumn],
@@ -185,29 +184,22 @@ export function Admin() {
             ['audit', ListChecks],
           ] as const
         ).map(([key, Icon]) => (
-          <Button
+          <SelectionButton
             key={key}
             className="a-btn a-ghost a-nav-item"
+            selected={tab === key}
             aria-current={tab === key ? 'page' : undefined}
             onClick={() => navigate(key)}
           >
-            {tab === key && (
-              <motion.span
-                className="a-tab-indicator"
-                aria-hidden="true"
-                layoutId={reduced ? undefined : 'admin-current-tab'}
-                transition={{ type: 'spring', stiffness: 420, damping: 38 }}
-              />
-            )}
             <Icon />
             <span className="a-nav-label">{t(key)}</span>
-          </Button>
+          </SelectionButton>
         ))}
         <Link className="d-btn d-ghost a-btn" to="/">
           <ArrowLeft />
           {t('home')}
         </Link>
-      </nav>
+      </SelectionGroup>
       <main key={tab} className="a-main">
         {tab !== 'overview' && (
           <AdminHeading title={t(tab)}>

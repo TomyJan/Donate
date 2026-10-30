@@ -415,7 +415,7 @@ test('admin navigation animates content and selection without resetting the acti
   expect(await previous?.evaluate((element) => element.isConnected)).toBe(false);
   const main = await page.locator('.a-main').elementHandle();
   await expect(page.locator('html')).toHaveAttribute('data-admin-entrance', 'moving');
-  await expect(ordersTab.locator('.a-tab-indicator')).toBeVisible();
+  await expect(ordersTab.locator('.d-selection-highlight')).toBeVisible();
   const search = page.getByRole('textbox', { name: '昵称 / 订单 ID / 用户 ID', exact: true });
   await search.fill('保留筛选');
   await ordersTab.click();
@@ -431,13 +431,85 @@ test('admin navigation animates content and selection without resetting the acti
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
   try {
+    await expect(ordersTab).toHaveCSS('transform', 'none');
     await expect
-      .poll(() => ordersTab.evaluate((button) => new DOMMatrix(getComputedStyle(button).transform).a))
+      .poll(() =>
+        ordersTab
+          .locator('.d-selection-content')
+          .evaluate((content) => Number.parseFloat(getComputedStyle(content).scale)),
+      )
       .toBeLessThan(0.99);
   } finally {
     await page.mouse.up();
   }
 });
+
+for (const width of [1280, 768, 320])
+  test(`navigation highlight stays above every button surface in both directions at ${width}px`, async ({
+    page,
+  }) => {
+    await admin(page);
+    await page.setViewportSize({ width, height: 900 });
+    for (const label of ['审计', '概览']) {
+      await page.locator('.a-side').evaluate((nav) => {
+        nav.removeAttribute('data-highlight-samples');
+        nav.addEventListener(
+          'click',
+          () => {
+            const samples: { covered: boolean; labelCovered: boolean; top: string }[] = [];
+            const sample = () => {
+              const indicator = nav.querySelector<HTMLElement>('.d-selection-highlight');
+              if (indicator) {
+                const rect = indicator.getBoundingClientRect();
+                const previous = indicator.style.pointerEvents;
+                // Hit testing changes no paint or stacking, and is restored within this frame.
+                indicator.style.pointerEvents = 'auto';
+                const top = document.elementFromPoint(rect.x + rect.width / 2, rect.y + 4);
+                let labelCovered = false;
+                for (const content of nav.querySelectorAll<HTMLElement>('.d-selection-content')) {
+                  const box = content.getBoundingClientRect();
+                  const x = box.x + box.width / 2,
+                    y = box.y + box.height / 2;
+                  if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) continue;
+                  const previousContent = content.style.pointerEvents;
+                  content.style.pointerEvents = 'auto';
+                  const text = document.elementFromPoint(x, y);
+                  labelCovered ||= !text || !content.contains(text);
+                  content.style.pointerEvents = previousContent;
+                }
+                indicator.style.pointerEvents = previous;
+                samples.push({
+                  covered: top !== indicator,
+                  labelCovered,
+                  top: top?.className?.toString() ?? '',
+                });
+              }
+              if (samples.length < 24) requestAnimationFrame(sample);
+              else nav.setAttribute('data-highlight-samples', JSON.stringify(samples));
+            };
+            requestAnimationFrame(sample);
+          },
+          { once: true },
+        );
+      });
+      await page.locator('.a-side').getByRole('button', { name: label, exact: true }).click();
+      const nav = page.locator('.a-side');
+      await expect(nav).toHaveAttribute('data-highlight-samples', /.+/);
+      const samples = JSON.parse((await nav.getAttribute('data-highlight-samples')) ?? '[]') as {
+        covered: boolean;
+        labelCovered: boolean;
+        top: string;
+      }[];
+      expect(
+        samples.filter((sample) => sample.covered),
+        `${label}: moving highlight must remain above all button surfaces`,
+      ).toEqual([]);
+      expect(
+        samples.some((sample) => sample.labelCovered),
+        'labels must stay above the moving highlight',
+      ).toBe(false);
+    }
+  });
 
 test('reduced motion suppresses admin entrance and navigation movement', async ({ page }) => {
   await page.emulateMedia({ reducedMotion: 'reduce' });

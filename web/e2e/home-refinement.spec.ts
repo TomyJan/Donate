@@ -71,6 +71,57 @@ async function home(page: Page, holdMore = false) {
   return releaseMore;
 }
 
+test('amount presets share the moving selection and keep manual amount input authoritative', async ({
+  page,
+}) => {
+  await home(page);
+  const presets = page.locator('.r-presets');
+  await expect(presets.locator('.d-selection-highlight')).toHaveCount(1);
+  const press = presets.getByRole('button', { name: '648', exact: true });
+  const box = await press.boundingBox();
+  if (!box) throw new Error('Missing amount preset');
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  try {
+    await expect(press).toHaveCSS('transform', 'none');
+    await expect
+      .poll(() =>
+        press
+          .locator('.d-selection-content')
+          .evaluate((content) => Number.parseFloat(getComputedStyle(content).scale)),
+      )
+      .toBeLessThan(0.99);
+  } finally {
+    await page.mouse.up();
+  }
+  await expect(press).toHaveCSS('transform', 'none');
+  for (const width of [1280, 390, 320]) {
+    await page.setViewportSize({ width, height: 1000 });
+    for (const amount of ['648', '0.01', '256', '8.88']) {
+      await presets.getByRole('button', { name: amount, exact: true }).click();
+      await expect(presets.getByRole('button', { name: amount, exact: true })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      await expect(page.getByRole('textbox', { name: '金额（元）', exact: true })).toHaveValue(amount);
+      await expect(presets.locator('.d-selection-highlight')).toHaveCount(1);
+    }
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  await page.getByRole('textbox', { name: '金额（元）', exact: true }).fill('19.99');
+  await expect(presets.locator('.d-selection-highlight')).toHaveCount(0);
+  await page.getByRole('textbox', { name: '金额（元）', exact: true }).fill('8.88');
+  await expect(presets.getByRole('button', { name: '8.88', exact: true })).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await presets.getByRole('button', { name: '50', exact: true }).click();
+  await expect(presets.locator('.d-selection-highlight')).toHaveCSS('transform', 'none');
+  await expect(presets.locator('.d-selection-highlight')).toHaveCSS('translate', 'none');
+  await expect(presets.locator('.d-selection-content').first()).toHaveCSS('scale', 'none');
+});
+
 test('more expands appended records without replaying old rows or resizing the message', async ({ page }) => {
   const releaseMore = await home(page, true);
   const message = page.getByRole('textbox', { name: '留言（选填）' });

@@ -45,11 +45,10 @@
   #receipt-refinement .r-money input:focus-visible { outline:none; }
   #receipt-refinement .r-money > span { font-size:22px; color:var(--r-muted); }
   #receipt-refinement .r-money input { width:100%; min-width:0; border:0; background:transparent; padding:0; font:700 var(--r-amount-size,56px)/1.3 "Source Code Pro",ui-monospace,Consolas,monospace; letter-spacing:-.06em; font-variant-numeric:tabular-nums; }
-  #receipt-refinement .r-presets { display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:6px; margin-top:16px; width:100%; }
-  #receipt-refinement .r-preset { grid-column:span 3; min-width:0; min-height:36px; padding:5px 4px; border:1px solid var(--r-line); background:transparent; border-radius:var(--r-control-radius); font-size:12px; line-height:1.4; }
+  #receipt-refinement .r-presets { display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:6px; margin-top:16px; width:100%; --selection-surface:transparent; }
+  #receipt-refinement .r-preset { grid-column:span 3; min-width:0; min-height:36px; padding:5px 4px; border:1px solid transparent; background:transparent; border-radius:var(--r-control-radius); font-size:12px; line-height:1.4; }
   #receipt-refinement .r-preset:nth-child(n+5) { grid-column:span 4; }
-  #receipt-refinement .r-preset:hover { background:var(--r-soft); }
-  #receipt-refinement .r-preset[aria-pressed="true"] { background:var(--r-ink); border-color:var(--r-ink); color:var(--r-bg); }
+  #receipt-refinement .r-preset[aria-pressed="true"] { color:var(--r-bg); }
   #receipt-refinement .r-message-field { position:relative; width:100%; margin:22px 0; }
   #receipt-refinement .r-message-field::after { content:""; position:absolute; height:1px; left:0; right:0; bottom:0; background:var(--r-line); border-radius:999px; pointer-events:none; }
   #receipt-refinement .r-message-field:focus-within::after { height:2px; background:var(--r-accent); }
@@ -140,8 +139,8 @@
     #receipt-refinement .r-filter { min-height:44px; }
   }
   @media (prefers-reduced-motion:no-preference) {
-    #receipt-refinement :is(.r-btn,.r-option,.r-preset,.r-filter,.r-pay,.r-footer a) { transition:background-color .18s,color .18s,border-color .18s,opacity .18s,transform .18s; }
-    #receipt-refinement .r-btn:active:not(:disabled), #receipt-refinement .r-preset:active { transform:scale(.97); }
+    #receipt-refinement :is(.r-btn,.r-option,.r-filter,.r-pay,.r-footer a) { transition:background-color .18s,color .18s,border-color .18s,opacity .18s,transform .18s; }
+    #receipt-refinement .r-btn:active:not(:disabled) { transform:scale(.97); }
     #receipt-refinement .r-index-row { transition:padding .2s,background-color .2s,color .2s; }
     #receipt-refinement .r-app { transition:background-color .24s,color .24s; }
     #receipt-refinement .r-channel svg, #receipt-refinement summary svg { transition:transform .22s; }

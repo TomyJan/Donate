@@ -68,10 +68,11 @@ for (const stage of ['module', 'identity'] as const)
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         await page.screenshot({ path: info.outputPath(`loading-${width}.png`), animations: 'disabled' });
       }
-      const start = await page.locator('.a-main').boundingBox();
       await page.emulateMedia({ colorScheme: 'dark', reducedMotion: 'reduce' });
       await expect(loading.locator('.admin-loading-spinner')).toHaveCSS('animation-name', 'none');
       await expect(loading.locator('.admin-loading-preview')).toHaveCSS('animation-name', 'none');
+      await expect(page.locator('.a-main')).toHaveCSS('transform', 'none');
+      const start = await page.locator('.a-main').boundingBox();
       control.release();
       await expect(page.locator('.overview-stats')).toBeVisible();
       const ready = await page.locator('.a-main').boundingBox();

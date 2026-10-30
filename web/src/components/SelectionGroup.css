@@ -1,0 +1,80 @@
+/* One stacking context per group: surfaces < moving highlight < every label.
+   Transform the visual layers, never the buttons, so DOM order cannot cover a reverse transition. */
+.d-app .d-selection-group {
+  isolation: isolate;
+}
+.d-app .d-selection-group .d-selection-button {
+  position: relative;
+  background: transparent;
+  border-color: transparent;
+  transition:
+    color 0.18s ease,
+    box-shadow 0.18s ease;
+}
+.d-app .d-selection-button::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  z-index: 0;
+  background: var(--selection-surface, var(--d-paper));
+  border: 1px solid var(--d-line);
+  border-radius: inherit;
+  pointer-events: none;
+}
+.d-app .d-selection-highlight {
+  position: absolute;
+  inset: -1px;
+  z-index: 1;
+  background: var(--d-ink);
+  border-radius: inherit;
+  pointer-events: none;
+}
+.d-app .d-selection-content {
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: inherit;
+  gap: inherit;
+  min-width: 0;
+  width: 100%;
+  pointer-events: none;
+}
+.d-app .d-selection-button::before,
+.d-app .d-selection-highlight,
+.d-app .d-selection-content {
+  transition:
+    translate 0.18s ease,
+    scale 0.18s ease,
+    background-color 0.18s ease;
+}
+@media (hover: hover) {
+  .d-app .d-selection-button:hover::before {
+    background: var(--d-soft);
+  }
+  .d-app .d-selection-button:hover::before,
+  .d-app .d-selection-button:hover .d-selection-highlight,
+  .d-app .d-selection-button:hover .d-selection-content {
+    translate: 0 -1px;
+  }
+}
+.d-app .d-selection-button:active::before,
+.d-app .d-selection-button:active .d-selection-highlight,
+.d-app .d-selection-button:active .d-selection-content {
+  translate: 0;
+  scale: 0.97;
+}
+@media (prefers-reduced-motion: reduce) {
+  .d-app .d-selection-group .d-selection-button,
+  .d-app .d-selection-button::before,
+  .d-app .d-selection-highlight,
+  .d-app .d-selection-content {
+    transition: none;
+  }
+  .d-app .d-selection-group .d-selection-button:is(:hover, :active)::before,
+  .d-app .d-selection-group .d-selection-button:is(:hover, :active) .d-selection-highlight,
+  .d-app .d-selection-group .d-selection-button:is(:hover, :active) .d-selection-content {
+    translate: none;
+    scale: none;
+  }
+}

@@ -6,6 +6,7 @@ import { useApp } from '../app/context';
 import { ConstrainedInput } from '../components/ConstrainedInput';
 import { MessageInput } from '../components/MessageInput';
 import { checkout, OrderDialog } from '../components/OrderDialog';
+import { SelectionButton, SelectionGroup } from '../components/SelectionGroup';
 import { Button, Empty, Menu } from '../components/ui';
 import { acceptAmountEdit, amountFen } from '../lib/amount';
 import { api, query } from '../lib/api';
@@ -127,19 +128,19 @@ export function Home() {
           }}
         />
       </label>
-      <div className="r-presets">
+      <SelectionGroup className="r-presets">
         {['0.01', '8.88', '20.26', '50', '128', '256', '648'].map((value) => (
-          <button
-            type="button"
+          <SelectionButton
             className="r-preset"
             key={value}
+            selected={amountFen(draft.amount) === amountFen(value)}
             aria-pressed={amountFen(draft.amount) === amountFen(value)}
             onClick={() => setDraft((v) => ({ ...v, amount: value }))}
           >
             {value}
-          </button>
+          </SelectionButton>
         ))}
-      </div>
+      </SelectionGroup>
       <MessageInput
         value={draft.message}
         label={t('message')}
