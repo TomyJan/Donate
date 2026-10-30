@@ -30,13 +30,14 @@ afterEach(() => {
 function renderOrder(admin = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   clients.push(client);
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <div className="d-app">
         <OrderDialog id="order-uuid" onClose={() => {}} admin={admin} />
       </div>
     </QueryClientProvider>,
   );
+  return { ...view, client };
 }
 const response = (data: unknown) => new Response(JSON.stringify({ code: 'OK', data }), { status: 200 });
 
@@ -64,6 +65,94 @@ const order: Order & { province: string } = {
   ip: '192.0.2.123',
   province: '广东',
 };
+
+it.each([
+  ['NOT_FOUND', 200, 'recordMissingError'],
+  ['FORBIDDEN', 403, 'forbidden'],
+  ['UNAUTHORIZED', 401, 'unauthorized'],
+  ['ACCOUNT_BANNED', 403, 'banned'],
+])('removes cached order details and actions after %s', async (code, status, label) => {
+  let missing = false;
+  vi.stubGlobal('fetch', async () =>
+    missing
+      ? new Response(JSON.stringify({ code, data: null }), { status: Number(status) })
+      : response({ ...order, status: 'pending', expires_at: '2099-01-01T00:00:00Z' }),
+  );
+  const { client } = renderOrder();
+  expect(await screen.findByRole('button', { name: 'Continue payment' })).toBeEnabled();
+  missing = true;
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: ['order-detail'] });
+  });
+  await screen.findByText(translate(String(label), 'en'));
+  await waitFor(() => expect(client.getQueryData(['order-detail', false, 'order-uuid'])).toBeUndefined());
+  expect(screen.queryByText('Admin')).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Continue payment' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Copy info' })).not.toBeInTheDocument();
+});
+
+it.each([false, true])(
+  'keeps an invalidated order unavailable through later network errors until fresh success (admin=%s)',
+  async (admin) => {
+    let state = 'initial';
+    vi.stubGlobal('fetch', async () => {
+      if (state === 'missing') return new Response(JSON.stringify({ code: 'NOT_FOUND', data: null }));
+      if (state === 'offline') return new Response('proxy unavailable', { status: 503 });
+      return response({ ...order, nickname: state === 'recovered' ? 'Fresh donor' : order.nickname });
+    });
+    const { client } = renderOrder(admin);
+    await screen.findByText('Admin');
+    state = 'missing';
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['order-detail'] });
+    });
+    await screen.findByText(translate('recordMissingError', 'en'));
+    await waitFor(() => expect(client.getQueryData(['order-detail', admin, 'order-uuid'])).toBeUndefined());
+    expect(screen.queryByText('Admin')).not.toBeInTheDocument();
+    state = 'offline';
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['order-detail'] });
+    });
+    await screen.findByText(translate('serverBusyError', 'en'));
+    expect(screen.queryByText('Admin')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: admin ? 'Copy ID' : 'Copy info' })).not.toBeInTheDocument();
+    state = 'recovered';
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await screen.findByText('Fresh donor');
+    expect(screen.queryByText(translate('serverBusyError', 'en'))).not.toBeInTheDocument();
+  },
+);
+
+it.each([false, true])(
+  'shows cached detail refresh failures and recovers on retry (admin=%s)',
+  async (admin) => {
+    let failed = false;
+    vi.stubGlobal('fetch', async () =>
+      failed
+        ? new Response('proxy unavailable', { status: 503 })
+        : response({ ...order, status: 'pending', expires_at: '2099-01-01T00:00:00Z' }),
+    );
+    const { client } = renderOrder(admin);
+    await screen.findByText('Admin');
+    failed = true;
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['order-detail'] });
+    });
+    expect(screen.getByText('Admin')).toBeInTheDocument();
+    await screen.findByText(translate('serverBusyError', 'en'));
+    expect(
+      screen.getByRole('button', { name: admin ? 'Reconcile payment' : 'Continue payment' }),
+    ).toBeDisabled();
+    failed = false;
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() =>
+      expect(screen.queryByText(translate('serverBusyError', 'en'))).not.toBeInTheDocument(),
+    );
+    expect(
+      screen.getByRole('button', { name: admin ? 'Reconcile payment' : 'Continue payment' }),
+    ).toBeEnabled();
+  },
+);
 
 it('copies a complete readable order summary using an explicit safe field list', () => {
   const labels: Record<string, string> = {

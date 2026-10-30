@@ -305,11 +305,12 @@ export function Admin() {
                 )}
               </div>
             )}
+            {list.error && (
+              <RequestError error={list.error} busy={list.isFetching} onRetry={() => void list.refetch()} />
+            )}
             {list.isLoading ? (
               <AdminLoading kind="table" />
-            ) : list.error && !rows.length ? (
-              <RequestError error={list.error} busy={list.isFetching} onRetry={() => void list.refetch()} />
-            ) : !rows.length ? (
+            ) : list.error && !rows.length ? null : !rows.length ? (
               <Empty />
             ) : (
               <AdminTable

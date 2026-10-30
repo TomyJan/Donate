@@ -1,8 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Download, ExternalLink, RefreshCw } from 'lucide-react';
-import { type ReactNode, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useApp } from '../app/context';
-import { api, dateTime, downloadExport, money, query } from '../lib/api';
+import { APIError, api, dateTime, downloadExport, money, query } from '../lib/api';
 import { rememberPayment } from '../lib/payment-return';
 import type { Operation, Order } from '../lib/types';
 import { ActionConfirm } from './ActionConfirm';
@@ -73,7 +73,18 @@ export function OrderDialog({
     refetchInterval: () => (Date.now() < pollUntil ? 2000 : false),
     retry: false,
   });
-  const o = detail.data;
+  const unavailable =
+    detail.error instanceof APIError &&
+    ['NOT_FOUND', 'UNAUTHORIZED', 'FORBIDDEN', 'ACCOUNT_BANNED'].includes(detail.error.code);
+  useEffect(() => {
+    if (!unavailable) return;
+    const cached = client.getQueryCache().find({ queryKey: ['order-detail', admin, id], exact: true });
+    // Preserve the terminal error while revoking its data for every observer,
+    // including dialogs reopened after this component has unmounted.
+    if (cached?.state.data !== undefined) cached.setState({ data: undefined, dataUpdatedAt: 0 });
+  }, [unavailable, client, admin, id]);
+  const o = unavailable ? undefined : detail.data;
+  const actionsDisabled = busy || detail.isFetching || !!detail.error;
   const canContinue = !!o && o.status === 'pending' && new Date(o.expires_at).getTime() > Date.now();
   const reconciliations = o?.reconciliations ?? [];
   const manualJobIDs = new Set(reconciliations.map((request) => request.job_id));
@@ -131,7 +142,7 @@ export function OrderDialog({
         title={label}
         description={t(action === 'delete' ? 'deleteHint' : action === 'close' ? 'closeHint' : 'confirm')}
         trigger={
-          <Button disabled={busy} className={action === 'delete' ? 'is-danger' : ''}>
+          <Button disabled={actionsDisabled} className={action === 'delete' ? 'is-danger' : ''}>
             {icon}
             {label}
           </Button>
@@ -196,10 +207,11 @@ export function OrderDialog({
     : [];
   return (
     <Modal open={!!id} onOpenChange={(v) => !v && onClose()} title={t('details')} wide>
+      {detail.error && (
+        <RequestError error={detail.error} busy={detail.isFetching} onRetry={() => void detail.refetch()} />
+      )}
       {detail.isLoading ? (
         <AdminLoading kind="detail" />
-      ) : detail.error && !o ? (
-        <RequestError error={detail.error} busy={detail.isFetching} onRetry={() => void detail.refetch()} />
       ) : (
         o && (
           <div className="order-detail">
@@ -257,7 +269,7 @@ export function OrderDialog({
                     <CopyButton key={o.id} text={o.id} label={t('copy')} />
                     {confirmAction('export', t('export'), <Download />)}
                     <Button
-                      disabled={busy || o.protocol === 'legacy'}
+                      disabled={actionsDisabled || o.protocol === 'legacy'}
                       onClick={() =>
                         void run(async () => {
                           await api('admin/order/reconcile', {
@@ -288,7 +300,7 @@ export function OrderDialog({
                   canContinue && (
                     <Button
                       className="d-primary"
-                      disabled={busy}
+                      disabled={actionsDisabled}
                       onClick={() => void run(() => checkout(o.id))}
                     >
                       <ExternalLink />

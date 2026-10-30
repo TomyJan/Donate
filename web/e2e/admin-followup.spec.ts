@@ -131,6 +131,35 @@ async function admin(page: BrowserPage) {
   };
 }
 
+test('cached admin rows show a refetch failure and recover with a local retry', async ({ page }) => {
+  await page.clock.install();
+  await admin(page);
+  await page.locator('.a-side').getByRole('button', { name: '订单', exact: true }).click();
+  await expect(page.locator('tbody tr')).toHaveCount(12);
+  let recovered = false;
+  let requests = 0;
+  await page.route('**/api/v1/admin/order/list?**', (route) => {
+    requests++;
+    return recovered
+      ? route.fulfill({
+          json: { code: 'OK', data: { items: orders, total: orders.length, page: 1, page_size: 20 } },
+        })
+      : route.fulfill({ status: 503, contentType: 'text/plain', body: 'proxy unavailable' });
+  });
+  await page.locator('.a-side').getByRole('button', { name: '概览', exact: true }).click();
+  await expect(page.locator('.overview-stats')).toBeVisible();
+  await page.clock.fastForward(16000);
+  await page.locator('.a-side').getByRole('button', { name: '订单', exact: true }).click();
+  await expect.poll(() => requests).toBeGreaterThan(0);
+  const error = page.locator('.a-main .request-error');
+  await expect(error).toContainText('服务器正在忙');
+  await expect(page.locator('tbody tr')).toHaveCount(12);
+  recovered = true;
+  await error.getByRole('button', { name: '重试', exact: true }).click();
+  await expect(error).toHaveCount(0);
+  await expect(page.locator('tbody tr')).toHaveCount(12);
+});
+
 test('admin tab navigation keeps its intrinsic height across short and long pages', async ({ page }) => {
   await admin(page);
   for (const height of [600, 1000])
