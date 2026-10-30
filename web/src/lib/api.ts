@@ -33,18 +33,25 @@ function responseError(path: string, response: Response) {
   signalAccessFailure(path, response.status, code);
   return new APIError(code, '', response.status, response.headers.get('X-Request-ID') ?? '', path);
 }
-async function request(path: string, body?: unknown, signal?: AbortSignal) {
+async function request<T>(
+  path: string,
+  body: unknown,
+  read: (response: Response) => Promise<T>,
+  signal?: AbortSignal,
+) {
   try {
     const timeout = AbortSignal.timeout(15000);
-    return await fetch(`/api/v1/${path}`, {
+    const response = await fetch(`/api/v1/${path}`, {
       method: body === undefined ? 'GET' : 'POST',
       credentials: 'same-origin',
       headers: body === undefined ? {} : { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     });
+    return await read(response);
   } catch (error) {
     if (signal?.aborted) throw error;
+    if (error instanceof APIError) throw error;
     const code = !navigator.onLine
       ? 'OFFLINE'
       : error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError')
@@ -57,8 +64,9 @@ async function envelope<T>(path: string, response: Response): Promise<T> {
   let value: unknown;
   try {
     value = await response.json();
-  } catch {
-    throw responseError(path, response);
+  } catch (error) {
+    if (error instanceof SyntaxError) throw responseError(path, response);
+    throw error;
   }
   if (!value || typeof value !== 'object' || !('code' in value) || typeof value.code !== 'string')
     throw responseError(path, response);
@@ -77,16 +85,18 @@ async function envelope<T>(path: string, response: Response): Promise<T> {
   return wire.data;
 }
 export async function api<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
-  return envelope<T>(path, await request(path, body, signal));
+  return request(path, body, (response) => envelope<T>(path, response), signal);
 }
 export async function downloadExport(id: string) {
   const path = 'admin/order/export';
-  const response = await request(path, { operation_id: id });
-  if (!response.ok || !response.headers.get('Content-Type')?.includes('text/csv')) {
-    await envelope(path, response);
-    throw responseError(path, response);
-  }
-  const url = URL.createObjectURL(await response.blob());
+  const blob = await request(path, { operation_id: id }, async (response) => {
+    if (!response.ok || !response.headers.get('Content-Type')?.includes('text/csv')) {
+      await envelope(path, response);
+      throw responseError(path, response);
+    }
+    return response.blob();
+  });
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = 'donate-orders.csv';

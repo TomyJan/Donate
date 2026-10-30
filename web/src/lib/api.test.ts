@@ -1,9 +1,64 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { APIError, api, setCSRF } from './api';
+import { APIError, api, downloadExport, setCSRF } from './api';
 
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+});
+function streamResponse(contentType: string) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((_url: string, options: RequestInit) =>
+      Promise.resolve(
+        new Response(
+          new ReadableStream({
+            start(stream) {
+              options.signal?.addEventListener('abort', () => stream.error(options.signal?.reason), {
+                once: true,
+              });
+            },
+          }),
+          { headers: { 'Content-Type': contentType } },
+        ),
+      ),
+    ),
+  );
+}
+it.each(['json', 'csv'])('classifies a timeout while reading the %s response body', async (kind) => {
+  const timeout = new AbortController();
+  vi.spyOn(AbortSignal, 'timeout').mockReturnValue(timeout.signal);
+  streamResponse(kind === 'json' ? 'application/json' : 'text/csv');
+  const pending = kind === 'json' ? api('order/list') : downloadExport('export-id');
+  await Promise.resolve();
+  timeout.abort(new DOMException('timed out', 'TimeoutError'));
+  await expect(pending).rejects.toMatchObject({
+    code: 'REQUEST_TIMEOUT',
+    status: 0,
+    requestPath: kind === 'json' ? 'order/list' : 'admin/order/export',
+  });
+});
+it('preserves caller cancellation while reading a response body', async () => {
+  streamResponse('application/json');
+  const caller = new AbortController();
+  const pending = api('order/list', undefined, caller.signal);
+  await Promise.resolve();
+  caller.abort();
+  await expect(pending).rejects.toBe(caller.signal.reason);
+});
+it('classifies a connection lost during response body reading as a network failure', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn().mockResolvedValue(
+      new Response(
+        new ReadableStream({
+          start(stream) {
+            stream.error(new TypeError('connection closed'));
+          },
+        }),
+      ),
+    ),
+  );
+  await expect(api('order/list')).rejects.toMatchObject({ code: 'NETWORK_ERROR', status: 0 });
 });
 it.each([
   [502, 'SERVER_UNAVAILABLE'],
