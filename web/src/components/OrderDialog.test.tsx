@@ -231,7 +231,7 @@ it('places the frontend copy summary beside the amount and excludes administrati
   const copy = await screen.findByRole('button', { name: 'Copy info' });
   expect(copy.closest('.order-amount-row')).toHaveTextContent('¥9.88');
   expect(screen.queryByRole('button', { name: 'Copy ID' })).not.toBeInTheDocument();
-  expect(screen.queryByText('Order IP')).not.toBeInTheDocument();
+  expect(screen.getByText('Order IP').closest('div')).toHaveTextContent('192.0.2.123');
   fireEvent.click(copy);
   await act(async () => {});
   expect(clipboard).toContain('Account: Admin (full-user-uuid)');
@@ -254,6 +254,64 @@ it('shows only the safe province on the frontend and leaves no empty action foot
   expect(screen.queryByText('private-city')).not.toBeInTheDocument();
   expect(screen.queryByText('private-street')).not.toBeInTheDocument();
   expect(document.querySelector('.detail-actions')).not.toBeInTheDocument();
+});
+
+it('queues a location refresh from the order actions and shows its task feedback', async () => {
+  const actions: unknown[] = [];
+  let refreshed = false;
+  vi.stubGlobal('fetch', async (input: string, init?: RequestInit) => {
+    const path = String(input);
+    if (path.endsWith('/preview')) {
+      actions.push(JSON.parse(String(init?.body)));
+      return response({
+        id: 'geo-preview',
+        action: 'refresh_location',
+        expires_at: '2099-01-01T00:00:00Z',
+        items: [{ id: order.id, result: 'ready', status: 'paid' }],
+      });
+    }
+    if (path.endsWith('/execute')) {
+      actions.push(JSON.parse(String(init?.body)));
+      refreshed = true;
+      return response({
+        id: 'geo-preview',
+        action: 'refresh_location',
+        items: [{ id: order.id, result: 'queued' }],
+      });
+    }
+    return response({
+      ...order,
+      jobs: refreshed
+        ? [
+            {
+              id: 'geo-refresh',
+              kind: 'geo',
+              source: 'admin_refresh',
+              status: 'ready',
+              result: '',
+              attempts: 0,
+              created_at: '2026-10-31T00:00:00Z',
+              run_at: '2026-10-31T00:00:00Z',
+            },
+          ]
+        : [],
+    });
+  });
+  renderOrder(true);
+  fireEvent.click(await screen.findByRole('button', { name: 'Refresh location' }));
+  const confirm = await screen.findByRole('button', { name: 'Confirm' });
+  await waitFor(() => expect(confirm).toBeEnabled());
+  fireEvent.click(confirm);
+  await waitFor(() =>
+    expect(actions).toEqual([
+      { action: 'refresh_location', ids: ['order-uuid'] },
+      { operation_id: 'geo-preview' },
+    ]),
+  );
+  await waitFor(() =>
+    expect(document.querySelector('.job-list')).toHaveTextContent('Refresh location 2026-10-31 08:00'),
+  );
+  expect(notify).toHaveBeenCalledWith('Queued');
 });
 
 it('keeps an unknown province state visible when geolocation has no province', async () => {

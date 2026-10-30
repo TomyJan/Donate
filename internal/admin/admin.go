@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"github.com/TomyJan/Donate/internal/auth"
 	"github.com/TomyJan/Donate/internal/config"
+	"github.com/TomyJan/Donate/internal/jobs"
 	"github.com/TomyJan/Donate/internal/order"
 	"github.com/TomyJan/Donate/internal/storage"
 	"github.com/TomyJan/Donate/internal/storage/dbgen"
@@ -100,7 +101,7 @@ type Operation struct {
 	Items     []Item    `json:"items"`
 }
 
-var actions = map[string]bool{"close": true, "hide_order": true, "show_order": true, "hide_message": true, "show_message": true, "delete": true, "export": true}
+var actions = map[string]bool{"close": true, "hide_order": true, "show_order": true, "hide_message": true, "show_message": true, "delete": true, "export": true, "refresh_location": true}
 
 func (s *Service) Preview(ctx context.Context, actor, action string, ids []string) (Operation, error) {
 	out := Operation{Items: []Item{}}
@@ -196,6 +197,9 @@ func (s *Service) Operation(ctx context.Context, actor, id string) (Operation, e
 		} else {
 			item.Status = o.Status
 			item.AmountFen = o.AmountFen
+			if out.Action == "refresh_location" && s.Config.GeoMode == "disabled" {
+				item.Result = "disabled"
+			}
 		}
 		out.Items = append(out.Items, item)
 	}
@@ -239,6 +243,16 @@ func (s *Service) Execute(ctx context.Context, actor, id string) (Operation, err
 				return e
 			} else {
 				switch action {
+				case "refresh_location":
+					if s.Config.GeoMode == "disabled" {
+						result = "disabled"
+					} else {
+						jid, err := jobs.EnqueueGeoRefreshTx(ctx, tx, tid, aid, id, now)
+						if err != nil {
+							return err
+						}
+						job, result = jid, "queued"
+					}
 				case "delete":
 					if _, e = tx.ExecContext(ctx, "DELETE FROM orders WHERE id=?", tid); e != nil {
 						return e
@@ -299,5 +313,11 @@ func (s *Service) Execute(ctx context.Context, actor, id string) (Operation, err
 		return Operation{}, e
 	}
 	s.Log.Info(fmt.Sprintf("管理员 %s 确认执行管理操作 %s", actor, id), "actor_id", actor, "operation_id", id)
-	return s.Operation(ctx, actor, id)
+	out, err := s.Operation(ctx, actor, id)
+	if err == nil && out.Action == "refresh_location" {
+		for _, item := range out.Items {
+			s.Log.Info(fmt.Sprintf("管理员 %s 确认刷新订单 %s 属地，操作 %s，任务 %s，结果 %s", actor, item.ID, id, item.JobID, item.Result), "actor_id", actor, "order_id", item.ID, "operation_id", id, "job_id", item.JobID, "result", item.Result)
+		}
+	}
+	return out, err
 }

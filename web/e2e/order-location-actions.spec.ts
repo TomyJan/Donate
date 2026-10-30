@@ -203,3 +203,35 @@ test('dialog action rows fill the available width at desktop and narrow viewport
   if (!row || !button) throw new Error('User actions must remain visible on a narrow viewport');
   expect(Math.abs(button.x + button.width - (row.x + row.width))).toBeLessThanOrEqual(2);
 });
+
+test('administrators refresh location from the order dialog and from a bulk selection', async ({ page }) => {
+  const { previews } = await setup(page);
+  const dialog = await openOrder(page);
+  await dialog.getByRole('button', { name: '刷新属地', exact: true }).click();
+  const confirmation = page.getByRole('dialog', { name: '刷新属地', exact: true });
+  await confirmation.getByRole('button', { name: '确认', exact: true }).click();
+  await expect(dialog.locator('.detail-grid')).toContainText('浙江');
+  await expect(dialog.locator('.job-list')).toContainText('属地已更新');
+  expect(previews).toEqual([{ action: 'refresh_location', ids: ['location-order-0'] }]);
+  await dialog.getByRole('button', { name: '关闭', exact: true }).first().click();
+  for (const checkbox of await page.locator('tbody .custom-check').all()) await checkbox.check();
+  await page.getByRole('button', { name: '批量操作', exact: true }).click();
+  await page.getByRole('menuitem', { name: '刷新属地', exact: true }).click();
+  const bulk = page
+    .getByRole('dialog')
+    .filter({ has: page.getByRole('heading', { name: '刷新属地', exact: true }) });
+  await bulk.getByRole('button', { name: '确认', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('已加入队列');
+  expect(previews[1]).toEqual({ action: 'refresh_location', ids: ['location-order-0', 'location-order-1'] });
+  await expect(page.getByRole('dialog')).toContainText('属地已更新');
+  await expect(page.getByRole('dialog')).not.toContainText('located_mmdb');
+});
+
+test('a disabled location source is explained before confirming a bulk refresh', async ({ page }) => {
+  await setup(page, true);
+  for (const checkbox of await page.locator('tbody .custom-check').all()) await checkbox.check();
+  await page.getByRole('button', { name: '批量操作', exact: true }).click();
+  await page.getByRole('menuitem', { name: '刷新属地', exact: true }).click();
+  await expect(page.getByRole('dialog').locator('.operation-items')).toContainText('属地查询已关闭');
+  await expect(page.getByRole('dialog').locator('.operation-items')).not.toContainText('已支付');
+});

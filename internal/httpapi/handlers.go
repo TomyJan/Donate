@@ -163,6 +163,10 @@ func (s *Server) detail(w http.ResponseWriter, r *http.Request) {
 		s.failure(w, r, e)
 		return
 	}
+	// Ownership permits this order's request IP without granting the full admin view.
+	if o.UserID == session.UserID {
+		v.IP = o.IP
+	}
 	s.ok(w, r, v)
 }
 func (s *Server) create(w http.ResponseWriter, r *http.Request) {

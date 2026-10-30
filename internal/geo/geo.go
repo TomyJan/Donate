@@ -22,6 +22,7 @@ import (
 )
 
 var ErrUnavailable = errors.New("属地查询暂不可用")
+var ErrDisabled = errors.New("属地查询已禁用")
 
 type Location struct {
 	Country        string    `json:"country"`
@@ -39,9 +40,10 @@ type Location struct {
 	QueriedAt      time.Time `json:"queried_at"`
 }
 type cached struct {
-	value Location
-	until time.Time
-	err   error
+	value    Location
+	until    time.Time
+	err      error
+	revision uint64
 }
 type source struct {
 	name, endpoint string
@@ -52,14 +54,15 @@ type source struct {
 	failures       int
 }
 type Service struct {
-	HTTP    *http.Client
-	config  config.Config
-	log     *slog.Logger
-	local   *maxminddb.Reader
-	sources []*source
-	mu      sync.Mutex
-	cache   map[string]cached
-	flight  singleflight.Group
+	HTTP     *http.Client
+	config   config.Config
+	log      *slog.Logger
+	local    *maxminddb.Reader
+	sources  []*source
+	mu       sync.Mutex
+	cache    map[string]cached
+	flight   singleflight.Group
+	revision uint64
 }
 
 func New(c config.Config, l *slog.Logger) (*Service, error) {
@@ -95,22 +98,57 @@ func PublicIP(a netip.Addr) bool {
 	return true
 }
 func (s *Service) Lookup(ctx context.Context, ip string) (Location, error) {
+	return s.lookup(ctx, ip, false)
+}
+
+// Refresh uses the configured sources and rate limits, but never reuses a cached
+// result or an ordinary lookup already in flight.
+func (s *Service) Refresh(ctx context.Context, ip string) (Location, error) {
+	return s.lookup(ctx, ip, true)
+}
+
+func (s *Service) lookup(ctx context.Context, ip string, force bool) (Location, error) {
 	a, e := netip.ParseAddr(ip)
 	if e != nil {
 		return Location{}, e
 	}
 	a = a.Unmap()
 	ip = a.String()
+	if force && s.config.GeoMode == "disabled" {
+		return Location{}, ErrDisabled
+	}
 	if !PublicIP(a) || s.config.GeoMode == "disabled" {
+		if force {
+			return Location{}, ErrUnavailable
+		}
 		return Location{Source: "unavailable", QueriedAt: time.Now().UTC()}, nil
 	}
 	s.mu.Lock()
 	v, ok := s.cache[ip]
+	revision := v.revision
+	if !ok {
+		revision = s.revision
+	}
 	s.mu.Unlock()
-	if ok && v.until.After(time.Now()) {
+	if !force && ok && v.until.After(time.Now()) {
 		return v.value, v.err
 	}
-	ch := s.flight.DoChan(ip, func() (any, error) {
+	flightKey := ip
+	if force {
+		flightKey = "refresh:" + ip
+	}
+	ch := s.flight.DoChan(flightKey, func() (any, error) {
+		lookupRevision := revision
+		if force {
+			s.mu.Lock()
+			entry := s.cache[ip]
+			s.revision++
+			entry.revision = s.revision
+			s.cache[ip] = entry
+			lookupRevision = entry.revision
+			s.mu.Unlock()
+		}
+		remember := func(p Location, err error) Location { return s.remember(ip, p, err, lookupRevision, force) }
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		defer cancel()
 		var out Location
@@ -118,10 +156,10 @@ func (s *Service) Lookup(ctx context.Context, ip string) (Location, error) {
 		if s.local != nil {
 			out, err = s.lookupLocal(a)
 			if err == nil && out.Country != "" {
-				return s.remember(ip, out, nil), nil
+				return remember(out, nil), nil
 			}
 			if !s.config.GeoOnlineFallback {
-				return s.remember(ip, out, err), err
+				return remember(out, err), err
 			}
 		}
 		for _, src := range s.sources {
@@ -130,11 +168,11 @@ func (s *Service) Lookup(ctx context.Context, ip string) (Location, error) {
 			}
 			out, err = s.lookupOnline(ctx, src, ip)
 			if err == nil {
-				return s.remember(ip, out, nil), nil
+				return remember(out, nil), nil
 			}
 		}
 		out = Location{Source: "unknown", QueriedAt: time.Now().UTC()}
-		s.remember(ip, out, ErrUnavailable)
+		remember(out, ErrUnavailable)
 		return out, ErrUnavailable
 	})
 	select {
@@ -144,12 +182,26 @@ func (s *Service) Lookup(ctx context.Context, ip string) (Location, error) {
 		if r.Val == nil {
 			return Location{}, r.Err
 		}
-		return r.Val.(Location), r.Err
+		out := r.Val.(Location)
+		if force && r.Err == nil && out.Country == "" {
+			return out, ErrUnavailable
+		}
+		return out, r.Err
 	}
 }
-func (s *Service) remember(ip string, p Location, e error) Location {
+func (s *Service) remember(ip string, p Location, e error, revision uint64, force bool) Location {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	entry, exists := s.cache[ip]
+	// An evicted entry must not let an older lookup recreate a stale cache value.
+	if (exists && entry.revision != revision) || (!exists && s.revision != revision) {
+		return p
+	}
+	if force {
+		// Fence out ordinary lookups that started while this refresh was in flight.
+		s.revision++
+		revision = s.revision
+	}
 	if len(s.cache) >= 4096 {
 		for k, v := range s.cache {
 			if v.until.Before(time.Now()) {
@@ -167,7 +219,7 @@ func (s *Service) remember(ip string, p Location, e error) Location {
 	if e != nil || p.Country == "" {
 		ttl = 5 * time.Minute
 	}
-	s.cache[ip] = cached{p, time.Now().Add(ttl), e}
+	s.cache[ip] = cached{value: p, until: time.Now().Add(ttl), err: e, revision: revision}
 	return p
 }
 func (s *Service) lookupOnline(ctx context.Context, src *source, ip string) (out Location, err error) {

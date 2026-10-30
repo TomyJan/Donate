@@ -1,8 +1,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Download, ExternalLink, RefreshCw } from 'lucide-react';
+import { Download, ExternalLink, LocateFixed, RefreshCw } from 'lucide-react';
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { useApp } from '../app/context';
 import { APIError, api, dateTime, downloadExport, money, query } from '../lib/api';
+import { locationResultKey } from '../lib/operation-results';
 import { rememberPayment } from '../lib/payment-return';
 import type { Operation, Order } from '../lib/types';
 import { ActionConfirm } from './ActionConfirm';
@@ -94,13 +95,17 @@ export function OrderDialog({
       ...request,
       key: `request:${request.id}`,
       label: t('reconcile'),
+      displayResult: request.result || 'ready',
     })),
     ...(o?.jobs ?? [])
-      .filter((job) => job.kind !== 'geo' && !manualJobIDs.has(job.id))
+      .filter((job) => (job.kind !== 'geo' || job.source === 'admin_refresh') && !manualJobIDs.has(job.id))
       .map((job) => ({
         ...job,
         key: `job:${job.id}`,
-        label: t(job.kind === 'close' ? 'closeOrder' : 'paymentCheck'),
+        label: t(
+          job.kind === 'geo' ? 'refresh_location' : job.kind === 'close' ? 'closeOrder' : 'paymentCheck',
+        ),
+        displayResult: job.kind !== 'geo' ? job.result || 'ready' : locationResultKey(job.result, job.status),
       })),
   ];
   const run = async (fn: () => Promise<unknown>) => {
@@ -125,7 +130,17 @@ export function OrderDialog({
     try {
       const result = await api<Operation>('admin/order/action/execute', { operation_id: confirmation.id });
       if (result.action === 'export') await downloadExport(result.id);
-      notify(t('success'));
+      notify(
+        t(
+          result.action === 'refresh_location'
+            ? result.items.some((item) => item.result === 'queued')
+              ? 'queued'
+              : result.items[0]?.result === 'disabled'
+                ? 'disabled'
+                : 'success'
+            : 'success',
+        ),
+      );
       await client.invalidateQueries();
       if (activeID.current === orderID) {
         if (confirmation.action === 'delete') onClose();
@@ -162,13 +177,13 @@ export function OrderDialog({
         [t('created'), dateTime(o.created_at)],
         [t('paidAt'), dateTime(o.paid_at)],
         [t('expires'), dateTime(o.expires_at)],
+        [t('ip'), o.ip || '—'],
         ...(!admin ? [[t('region'), o.province || t('unknownRegion')]] : []),
         ...(admin
           ? [
               [t('userId'), o.user_id || '—'],
               ...(o.qq_number ? [[t('qq'), o.qq_number]] : []),
               [t('channelTrade'), o.api_trade_no || '—'],
-              [t('ip'), o.ip || '—'],
               [
                 t('region'),
                 o.location
@@ -257,7 +272,7 @@ export function OrderDialog({
                       {record.label} <time dateTime={record.created_at}>{dateTime(record.created_at)}</time>
                     </span>
                     <span>
-                      {t(record.status)} · {t(record.result || 'ready')}
+                      {t(record.status)} · {t(record.displayResult)}
                     </span>
                   </div>
                 ))}
@@ -286,6 +301,7 @@ export function OrderDialog({
                       <RefreshCw />
                       {t('reconcile')}
                     </Button>
+                    {confirmAction('refresh_location', t('refresh_location'), <LocateFixed />)}
                     {o.status === 'pending' && confirmAction('close', t('closeOrder'))}
                     {confirmAction(
                       o.hidden_order ? 'show_order' : 'hide_order',

@@ -33,11 +33,20 @@ import { UserDialog } from '../components/UserDialog';
 import { Button, Empty, Menu, Modal, Pagination } from '../components/ui';
 import { amountFen } from '../lib/amount';
 import { api, downloadExport, money, query } from '../lib/api';
+import { operationItemResultKey } from '../lib/operation-results';
 import type { Audit, Metric, Operation, Order, Overview, Page, User } from '../lib/types';
 
 type Tab = 'overview' | 'orders' | 'users' | 'audit';
 type Sort = { key: string; direction: 'asc' | 'desc' };
-const bulkActions = ['close', 'hide_order', 'show_order', 'hide_message', 'show_message', 'delete'] as const;
+const bulkActions = [
+  'close',
+  'refresh_location',
+  'hide_order',
+  'show_order',
+  'hide_message',
+  'show_message',
+  'delete',
+] as const;
 export function Admin() {
   const app = useApp(),
     { t, profile, report } = app;
@@ -397,7 +406,7 @@ export function Admin() {
                 {item.id.slice(0, 8)}
                 {item.amount_fen !== undefined && <small>¥{money(item.amount_fen)}</small>}
               </span>
-              <span>{t(currentOp.confirmed ? item.result : (item.status ?? item.result))}</span>
+              <span>{t(operationItemResultKey(currentOp, item))}</span>
             </div>
           ))}
         </div>

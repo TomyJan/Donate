@@ -145,7 +145,7 @@ func (q *Queue) Claim(ctx context.Context, kinds []string) (Job, error) {
 		}
 		id, _ := storage.ParseID(j.ID)
 		lease := storage.NewID().String()
-		_, e = tx.ExecContext(ctx, "UPDATE jobs SET status='running',attempts=attempts+1,lease_token=?,lease_until=?,updated_at=? WHERE id=?", lease, now.Add(time.Minute).Unix(), now.Unix(), id)
+		_, e = tx.ExecContext(ctx, "UPDATE jobs SET status='running',attempts=attempts+1,lease_token=?,lease_until=?,rerun=CASE WHEN kind='geo' THEN 0 ELSE rerun END,updated_at=? WHERE id=?", lease, now.Add(time.Minute).Unix(), now.Unix(), id)
 		j.Status = "running"
 		j.LeaseToken = lease
 		j.Attempts++

@@ -38,7 +38,7 @@ func TestRecordOwnershipUsesSessionAndDetailKeepsPrivacy(t *testing.T) {
 			paid = time.Now().Unix()
 			trade = key
 		}
-		if _, e = s.Orders.Store.DB.ExecContext(ctx, "UPDATE orders SET status=?,paid_at=?,trade_no=?,hidden_order=?,hidden_message=1 WHERE id=?", status, paid, trade, hidden, id); e != nil {
+		if _, e = s.Orders.Store.DB.ExecContext(ctx, "UPDATE orders SET status=?,paid_at=?,trade_no=?,hidden_order=?,hidden_message=1,donor_qq_number='123456' WHERE id=?", status, paid, trade, hidden, id); e != nil {
 			t.Fatal(e)
 		}
 		return o
@@ -101,7 +101,13 @@ func TestRecordOwnershipUsesSessionAndDetailKeepsPrivacy(t *testing.T) {
 		if status != 200 || code != "OK" || data["province"] != "上海" {
 			t.Fatal(status, code, data)
 		}
-		for _, field := range []string{"ip", "location", "jobs", "reconciliations"} {
+		if token == owner.Token && data["ip"] != "192.0.2.1" {
+			t.Errorf("owner cannot see own order IP: %+v", data)
+		}
+		if token == administrator.Token && data["ip"] != nil {
+			t.Errorf("non-owner public detail exposes IP: %+v", data)
+		}
+		for _, field := range []string{"qq_number", "location", "jobs", "reconciliations"} {
 			if data[field] != nil {
 				t.Errorf("public detail exposes %s: %+v", field, data)
 			}
@@ -116,7 +122,7 @@ func TestRecordOwnershipUsesSessionAndDetailKeepsPrivacy(t *testing.T) {
 		t.Fatalf("guest detail=%d %s", status, code)
 	}
 	status, code, data := get("/api/v1/admin/order/detail?id="+visible.ID, administrator.Token)
-	if status != 200 || code != "OK" || data["location"] == nil || data["jobs"] == nil || len(data["reconciliations"].([]any)) != 1 {
+	if status != 200 || code != "OK" || data["ip"] != "192.0.2.1" || data["qq_number"] != "123456" || data["location"] == nil || data["jobs"] == nil || len(data["reconciliations"].([]any)) != 1 {
 		t.Fatalf("admin detail=%d %s %+v", status, code, data)
 	}
 }

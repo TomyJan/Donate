@@ -357,11 +357,35 @@ func (r *Runner) persistClose(ctx context.Context, j Job, o order.Order, remote 
 	return e
 }
 func (r *Runner) geolocate(ctx context.Context, j Job, o order.Order) {
+	refresh := j.Source == GeoRefreshSource
 	if r.Geo == nil {
-		r.finish(ctx, j, "done", "disabled", time.Time{})
+		status := "done"
+		if refresh {
+			status = "failed"
+		}
+		r.finish(ctx, j, status, "disabled", time.Time{})
 		return
 	}
-	p, e := r.Geo.Lookup(ctx, o.IP)
+	var p geo.Location
+	var e error
+	if refresh {
+		if fresh, ok := r.Geo.(interface {
+			Refresh(context.Context, string) (geo.Location, error)
+		}); ok {
+			p, e = fresh.Refresh(ctx, o.IP)
+		} else {
+			e = geo.ErrUnavailable
+		}
+		if e == nil && p.Country == "" {
+			e = geo.ErrUnavailable
+		}
+	} else {
+		p, e = r.Geo.Lookup(ctx, o.IP)
+	}
+	if errors.Is(e, geo.ErrDisabled) {
+		r.finish(ctx, j, "failed", "disabled", time.Time{})
+		return
+	}
 	if e != nil {
 		if j.Attempts >= 3 {
 			r.finish(ctx, j, "failed", "unknown", time.Time{})
@@ -379,13 +403,17 @@ func (r *Runner) geolocate(ctx context.Context, j Job, o order.Order) {
 	lid := storage.NewID()
 	e = r.Queue.Store.Write(ctx, func(tx *sql.Tx) error {
 		var n int
-		if e := tx.QueryRowContext(ctx, "SELECT count(*) FROM jobs WHERE id=? AND lease_token=? AND status='running' AND lease_until>?", jid, j.LeaseToken, r.Queue.Now().Unix()).Scan(&n); e != nil {
+		if e := tx.QueryRowContext(ctx, "SELECT count(*) FROM jobs WHERE id=? AND order_id=? AND kind='geo' AND source=? AND lease_token=? AND status='running' AND lease_until>?", jid, oid, j.Source, j.LeaseToken, r.Queue.Now().Unix()).Scan(&n); e != nil {
 			return e
 		}
 		if n != 1 {
 			return order.ErrBusy
 		}
-		_, e := tx.ExecContext(ctx, "INSERT INTO order_locations(id,order_id,country,province,city,district,street,isp,asn,latitude,longitude,accuracy_radius,source,source_version,queried_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM orders WHERE id=?) ON CONFLICT(order_id) DO NOTHING", lid[:], oid, p.Country, p.Province, p.City, p.District, p.Street, p.ISP, p.ASN, p.Latitude, p.Longitude, p.AccuracyRadius, p.Source, p.Version, p.QueriedAt.Unix(), oid)
+		conflict := "DO NOTHING"
+		if refresh {
+			conflict = "DO UPDATE SET country=excluded.country,province=excluded.province,city=excluded.city,district=excluded.district,street=excluded.street,isp=excluded.isp,asn=excluded.asn,latitude=excluded.latitude,longitude=excluded.longitude,accuracy_radius=excluded.accuracy_radius,source=excluded.source,source_version=excluded.source_version,queried_at=excluded.queried_at"
+		}
+		_, e := tx.ExecContext(ctx, "INSERT INTO order_locations(id,order_id,country,province,city,district,street,isp,asn,latitude,longitude,accuracy_radius,source,source_version,queried_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM orders WHERE id=?) ON CONFLICT(order_id) "+conflict, lid[:], oid, p.Country, p.Province, p.City, p.District, p.Street, p.ISP, p.ASN, p.Latitude, p.Longitude, p.AccuracyRadius, p.Source, p.Version, p.QueriedAt.Unix(), oid)
 		return e
 	})
 	if e != nil {

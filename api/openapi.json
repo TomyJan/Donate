@@ -488,6 +488,7 @@
             "type": "string"
           },
           "ip": {
+            "description": "The order's request IP: visible to its authenticated owner in ordinary detail and to administrators in admin detail. Never included in public lists or ordinary detail viewed by a non-owner administrator.",
             "type": "string"
           },
           "jobs": {
@@ -516,7 +517,7 @@
                   "type": "string"
                 },
                 "source": {
-                  "description": "The job's current wakeup source, such as automatic, manual or browser_return; automatic jobs must not be presented as manual requests.",
+                  "description": "The job's current wakeup source, such as automatic, manual, browser_return or admin_refresh. A geo job with admin_refresh forcibly rechecks current configured sources; automatic jobs must not be presented as manual requests.",
                   "type": "string"
                 },
                 "status": {
@@ -621,7 +622,7 @@
             "type": "string"
           },
           "province": {
-            "description": "Province-level location safe for owner detail. Empty when unavailable; full IP/location remains restricted to the admin detail route.",
+            "description": "Province-level stored location, or empty when unavailable. Full location is restricted to the admin detail route.",
             "type": "string"
           },
           "qq_number": {
@@ -996,6 +997,17 @@
       "PreviewInput": {
         "properties": {
           "action": {
+            "description": "refresh_location queues a forced geo lookup after confirmation, including legacy orders. Success replaces the saved location, failure preserves it; payment state is unchanged. Missing targets return not_found, disabled geo mode returns disabled without queuing. Active refresh tasks are reused.",
+            "enum": [
+              "close",
+              "hide_order",
+              "show_order",
+              "hide_message",
+              "show_message",
+              "delete",
+              "export",
+              "refresh_location"
+            ],
             "type": "string"
           },
           "ids": {

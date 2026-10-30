@@ -693,6 +693,7 @@ export interface components {
             hidden_message: boolean;
             hidden_order: boolean;
             id: string;
+            /** @description The order's request IP: visible to its authenticated owner in ordinary detail and to administrators in admin detail. Never included in public lists or ordinary detail viewed by a non-owner administrator. */
             ip?: string;
             jobs?: {
                 /** Format: int64 */
@@ -707,7 +708,7 @@ export interface components {
                 result: string;
                 /** Format: date-time */
                 run_at: string;
-                /** @description The job's current wakeup source, such as automatic, manual or browser_return; automatic jobs must not be presented as manual requests. */
+                /** @description The job's current wakeup source, such as automatic, manual, browser_return or admin_refresh. A geo job with admin_refresh forcibly rechecks current configured sources; automatic jobs must not be presented as manual requests. */
                 source: string;
                 status: string;
             }[];
@@ -735,7 +736,7 @@ export interface components {
             /** Format: date-time */
             paid_at?: string | null;
             protocol: string;
-            /** @description Province-level location safe for owner detail. Empty when unavailable; full IP/location remains restricted to the admin detail route. */
+            /** @description Province-level stored location, or empty when unavailable. Full location is restricted to the admin detail route. */
             province: string;
             qq_number?: string;
             /** @description Admin detail only: all persisted distinct manual reconciliation requests, newest first. IDs are stored request UUIDs, not idempotency keys. Several requests may share a job; status/result reflect the currently linked job. Absent from ordinary owner detail and after physical deletion. */
@@ -843,7 +844,11 @@ export interface components {
             pending: number;
         };
         PreviewInput: {
-            action: string;
+            /**
+             * @description refresh_location queues a forced geo lookup after confirmation, including legacy orders. Success replaces the saved location, failure preserves it; payment state is unchanged. Missing targets return not_found, disabled geo mode returns disabled without queuing. Active refresh tasks are reused.
+             * @enum {string}
+             */
+            action: "close" | "hide_order" | "show_order" | "hide_message" | "show_message" | "delete" | "export" | "refresh_location";
             ids: string[];
         };
         Profile: {

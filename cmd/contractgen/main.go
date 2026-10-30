@@ -89,10 +89,11 @@ func main() {
 	recordProps["is_mine"].(schema)["description"] = "Whether this record belongs to the effective authenticated session. Always false for guests; no owner user ID is exposed. Public feeds still contain only paid, non-hidden orders."
 	recordProps["province"].(schema)["description"] = "Stored province-level location only, or an empty string when lookup data is unavailable."
 	orderProps := schemas["Order"].(schema)["properties"].(map[string]any)
-	orderProps["province"].(schema)["description"] = "Province-level location safe for owner detail. Empty when unavailable; full IP/location remains restricted to the admin detail route."
+	orderProps["province"].(schema)["description"] = "Province-level stored location, or empty when unavailable. Full location is restricted to the admin detail route."
+	orderProps["ip"].(schema)["description"] = "The order's request IP: visible to its authenticated owner in ordinary detail and to administrators in admin detail. Never included in public lists or ordinary detail viewed by a non-owner administrator."
 	orderProps["reconciliations"].(schema)["description"] = "Admin detail only: all persisted distinct manual reconciliation requests, newest first. IDs are stored request UUIDs, not idempotency keys. Several requests may share a job; status/result reflect the currently linked job. Absent from ordinary owner detail and after physical deletion."
 	jobProps := orderProps["jobs"].(schema)["items"].(schema)["properties"].(map[string]any)
-	jobProps["source"].(schema)["description"] = "The job's current wakeup source, such as automatic, manual or browser_return; automatic jobs must not be presented as manual requests."
+	jobProps["source"].(schema)["description"] = "The job's current wakeup source, such as automatic, manual, browser_return or admin_refresh. A geo job with admin_refresh forcibly rechecks current configured sources; automatic jobs must not be presented as manual requests."
 	jobProps["created_at"].(schema)["description"] = "Job creation instant. This is not the timestamp of each manual request when an active job is reused."
 	auditProps := schemas["Audit"].(schema)["properties"].(map[string]any)
 	for field, description := range map[string]string{
@@ -114,6 +115,9 @@ func main() {
 	for name, t := range requestTypes {
 		schemas[name] = describe(t)
 	}
+	previewProps := schemas["PreviewInput"].(schema)["properties"].(map[string]any)
+	previewProps["action"].(schema)["enum"] = []string{"close", "hide_order", "show_order", "hide_message", "show_message", "delete", "export", "refresh_location"}
+	previewProps["action"].(schema)["description"] = "refresh_location queues a forced geo lookup after confirmation, including legacy orders. Success replaces the saved location, failure preserves it; payment state is unchanged. Missing targets return not_found, disabled geo mode returns disabled without queuing. Active refresh tasks are reused."
 	schemas["UnbindIdentityInput"] = describe(reflect.TypeFor[httpapi.UnbindIdentityInput]())
 	for _, name := range []string{"id", "identity_id"} {
 		schemas["UnbindIdentityInput"].(schema)["properties"].(map[string]any)[name].(schema)["format"] = "uuid"
