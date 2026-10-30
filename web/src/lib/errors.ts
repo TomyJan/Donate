@@ -25,6 +25,7 @@ const messages: Record<string, string> = {
   PAYMENT_CHANNEL_UNAVAILABLE: 'paymentChannelError',
   PAYMENT_AMOUNT_LIMITED: 'paymentAmountError',
   PAYMENT_CONFIGURATION_ERROR: 'paymentConfigurationError',
+  PAYMENT_RETURN_MISSING: 'paymentReturnMissing',
   LOGIN_PROVIDER_UNAVAILABLE: 'loginProviderError',
   UPSTREAM_UNAVAILABLE: 'upstreamError',
   SELF_BAN_FORBIDDEN: 'forbidden',

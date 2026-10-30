@@ -7,9 +7,10 @@ type Props = {
   onValue: (value: string) => void;
   composer: RefObject<HTMLElement | null>;
   book: RefObject<HTMLElement | null>;
+  disabled?: boolean;
 };
 
-export function MessageInput({ value, label, onValue, composer, book }: Props) {
+export function MessageInput({ value, label, onValue, composer, book, disabled }: Props) {
   const input = useRef<HTMLTextAreaElement>(null);
   const resize = useCallback(() => {
     const el = input.current;
@@ -59,6 +60,7 @@ export function MessageInput({ value, label, onValue, composer, book }: Props) {
     <div className="r-message-field">
       <textarea
         ref={input}
+        disabled={disabled}
         className="r-message"
         aria-label={label}
         placeholder={label}

@@ -1,4 +1,22 @@
 export const words = {
+  paymentChecking: ['正在查询支付结果', 'Checking payment'],
+  paymentConfirmed: ['查询成功', 'Payment confirmed'],
+  paymentFiling: ['正在收好这张收据', 'Filing your receipt'],
+  paymentSignIn: ['登录后确认支付', 'Sign in to check payment'],
+  paymentUnconfirmed: ['尚未确认到账', 'Payment not yet confirmed'],
+  paymentCheckingHint: ['正在核对这笔订单，请勿重复付款。', 'Checking this order. Please do not pay again.'],
+  paymentPendingHint: [
+    '暂未确认到账，可重新查询或稍后查看订单。请勿重复付款。',
+    'Not confirmed yet. Check again or view the order later. Please do not pay again.',
+  ],
+  paymentSignInHint: ['登录后继续确认这笔订单。', 'Sign in to continue checking this order.'],
+  paymentThanks: ['谢谢你，这份支持已收到。', 'Thank you. Your support has been received.'],
+  paymentReturnMissing: [
+    '未找到返回的订单信息，请在「只看我的」中查看订单。',
+    'No order information returned. Find your order under “Only mine”.',
+  ],
+  paymentRetry: ['重新查询', 'Check again'],
+  paymentLater: ['稍后查看', 'Check later'],
   terms: ['用户协议', 'Terms of Use'],
   privacy: ['隐私政策', 'Privacy Policy'],
   legalUpdated: ['更新及生效日期', 'Updated and effective'],

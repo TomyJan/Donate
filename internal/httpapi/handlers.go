@@ -228,17 +228,21 @@ func (s *Server) notify(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte("success"))
 }
 func (s *Server) paymentReturn(w http.ResponseWriter, r *http.Request) {
+	target := "/?payment=returned"
 	if s.limits.allow(s.clientIP(r)+":return", 10, time.Minute) {
 		v, e := payment.ParseValues(r.URL.Query())
 		if e == nil && len(v["out_trade_no"]) <= 128 {
 			o, e := order.Scan(s.Orders.Store.DB.QueryRowContext(r.Context(), "SELECT "+order.Columns+" FROM orders WHERE merchant_order_no=?", v["out_trade_no"]))
 			if e == nil {
-				_, _ = s.Queue.Enqueue(r.Context(), "payment", o.ID, "browser_return", "", state(r).ID)
+				target += "&order=" + o.ID
+				if _, err := s.Queue.Enqueue(r.Context(), "payment", o.ID, "browser_return", "", state(r).ID); err != nil {
+					s.Log.WarnContext(r.Context(), "订单 "+o.ID+" 支付返回核验任务入队失败", "order_id", o.ID, "request_id", state(r).ID, "error", err)
+				}
 			}
 		}
 	}
 	state(r).Status = 303
-	http.Redirect(w, r, "/?payment=returned", 303)
+	http.Redirect(w, r, target, 303)
 }
 func (s *Server) adminOrders(w http.ResponseWriter, r *http.Request) {
 	f, e := filter(r)

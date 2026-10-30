@@ -1,0 +1,82 @@
+#receipt-refinement .r-write:has([data-payment-phase="filing"]) {
+  position: relative;
+  z-index: 4;
+}
+#receipt-refinement .r-ticket[data-payment-phase="filing"] {
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+#receipt-refinement
+  .r-ticket:is([data-payment-phase="confirmed"], [data-payment-phase="filing"])
+  .r-primary:disabled {
+  background: color-mix(in srgb, var(--r-accent) 12%, var(--r-paper));
+  color: var(--r-accent);
+  border-color: transparent;
+}
+#receipt-refinement .r-ticket[data-payment-phase="checking"] .r-primary:disabled {
+  color: var(--r-ink);
+}
+.payment-spinner {
+  animation: payment-spin 1.8s linear infinite;
+}
+#receipt-refinement .payment-return-status {
+  margin-top: 22px;
+  font-size: 12px;
+  color: var(--r-muted);
+}
+.payment-return-status p {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.8;
+  min-height: 24px;
+}
+#receipt-refinement .payment-return-status svg.lucide {
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+.payment-return-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-top: 8px;
+}
+#receipt-refinement .payment-return-actions .d-btn {
+  min-height: 32px;
+  padding: 4px 9px;
+  font-size: 12px;
+}
+.receipt-destination {
+  position: relative;
+  min-height: 170px;
+  perspective: 1000px;
+}
+.receipt-destination::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border: 1px dashed var(--r-line);
+  border-radius: 6px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.8s;
+}
+.receipt-destination[data-receiving="true"]::after {
+  opacity: 0.7;
+}
+@keyframes payment-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .payment-spinner {
+    animation: none;
+  }
+  .receipt-destination::after {
+    transition: none;
+  }
+}

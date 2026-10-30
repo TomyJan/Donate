@@ -96,6 +96,15 @@ func validReturn(p string) string {
 	if p == "/" || p == "/admin" {
 		return p
 	}
+	u, err := url.Parse(p)
+	if err == nil && u.Scheme == "" && u.Host == "" && u.Path == "/" {
+		values, err := url.ParseQuery(u.RawQuery)
+		if err == nil && len(values["payment"]) == 1 && values.Get("payment") == "returned" && len(values["order"]) == 1 {
+			if id, err := storage.ParseID(values.Get("order")); err == nil {
+				return "/?payment=returned&order=" + storage.IDString(id)
+			}
+		}
+	}
 	return "/"
 }
 func (s *Service) provider(ctx context.Context) (*oidc.Provider, error) {

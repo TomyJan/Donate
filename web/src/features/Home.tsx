@@ -1,5 +1,5 @@
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { ArrowLeft, ArrowRight, ChevronDown } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, ChevronDown, LoaderCircle } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../app/context';
@@ -10,11 +10,15 @@ import { RequestError } from '../components/RequestError';
 import { SelectionButton, SelectionGroup } from '../components/SelectionGroup';
 import { Button, Empty, Menu } from '../components/ui';
 import { acceptAmountEdit, amountFen } from '../lib/amount';
-import { api, query } from '../lib/api';
+import { api, money, query } from '../lib/api';
 import { errorMessage } from '../lib/errors';
-import type { Order, Records } from '../lib/types';
+import type { Order, RecordItem, Records } from '../lib/types';
 import { HomeReceipt } from './HomeReceipt';
 import { HomeRecordIndex } from './HomeRecordIndex';
+import { PaymentReturnStatus } from './PaymentReturnStatus';
+import { usePaymentReturn } from './usePaymentReturn';
+import { usePaymentTransfer } from './usePaymentTransfer';
+import './payment-return.css';
 
 type Draft = { amount: string; message: string; channel: string };
 function initialDraft(): Draft {
@@ -49,6 +53,10 @@ export function Home() {
   const composer = useRef<HTMLElement>(null),
     book = useRef<HTMLElement>(null);
   const reduced = useReducedMotion();
+  const payment = usePaymentReturn();
+  const [composerEpoch, setComposerEpoch] = useState(0);
+  const [delivered, setDelivered] = useState<{ owner: string; item: RecordItem } | null>(null);
+  const destination = useRef<HTMLDivElement>(null);
   const list = useInfiniteQuery({
     queryKey: ['records', profile?.id ?? 'guest', mine],
     queryFn: ({ pageParam }) =>
@@ -56,8 +64,65 @@ export function Home() {
     initialPageParam: '',
     getNextPageParam: (last) => last.next_cursor || undefined,
   });
-  const records = list.data?.pages.flatMap((v) => v.items) ?? [];
+  const finishTransfer = () => {
+    const order = payment.order;
+    if (order && order.user_id === profile?.id) {
+      setDelivered({
+        owner: profile.id,
+        item: {
+          id: order.id,
+          is_mine: true,
+          nickname: order.nickname,
+          avatar_url: order.avatar_url,
+          amount_fen: order.amount_fen,
+          message: order.message,
+          province: order.province,
+          status: order.status,
+          date: order.paid_at ?? order.created_at,
+        },
+      });
+      setSelection({ selected: 0, direction: 1, previousId: null });
+      setDraft({ amount: '20.26', message: '', channel: 'alipay' });
+      setComposerEpoch((value) => value + 1);
+      setOpen(true);
+      void list.refetch();
+    }
+    payment.finish();
+  };
+  usePaymentTransfer({
+    active: payment.phase === 'filing',
+    reduced: !!reduced,
+    composer,
+    destination,
+    onComplete: finishTransfer,
+  });
+  const fetchedPages = list.data?.pages ?? [];
+  const received =
+    delivered && delivered.owner === profile?.id
+      ? (fetchedPages.flatMap((page) => page.items).find((item) => item.id === delivered.item.id) ??
+        delivered.item)
+      : null;
+  const pages = received
+    ? [
+        {
+          items: [received, ...(fetchedPages[0]?.items ?? []).filter((item) => item.id !== received.id)],
+          next_cursor: fetchedPages[0]?.next_cursor ?? '',
+        },
+        ...fetchedPages
+          .slice(1)
+          .map((page) => ({ ...page, items: page.items.filter((item) => item.id !== received.id) })),
+      ]
+    : fetchedPages;
+  const records = pages.flatMap((v) => v.items);
   const current = records[Math.min(selected, Math.max(0, records.length - 1))];
+  const shownDraft =
+    payment.locked && payment.order
+      ? {
+          amount: money(payment.order.amount_fen),
+          channel: payment.order.channel,
+          message: payment.order.message,
+        }
+      : draft;
   useEffect(() => {
     try {
       sessionStorage.setItem('donate-draft', JSON.stringify(draft));
@@ -69,13 +134,6 @@ export function Home() {
   useEffect(() => {
     if (!profile) setMine(false);
   }, [profile]);
-  useEffect(() => {
-    if (new URLSearchParams(location.search).get('payment') === 'returned') {
-      app.notify(t('checkPayment'));
-      history.replaceState(null, '', '/');
-      setMine(!!profile);
-    }
-  }, [app.notify, profile, t]);
   const selectRecord = (index: number) => {
     setSelection((previous) => ({
       selected: index,
@@ -89,7 +147,7 @@ export function Home() {
       return;
     }
     const fen = amountFen(draft.amount);
-    if (fen === null || busy) return;
+    if (fen === null || busy || payment.locked) return;
     setBusy(true);
     try {
       const order = await api<Order>('order/create', {
@@ -115,7 +173,16 @@ export function Home() {
     setMine((v) => !v);
   };
   const slip = (
-    <article className="r-ticket" ref={composer}>
+    <motion.article
+      className="r-ticket"
+      ref={composer}
+      key={composerEpoch}
+      data-payment-phase={payment.phase}
+      aria-busy={payment.phase === 'checking'}
+      initial={composerEpoch > 0 && !reduced ? { opacity: 0, y: 18, rotateX: -6 } : false}
+      animate={{ opacity: 1, y: 0, rotateX: 0 }}
+      transition={{ duration: reduced ? 0 : 0.8, ease: [0.2, 0.75, 0.25, 1] }}
+    >
       <div className="r-compose-title">
         <h2>{t('donate')}</h2>
       </div>
@@ -126,11 +193,13 @@ export function Home() {
           aria-label={t('amount')}
           inputMode="decimal"
           autoComplete="off"
-          value={draft.amount}
+          disabled={payment.locked}
+          value={shownDraft.amount}
           accept={acceptAmountEdit}
           onValue={(amount) => setDraft((v) => ({ ...v, amount }))}
           style={{
-            fontSize: draft.amount.length > 8 ? '34px' : draft.amount.length > 6 ? '42px' : undefined,
+            fontSize:
+              shownDraft.amount.length > 8 ? '34px' : shownDraft.amount.length > 6 ? '42px' : undefined,
           }}
         />
       </label>
@@ -139,8 +208,9 @@ export function Home() {
           <SelectionButton
             className="r-preset"
             key={value}
-            selected={amountFen(draft.amount) === amountFen(value)}
-            aria-pressed={amountFen(draft.amount) === amountFen(value)}
+            selected={amountFen(shownDraft.amount) === amountFen(value)}
+            disabled={payment.locked}
+            aria-pressed={amountFen(shownDraft.amount) === amountFen(value)}
             onClick={() => setDraft((v) => ({ ...v, amount: value }))}
           >
             {value}
@@ -148,51 +218,86 @@ export function Home() {
         ))}
       </SelectionGroup>
       <MessageInput
-        value={draft.message}
+        value={shownDraft.message}
         label={t('message')}
         onValue={(message) => setDraft((v) => ({ ...v, message }))}
         composer={composer}
         book={book}
+        disabled={payment.locked}
       />
       <div className="r-pay">
         <Button
           className="r-btn r-primary"
-          disabled={busy || amountFen(draft.amount) === null || !app.site?.payment_enabled}
+          disabled={
+            payment.locked || busy || amountFen(shownDraft.amount) === null || !app.site?.payment_enabled
+          }
           onClick={() => void pay()}
         >
-          {busy ? t('loading') : `${t('donate')} · ${t(draft.channel)}`}
+          {payment.locked ? (
+            <>
+              {payment.phase === 'confirmed' || payment.phase === 'filing' ? (
+                <Check aria-hidden="true" />
+              ) : payment.phase === 'checking' ? (
+                <LoaderCircle className="payment-spinner" aria-hidden="true" />
+              ) : null}
+              {t(
+                payment.phase === 'confirmed'
+                  ? 'paymentConfirmed'
+                  : payment.phase === 'filing'
+                    ? 'paymentFiling'
+                    : payment.phase === 'login'
+                      ? 'paymentSignIn'
+                      : payment.phase === 'checking'
+                        ? 'paymentChecking'
+                        : 'paymentUnconfirmed',
+              )}
+            </>
+          ) : busy ? (
+            t('loading')
+          ) : (
+            `${t('donate')} · ${t(shownDraft.channel)}`
+          )}
         </Button>
         <Menu
           label={t('channel')}
           trigger={
-            <Button className="r-icon r-channel" aria-label={t('channel')}>
+            <Button className="r-icon r-channel" aria-label={t('channel')} disabled={payment.locked}>
               <ChevronDown />
             </Button>
           }
           items={['alipay', 'wxpay'].map((channel) => ({
             label: t(channel),
-            selected: draft.channel === channel,
+            selected: shownDraft.channel === channel,
             action: () => setDraft((v) => ({ ...v, channel })),
           }))}
         />
       </div>
-      <p className="r-ticket-foot">
-        {app.siteError
-          ? errorMessage(app.siteError, t)
-          : !app.site
-            ? t('loading')
-            : t(app.site.payment_enabled ? 'foot' : 'paymentDisabled')}
-      </p>
-    </article>
+      {payment.locked ? (
+        <PaymentReturnStatus payment={payment} />
+      ) : (
+        <p className="r-ticket-foot">
+          {app.siteError
+            ? errorMessage(app.siteError, t)
+            : !app.site
+              ? t('loading')
+              : t(app.site.payment_enabled ? 'foot' : 'paymentDisabled')}
+        </p>
+      )}
+    </motion.article>
   );
   return (
     <main className="r-main">
       <section className={`r-write ${open ? 'is-open' : ''}`}>
-        <Button className="mobile-compose-toggle" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <Button
+          className="mobile-compose-toggle"
+          aria-expanded={open || payment.locked}
+          disabled={payment.locked}
+          onClick={() => setOpen((v) => !v)}
+        >
           {t('donate')}
           <ChevronDown />
         </Button>
-        <div className="composer-body" hidden={!open && innerWidth <= 680}>
+        <div className="composer-body" hidden={!open && !payment.locked && innerWidth <= 680}>
           {slip}
         </div>
       </section>
@@ -223,29 +328,31 @@ export function Home() {
             </Button>
           </div>
         </div>
-        {current ? (
-          <motion.div
-            className="r-stack"
-            animate={{ height }}
-            transition={{ duration: reduced ? 0 : 0.42, ease: [0.2, 0.75, 0.25, 1] }}
-          >
-            <AnimatePresence initial={false} custom={{ direction, previousId }}>
-              <HomeReceipt
-                key={current.id}
-                record={current}
-                reduced={!!reduced}
-                onHeight={setHeight}
-                onDetail={setDetail}
-              />
-            </AnimatePresence>
-          </motion.div>
-        ) : list.error ? (
-          <RequestError error={list.error} busy={list.isFetching} onRetry={() => void list.refetch()} />
-        ) : (
-          <Empty text={list.isLoading ? t('loading') : t('empty')} />
-        )}
+        <div className="receipt-destination" ref={destination} data-receiving={payment.phase === 'filing'}>
+          {current ? (
+            <motion.div
+              className="r-stack"
+              animate={{ height }}
+              transition={{ duration: reduced ? 0 : 0.42, ease: [0.2, 0.75, 0.25, 1] }}
+            >
+              <AnimatePresence initial={false} custom={{ direction, previousId }}>
+                <HomeReceipt
+                  key={current.id}
+                  record={current}
+                  reduced={!!reduced}
+                  onHeight={setHeight}
+                  onDetail={setDetail}
+                />
+              </AnimatePresence>
+            </motion.div>
+          ) : list.error ? (
+            <RequestError error={list.error} busy={list.isFetching} onRetry={() => void list.refetch()} />
+          ) : (
+            <Empty text={list.isLoading ? t('loading') : t('empty')} />
+          )}
+        </div>
         <HomeRecordIndex
-          pages={list.data?.pages ?? []}
+          pages={pages}
           scope={`${profile?.id ?? 'guest'}:${mine}`}
           mine={mine}
           selected={selected}

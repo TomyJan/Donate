@@ -3,6 +3,7 @@ import { Download, ExternalLink, RefreshCw } from 'lucide-react';
 import { type ReactNode, useRef, useState } from 'react';
 import { useApp } from '../app/context';
 import { api, dateTime, downloadExport, money, query } from '../lib/api';
+import { rememberPayment } from '../lib/payment-return';
 import type { Operation, Order } from '../lib/types';
 import { ActionConfirm } from './ActionConfirm';
 import { AdminLoading } from './AdminLoading';
@@ -31,6 +32,7 @@ export async function checkout(id: string) {
   const v = await api<{ mode: string; url: string; fields?: Record<string, string> }>('order/payment/start', {
     id,
   });
+  rememberPayment(id);
   if (v.mode === 'redirect') {
     location.assign(v.url);
     return;

@@ -6,6 +6,7 @@ import { errorMessage } from '../lib/errors';
 import type { Language } from '../lib/i18n';
 import { translate } from '../lib/i18n';
 import { LEGAL_CONSENT_KEY, useLocalAcknowledgment } from '../lib/legal';
+import { paymentLoginReturnPath, paymentReturnTarget, rememberPayment } from '../lib/payment-return';
 import type { Profile, Site } from '../lib/types';
 
 type Toast = { id: string; text: string; error: boolean };
@@ -196,9 +197,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
       return;
     }
     try {
+      const payment = paymentReturnTarget();
+      let returnTo = location.pathname.startsWith('/admin') ? '/admin' : '/';
+      if (payment.requested && payment.id) {
+        returnTo = `/?payment=returned&order=${payment.id}`;
+        rememberPayment(payment.id, true);
+      } else if (location.pathname === '/auth/complete') {
+        returnTo = paymentLoginReturnPath() || '/';
+        if (returnTo === '/') {
+          try {
+            const flow = await api<{ return_to: string }>('user/login/status');
+            returnTo = paymentLoginReturnPath(flow.return_to) || '/';
+          } catch {
+            // An expired authorization can still start a normal sign-in.
+          }
+        }
+      }
       const v = await api<{ authorization_url: string }>(bind ? 'user/identity/bind' : 'user/login', {
         provider,
-        return_to: location.pathname.startsWith('/admin') ? '/admin' : '/',
+        return_to: returnTo,
       });
       location.assign(v.authorization_url);
     } catch (e) {
