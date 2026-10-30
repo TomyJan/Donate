@@ -5,6 +5,12 @@ __pycache__/
 node_modules/
 web/dist/
 data/
+/donate.db
+/donate.db-*
+/donate.db.*
+/donate.lock
+/donate*.log*
+/backups/
 dist/
 !internal/webassets/dist/
 internal/webassets/dist/*

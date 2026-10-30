@@ -4,11 +4,58 @@ import (
 	"context"
 	"database/sql"
 	"github.com/pressly/goose/v3"
+	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"testing/fstest"
 )
+
+func TestDatabaseAndJournalsArePrivateInExistingDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Unix file permission bits do not model Windows ACLs")
+	}
+	for _, existing := range []bool{false, true} {
+		t.Run(map[bool]string{false: "new", true: "existing"}[existing], func(t *testing.T) {
+			dir := t.TempDir()
+			if err := os.Chmod(dir, 0755); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(dir, "donate.db")
+			if existing {
+				previous, err := Open(context.Background(), path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer previous.Close()
+				for _, file := range []string{path, path + "-wal", path + "-shm"} {
+					if err = os.Chmod(file, 0644); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			s, err := Open(context.Background(), path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer s.Close()
+			for _, file := range []string{path, path + "-wal", path + "-shm"} {
+				info, err := os.Stat(file)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if info.Mode().Perm()&0077 != 0 {
+					t.Errorf("database file %s exposes permissions %04o", filepath.Base(file), info.Mode().Perm())
+				}
+			}
+			info, err := os.Stat(dir)
+			if err != nil || info.Mode().Perm() != 0755 {
+				t.Fatal("opening the database changed the existing directory's permissions")
+			}
+		})
+	}
+}
 
 func TestFailedMigrationRollsBackItsSchemaChanges(t *testing.T) {
 	ctx := context.Background()

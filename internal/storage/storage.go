@@ -34,6 +34,22 @@ func Open(ctx context.Context, path string) (*Store, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return nil, err
 	}
+	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
+	if err != nil {
+		return nil, err
+	}
+	if err = file.Chmod(0600); err != nil {
+		file.Close()
+		return nil, err
+	}
+	if err = file.Close(); err != nil {
+		return nil, err
+	}
+	for _, suffix := range []string{"-wal", "-shm", "-journal"} {
+		if err = os.Chmod(path+suffix, 0600); err != nil && !os.IsNotExist(err) {
+			return nil, err
+		}
+	}
 	u := url.URL{Scheme: "file", Path: "/" + strings.TrimPrefix(filepath.ToSlash(path), "/")}
 	q := u.Query()
 	for _, pragma := range []string{"foreign_keys(1)", "busy_timeout(5000)", "journal_mode(WAL)", "synchronous(FULL)"} {

@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -40,7 +41,18 @@ func env(name, fallback string) string {
 }
 
 func Load() (Config, error) {
-	c := Config{Development: os.Getenv("APP_ENV") == "development", Listen: env("LISTEN_ADDR", "127.0.0.1:8080"), PublicURL: strings.TrimRight(env("PUBLIC_URL", "https://donate.tomys.top"), "/"), DataDir: env("DATA_DIR", "data"), LogLevel: env("LOG_LEVEL", "INFO"), AdminIDs: map[string]bool{}, OIDCissuer: os.Getenv("OIDC_ISSUER"), OIDCclientID: os.Getenv("OIDC_CLIENT_ID"), OIDCsecret: os.Getenv("OIDC_CLIENT_SECRET"), QQappID: os.Getenv("QQ_APP_ID"), QQsecret: os.Getenv("QQ_APP_SECRET"), EpayURL: strings.TrimRight(os.Getenv("EPAY_URL"), "/"), EpayPID: os.Getenv("EPAY_PID"), EpayProtocol: env("EPAY_PROTOCOL", "v2"), EpayKey: os.Getenv("EPAY_KEY"), GeoMode: env("GEO_MODE", "online"), GeoPath: os.Getenv("GEO_DATABASE"), GeoOnlineFallback: os.Getenv("GEO_ONLINE_FALLBACK") == "true"}
+	values, err := godotenv.Read(".env")
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return Config{}, errors.New("读取 .env 失败，请检查文件格式与权限")
+	}
+	for key, value := range values {
+		if _, exists := os.LookupEnv(key); !exists {
+			if err := os.Setenv(key, value); err != nil {
+				return Config{}, errors.New("加载 .env 失败，请检查配置变量")
+			}
+		}
+	}
+	c := Config{Development: os.Getenv("APP_ENV") == "development", Listen: env("LISTEN_ADDR", "127.0.0.1:8080"), PublicURL: strings.TrimRight(env("PUBLIC_URL", "https://donate.tomys.top"), "/"), DataDir: env("DATA_DIR", "."), LogLevel: env("LOG_LEVEL", "INFO"), AdminIDs: map[string]bool{}, OIDCissuer: os.Getenv("OIDC_ISSUER"), OIDCclientID: os.Getenv("OIDC_CLIENT_ID"), OIDCsecret: os.Getenv("OIDC_CLIENT_SECRET"), QQappID: os.Getenv("QQ_APP_ID"), QQsecret: os.Getenv("QQ_APP_SECRET"), EpayURL: strings.TrimRight(os.Getenv("EPAY_URL"), "/"), EpayPID: os.Getenv("EPAY_PID"), EpayProtocol: env("EPAY_PROTOCOL", "v2"), EpayKey: os.Getenv("EPAY_KEY"), GeoMode: env("GEO_MODE", "online"), GeoPath: os.Getenv("GEO_DATABASE"), GeoOnlineFallback: os.Getenv("GEO_ONLINE_FALLBACK") == "true"}
 	u, err := url.Parse(c.PublicURL)
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" || (u.Scheme != "https" && !(c.Development && u.Scheme == "http")) {
 		return c, errors.New("PUBLIC_URL 必须为无路径、查询或凭据的 HTTPS 站点地址")
