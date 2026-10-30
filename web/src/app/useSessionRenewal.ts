@@ -69,7 +69,7 @@ export function useSessionRenewal(
             if (!fresh || fresh.id !== userID || fresh.csrf_token !== csrfToken) return fresh;
             const remaining = Date.parse(fresh.expires_at) - Date.now();
             if (remaining > 0 && remaining <= renewalWindow && active() && liveProfile()) {
-              await api('user/session/renew', {});
+              await api('user/session/renew', {}, undefined, () => !!liveProfile());
               if (disposed || !liveProfile()) return undefined;
               fresh = await readProfile();
               if (disposed || !liveProfile()) return undefined;

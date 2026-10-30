@@ -13,13 +13,14 @@ let csrf = '';
 export function setCSRF(v: string) {
   csrf = v;
 }
-function signalAccessFailure(path: string, status: number, code: string) {
+function signalAccessFailure(path: string, status: number, code: string, isCurrent?: () => boolean) {
+  if (isCurrent && !isCurrent()) return;
   if ((status === 401 || code === 'ACCOUNT_BANNED') && path !== 'site/info' && path !== 'user/profile')
     window.dispatchEvent(new CustomEvent('session-invalid', { detail: code }));
   else if (status === 403 && code === 'FORBIDDEN' && path.startsWith('admin/'))
     window.dispatchEvent(new Event('admin-forbidden'));
 }
-function responseError(path: string, response: Response) {
+function responseError(path: string, response: Response, isCurrent?: () => boolean) {
   const code =
     response.status === 401
       ? 'UNAUTHORIZED'
@@ -30,7 +31,7 @@ function responseError(path: string, response: Response) {
           : response.status >= 500
             ? 'SERVER_UNAVAILABLE'
             : 'INVALID_RESPONSE';
-  signalAccessFailure(path, response.status, code);
+  signalAccessFailure(path, response.status, code, isCurrent);
   return new APIError(code, '', response.status, response.headers.get('X-Request-ID') ?? '', path);
 }
 async function request<T>(
@@ -60,19 +61,19 @@ async function request<T>(
     throw new APIError(code, '', 0, '', path);
   }
 }
-async function envelope<T>(path: string, response: Response): Promise<T> {
+async function envelope<T>(path: string, response: Response, isCurrent?: () => boolean): Promise<T> {
   let value: unknown;
   try {
     value = await response.json();
   } catch (error) {
-    if (error instanceof SyntaxError) throw responseError(path, response);
+    if (error instanceof SyntaxError) throw responseError(path, response, isCurrent);
     throw error;
   }
   if (!value || typeof value !== 'object' || !('code' in value) || typeof value.code !== 'string')
-    throw responseError(path, response);
+    throw responseError(path, response, isCurrent);
   const wire = value as { code: string; message?: string; request_id?: string; data: T };
   if (!response.ok || wire.code !== 'OK') {
-    signalAccessFailure(path, response.status, wire.code);
+    signalAccessFailure(path, response.status, wire.code, isCurrent);
     throw new APIError(
       wire.code,
       typeof wire.message === 'string' ? wire.message : '',
@@ -81,11 +82,21 @@ async function envelope<T>(path: string, response: Response): Promise<T> {
       path,
     );
   }
-  if (!Object.hasOwn(wire, 'data')) throw responseError(path, response);
+  if (!Object.hasOwn(wire, 'data')) throw responseError(path, response, isCurrent);
   return wire.data;
 }
-export async function api<T>(path: string, body?: unknown, signal?: AbortSignal): Promise<T> {
-  return request(path, body, (response) => envelope<T>(path, response), signal);
+export async function api<T>(
+  path: string,
+  body?: unknown,
+  signal?: AbortSignal,
+  isCurrent?: () => boolean,
+): Promise<T> {
+  return request(
+    path,
+    body,
+    (response) => envelope<T>(path, response, () => !signal?.aborted && (isCurrent?.() ?? true)),
+    signal,
+  );
 }
 export async function downloadExport(id: string) {
   const path = 'admin/order/export';

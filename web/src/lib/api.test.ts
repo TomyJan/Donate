@@ -5,6 +5,36 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
+it.each(['json', 'text'])('ignores a canceled request denial received as %s', async (format) => {
+  const controller = new AbortController();
+  let finish: ((response: Response) => void) | undefined;
+  vi.stubGlobal(
+    'fetch',
+    () =>
+      new Promise<Response>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  let expired = false;
+  const onExpired = () => {
+    expired = true;
+  };
+  window.addEventListener('session-invalid', onExpired);
+  try {
+    const pending = api('order/detail?id=one', undefined, controller.signal);
+    controller.abort();
+    finish?.(
+      format === 'json'
+        ? Response.json({ code: 'UNAUTHORIZED', data: null }, { status: 401 })
+        : new Response('expired', { status: 401 }),
+    );
+    await expect(pending).rejects.toMatchObject({ status: 401 });
+    expect(expired).toBe(false);
+  } finally {
+    window.removeEventListener('session-invalid', onExpired);
+  }
+});
+
 function streamResponse(contentType: string) {
   vi.stubGlobal(
     'fetch',
