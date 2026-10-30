@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from 'node:child_process';
-import { readdirSync } from 'node:fs';
+import { statSync } from 'node:fs';
 import { versionPattern } from './release-version.mjs';
 
 const run = (cmd, args) => execFileSync(cmd, args, {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']}).trim();
@@ -10,8 +10,8 @@ if (run('git', ['rev-parse', 'HEAD']) !== sha) throw new Error('Checkout differs
 const refs = run('git', ['ls-remote', 'origin', 'refs/tags/' + tag, 'refs/tags/' + tag + '^{}']).split(/\r?\n/).filter(Boolean).map(line => line.split(/\s+/));
 const remote = refs.find(([, ref]) => ref.endsWith('^{}')) ?? refs[0];
 if (remote?.[0] !== sha) throw new Error('Remote release tag changed after verification');
-const assets = readdirSync('release-assets').map(name => 'release-assets/' + name);
-if (!assets.length) throw new Error('No release assets');
+const assets = ['release-assets/donate-' + version + '-linux-amd64', 'release-assets/SHA256SUMS.txt'];
+if (assets.some(path => !statSync(path).isFile() || statSync(path).size === 0)) throw new Error('Release assets must be non-empty files');
 const repo = process.env.GITHUB_REPOSITORY;
 if (!repo || !/^[\w.-]+\/[\w.-]+$/.test(repo)) throw new Error('Invalid repository');
 const existing = spawnSync('gh', ['api', 'repos/' + repo + '/releases/tags/' + tag], {encoding: 'utf8'});

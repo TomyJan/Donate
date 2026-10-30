@@ -1,7 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { copyFileSync, mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { copyFileSync, mkdtempSync, mkdirSync, readdirSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -148,4 +149,25 @@ test('publish refuses a moved remote tag before invoking the release API', t => 
   const result = run('release-publish.mjs', repo, {SOURCE_SHA: sha, RELEASE_VERSION: '0.0.1', GITHUB_REPOSITORY: 'example/donate'});
   assert.notEqual(result.status, 0);
   assert.match(result.stderr, /Remote release tag changed after verification/);
+});
+
+test('release build produces only Linux amd64 and SHA256SUMS.txt with a matching checksum', t => {
+  const { repo } = fixture(t);
+  mkdirSync(join(repo, 'scripts'));
+  for (const file of ['build.mjs', 'process.mjs', 'version.mjs']) {
+    copyFileSync(resolve(import.meta.dirname, file), join(repo, 'scripts', file));
+  }
+  writeFileSync(join(repo, 'web/package.json'), JSON.stringify({name: '@donate/web', version: '0.0.1', scripts: {build: 'node --version'}}) + '\n');
+  writeFileSync(join(repo, 'go.mod'), 'module example.invalid/donate\n');
+  writeFileSync(join(repo, 'cmd/donate/main.go'), 'package main\n\nvar commit, tag, builtAt string\n\nfunc main() {}\n');
+  git(repo, 'add', '.');
+  git(repo, 'commit', '-m', 'build fixture');
+  git(repo, 'tag', 'v0.0.1');
+  const result = run('build.mjs', repo, {}, ['--release', '--version=0.0.1']);
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.deepEqual(readdirSync(join(repo, 'dist')).sort(), ['SHA256SUMS.txt', 'donate-0.0.1-linux-amd64']);
+  const binary = readFileSync(join(repo, 'dist/donate-0.0.1-linux-amd64'));
+  assert.equal(binary.subarray(0, 4).toString('hex'), '7f454c46');
+  assert.equal(binary.readUInt16LE(18), 62, 'Binary must target x86-64');
+  assert.equal(readFileSync(join(repo, 'dist/SHA256SUMS.txt'), 'utf8'), createHash('sha256').update(binary).digest('hex') + '  donate-0.0.1-linux-amd64\n');
 });

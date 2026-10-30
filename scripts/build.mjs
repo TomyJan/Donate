@@ -17,7 +17,7 @@ const build = metadata({
 });
 pnpm(['--dir', 'web', 'build']);
 mkdirSync('dist', {recursive: true});
-const targets = release ? [['linux', 'amd64'], ['linux', 'arm64'], ['windows', 'amd64']] : [[process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'darwin' : 'linux', process.arch === 'arm64' ? 'arm64' : 'amd64']];
+const targets = release ? [['linux', 'amd64']] : [[process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'darwin' : 'linux', process.arch === 'arm64' ? 'arm64' : 'amd64']];
 const builtAt = new Date().toISOString();
 const checksums = [];
 for (const [os, arch] of targets) {
@@ -25,4 +25,4 @@ for (const [os, arch] of targets) {
   run('go', ['build', '-trimpath', '-ldflags', `-s -w -X main.version=${build.version} -X main.commit=${build.commit} -X main.tag=${build.tag} -X main.builtAt=${builtAt}`, '-o', output, './cmd/donate'], {env: {...process.env, CGO_ENABLED: '0', GOOS: os, GOARCH: arch}});
   checksums.push(`${createHash('sha256').update(readFileSync(output)).digest('hex')}  ${output.slice(5)}`);
 }
-writeFileSync('dist/SHA256SUMS', checksums.join(String.fromCharCode(10)) + String.fromCharCode(10));
+writeFileSync('dist/SHA256SUMS.txt', checksums.join(String.fromCharCode(10)) + String.fromCharCode(10));

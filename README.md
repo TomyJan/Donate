@@ -4,13 +4,13 @@
 
 ## 部署
 
-从 [Releases](https://github.com/TomyJan/Donate/releases) 下载二进制，复制 `.env.example` 为 `.env`，填写配置后运行：
+从 [Releases](https://github.com/TomyJan/Donate/releases) 下载 Linux amd64 二进制，复制 `.env.example` 为 `.env`，填写配置后运行：
 
 ```sh
 ./donate
 ```
 
-Windows 运行 `donate.exe`。默认从当前工作目录读取 `.env`，数据库、日志和备份也保存在此。详见[运行说明](docs/operations.md)和[登录配置](docs/legal-and-login.md)。
+默认从当前工作目录读取 `.env`，数据库、日志和备份也保存在此。详见[运行说明](docs/operations.md)和[登录配置](docs/legal-and-login.md)。
 
 ## 开发
 

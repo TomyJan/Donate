@@ -69,29 +69,18 @@ jobs:
       - name: Verify and exercise the release binary
         run: |
           cd dist
-          sha256sum --check SHA256SUMS
+          sha256sum --check SHA256SUMS.txt
           cd ..
           cp dist/donate-${RELEASE_VERSION}-linux-amd64 dist/donate
           ./dist/donate --version
           pnpm --dir web exec playwright install --with-deps chromium
           pnpm test:e2e
-      - name: Prepare downloadable assets
-        run: |
-          cp LICENSE dist/LICENSE
-          cp docs/operations.md dist/OPERATIONS.md
-          cp .env.example dist/.env.example
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: release-assets
           path: |
-            dist/donate-*-linux-amd64
-            dist/donate-*-linux-arm64
-            dist/donate-*-windows-amd64.exe
-            dist/SHA256SUMS
-            dist/LICENSE
-            dist/OPERATIONS.md
-            dist/.env.example
-          include-hidden-files: true
+            dist/donate-${{ needs.prepare.outputs.version }}-linux-amd64
+            dist/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 7
 
