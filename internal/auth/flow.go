@@ -296,17 +296,28 @@ func (s *Service) exchangeOIDC(ctx context.Context, code string, f flow) (Identi
 	if e != nil || verified.Nonce != f.Nonce {
 		return Identity{}, ErrUnauthorized
 	}
-	var claims struct {
+	type profileClaims struct {
 		Name      string `json:"name"`
 		Preferred string `json:"preferred_username"`
 		Picture   string `json:"picture"`
 	}
+	var claims profileClaims
 	if e = verified.Claims(&claims); e != nil {
 		return Identity{}, ErrUnauthorized
 	}
-	if claims.Name == "" && claims.Preferred == "" {
+	if claims.Name == "" && claims.Preferred == "" || claims.Picture == "" {
 		if info, e := p.UserInfo(ctx, oauth2.StaticTokenSource(token)); e == nil && info.Subject == verified.Subject {
-			_ = info.Claims(&claims)
+			var additional profileClaims
+			if e := info.Claims(&additional); e == nil {
+				// UserInfo only enriches this verified subject; it cannot replace
+				// identity keys or profile fields already present in the ID token.
+				if claims.Name == "" && claims.Preferred == "" {
+					claims.Name, claims.Preferred = additional.Name, additional.Preferred
+				}
+				if claims.Picture == "" {
+					claims.Picture = additional.Picture
+				}
+			}
 		}
 	}
 	if claims.Name == "" {
