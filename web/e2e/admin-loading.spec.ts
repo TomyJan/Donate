@@ -72,13 +72,24 @@ for (const stage of ['module', 'identity'] as const)
       await expect(loading.locator('.admin-loading-spinner')).toHaveCSS('animation-name', 'none');
       await expect(loading.locator('.admin-loading-preview')).toHaveCSS('animation-name', 'none');
       await expect(page.locator('.a-main')).toHaveCSS('transform', 'none');
-      const start = await page.locator('.a-main').boundingBox();
+      // Resolve and measure in the same browser task so a lazy-route handoff
+      // cannot leave us sampling a detached loading-shell handle.
+      const position = () =>
+        page.evaluate(() => {
+          const element = document.querySelector('.a-main');
+          if (!element) return null;
+          const { x, y } = element.getBoundingClientRect();
+          return { x, y };
+        });
+      const start = await position();
+      if (!start) throw new Error('The loading shell must be mounted before releasing the request');
       control.release();
       await expect(page.locator('.overview-stats')).toBeVisible();
-      const ready = await page.locator('.a-main').boundingBox();
-      expect(Math.abs((start?.x ?? 0) - (ready?.x ?? 0))).toBeLessThan(1);
       await expect
-        .poll(async () => Math.abs((start?.y ?? 0) - ((await page.locator('.a-main').boundingBox())?.y ?? 0)))
+        .poll(async () => {
+          const ready = await position();
+          return ready ? Math.max(Math.abs(start.x - ready.x), Math.abs(start.y - ready.y)) : Infinity;
+        })
         .toBeLessThan(1);
       await expect(loading).toHaveCount(0);
     } finally {
