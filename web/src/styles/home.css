@@ -67,9 +67,6 @@
     #receipt-refinement .r-presets { grid-template-columns:repeat(7,minmax(0,1fr)); }
     #receipt-refinement .r-preset:nth-child(n) { grid-column:span 1; }
   }
-  #receipt-refinement .r-write > summary { display:none; }
-  #receipt-refinement .r-write > summary::marker { content:""; }
-  #receipt-refinement .r-write > summary::-webkit-details-marker { display:none; }
   #receipt-refinement .r-book { min-width:0; padding-top:4px; }
   #receipt-refinement .r-book-head { display:flex; justify-content:space-between; align-items:center; gap:6px; margin-bottom:18px; }
   #receipt-refinement .r-book-title { display:flex; align-items:center; gap:10px; min-width:0; }
@@ -77,7 +74,12 @@
   #receipt-refinement .r-filter { min-height:36px; padding:7px 10px; font-size:12px; white-space:nowrap; }
   #receipt-refinement .r-filter[aria-pressed="true"] { background:var(--r-ink); border-color:var(--r-ink); color:var(--r-bg); }
   #receipt-refinement .r-page-nav { display:flex; gap:0; flex-shrink:0; margin-right:-10px; }
-  #receipt-refinement .r-page-nav .r-icon { width:40px; }
+  #receipt-refinement .r-page-nav .d-btn { position:relative; isolation:isolate; width:44px; height:44px; min-height:44px; padding:0; border:0; background:transparent; transition:color .18s,opacity .18s; }
+  #receipt-refinement .r-page-nav .d-btn::before { content:""; position:absolute; inset:6px; z-index:-1; pointer-events:none; border-radius:var(--r-control-radius); background:var(--r-soft); opacity:0; transition:opacity .18s,transform .18s; }
+  #receipt-refinement .r-page-nav .d-btn:disabled::before, #receipt-refinement .r-page-nav .d-btn:is(:hover,:focus-visible):not(:disabled)::before { opacity:1; }
+  #receipt-refinement .r-page-nav .d-btn:focus-visible { outline:none; }
+  #receipt-refinement .r-page-nav .d-btn:focus-visible::before { outline:2px solid var(--r-accent); outline-offset:2px; }
+  #receipt-refinement .r-page-nav .d-btn:active:not(:disabled)::before { transform:scale(.94); }
   #receipt-refinement .r-stack { position:relative; margin:0 6px; perspective:1000px; }
   #receipt-refinement .r-stack::before, #receipt-refinement .r-stack::after { content:""; position:absolute; inset:7px -4px -3px 4px; border:1px solid var(--r-line); background:var(--r-paper); transform:rotate(-3deg); box-shadow:var(--r-shadow); }
   #receipt-refinement .r-stack::after { inset:4px 0 -2px; transform:rotate(1deg); }
@@ -117,12 +119,8 @@
   #receipt-refinement .r-payment-amount { font-size:40px; line-height:1.4; margin-bottom:8px; }
   @container receipt-page (max-width:680px) {
     #receipt-refinement .r-main { padding:26px 22px 28px; grid-template-columns:minmax(0,1fr); gap:42px; }
-    #receipt-refinement .r-write > summary { display:flex; justify-content:space-between; align-items:center; padding:15px 20px; background:var(--r-paper); box-shadow:var(--r-shadow); min-height:54px; cursor:var(--cursor-interaction,pointer); }
-    #receipt-refinement .r-write[open] > summary { box-shadow:none; }
-    #receipt-refinement .r-write[open] > summary svg { transform:rotate(45deg); }
     #receipt-refinement .r-compose-title { display:none; }
     #receipt-refinement .r-ticket { padding:24px; }
-    #receipt-refinement .r-write .r-ticket { padding-top:8px; }
     #receipt-refinement .r-book { padding-top:0; }
     #receipt-refinement .r-book-title { gap:4px; }
     #receipt-refinement .r-book-head h2 { font-size:13px; white-space:nowrap; }
@@ -135,7 +133,6 @@
   }
   @media (pointer:coarse) {
     #receipt-refinement .r-preset { min-height:44px; }
-    #receipt-refinement .r-page-nav .r-icon { width:44px; }
     #receipt-refinement .r-filter { min-height:44px; }
   }
   @media (prefers-reduced-motion:no-preference) {
@@ -143,5 +140,5 @@
     #receipt-refinement .r-btn:active:not(:disabled) { transform:scale(.97); }
     #receipt-refinement .r-index-row { transition:padding .2s,background-color .2s,color .2s; }
     #receipt-refinement .r-app { transition:background-color .24s,color .24s; }
-    #receipt-refinement .r-channel svg, #receipt-refinement summary svg { transition:transform .22s; }
+    #receipt-refinement .r-channel svg { transition:transform .22s; }
   }

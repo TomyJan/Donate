@@ -47,7 +47,6 @@ export function Home() {
     }),
     [detail, setDetail] = useState<string | null>(null),
     [busy, setBusy] = useState(false),
-    [open, setOpen] = useState(() => innerWidth > 680),
     [height, setHeight] = useState(180);
   const requestKey = useRef(crypto.randomUUID());
   const composer = useRef<HTMLElement>(null),
@@ -101,7 +100,6 @@ export function Home() {
       setSelection({ selected: 0, direction: 1, previousId: null });
       setDraft({ amount: '20.26', message: '', channel: 'alipay' });
       setComposerEpoch((value) => value + 1);
-      setOpen(true);
       void list.refetch();
     }
     payment.finish();
@@ -309,19 +307,8 @@ export function Home() {
   );
   return (
     <main className="r-main">
-      <section className={`r-write ${open ? 'is-open' : ''}`}>
-        <Button
-          className="mobile-compose-toggle"
-          aria-expanded={open || payment.locked}
-          disabled={payment.locked}
-          onClick={() => setOpen((v) => !v)}
-        >
-          {t('donate')}
-          <ChevronDown />
-        </Button>
-        <div className="composer-body" hidden={!open && !payment.locked && innerWidth <= 680}>
-          {slip}
-        </div>
+      <section className="r-write">
+        <div className="composer-body">{slip}</div>
       </section>
       <section className="r-book" ref={book} aria-label={t('records')}>
         <div className="r-book-head">
@@ -340,16 +327,22 @@ export function Home() {
             <Button
               className="d-icon d-ghost"
               aria-label={t('previous')}
-              disabled={selected <= 0 || payment.phase === 'filing'}
-              onClick={() => selectRecord(selected - 1)}
+              disabled={selected <= 0}
+              aria-disabled={selected <= 0 || payment.phase === 'filing'}
+              onClick={() => {
+                if (payment.phase !== 'filing') selectRecord(selected - 1);
+              }}
             >
               <ArrowLeft />
             </Button>
             <Button
               className="d-icon d-ghost"
               aria-label={t('next')}
-              disabled={selected >= records.length - 1 || payment.phase === 'filing'}
-              onClick={() => selectRecord(selected + 1)}
+              disabled={selected >= records.length - 1}
+              aria-disabled={selected >= records.length - 1 || payment.phase === 'filing'}
+              onClick={() => {
+                if (payment.phase !== 'filing') selectRecord(selected + 1);
+              }}
             >
               <ArrowRight />
             </Button>

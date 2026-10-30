@@ -75,6 +75,83 @@ async function prepare(page: Page, options: { status?: string; error?: string; s
   };
 }
 
+test('the composer stays expanded on narrow screens without a collapse control', async ({ page }) => {
+  await prepare(page, { signedIn: false });
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto('/');
+  await expect(page.locator('.r-write .r-ticket')).toBeVisible();
+  await expect(page.locator('.mobile-compose-toggle')).toHaveCount(0);
+  for (const width of [390, 680, 900, 1280, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expect(page.getByRole('textbox', { name: '金额（元）' })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+});
+
+test('receipt navigation keeps its appearance through filing and uses an inset hover surface', async ({
+  page,
+}) => {
+  await prepare(page);
+  await page.route('**/api/v1/order/list?**', (route) =>
+    route.fulfill({
+      json: {
+        code: 'OK',
+        data: {
+          items: [0, 1].map((index) => ({
+            id: `previous-${index}`,
+            nickname: `先前记录${index}`,
+            avatar_url: '',
+            amount_fen: 100,
+            message: '原来的收据',
+            province: '广东',
+            date: paidOrder.paid_at,
+            status: 'paid',
+            is_mine: false,
+          })),
+          next_cursor: '',
+        },
+      },
+    }),
+  );
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(`/?payment=returned&order=${orderID}`);
+  const ticket = page.locator('.r-write .r-ticket');
+  const next = page.locator('.r-page-nav button').last();
+  await expect(ticket).toHaveAttribute('data-payment-phase', 'confirmed');
+  await expect(next).toBeEnabled();
+  await expect(next).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)');
+  await expect(next).toHaveCSS('opacity', '1');
+  const initial = await next.evaluate((element) => ({
+    opacity: getComputedStyle(element).opacity,
+    background: getComputedStyle(element).backgroundColor,
+  }));
+  await expect(ticket).toHaveAttribute('data-payment-phase', 'filing');
+  const filing = await next.evaluate((element) => ({
+    opacity: getComputedStyle(element).opacity,
+    background: getComputedStyle(element).backgroundColor,
+  }));
+  expect(filing.opacity).toBe(initial.opacity);
+  expect(filing.background).toBe(initial.background);
+  await next.evaluate((element: HTMLButtonElement) => element.click());
+  await expect(
+    page.locator('.receipt-destination > .r-stack:not(.payment-arrival-stack) .r-featured:not(.r-leaving)'),
+  ).toContainText('先前记录0');
+  await expect(ticket).toHaveAttribute('data-payment-phase', 'complete', { timeout: 8000 });
+  await next.hover();
+  const surface = await next.evaluate((element) => ({
+    width: element.getBoundingClientRect().width,
+    height: element.getBoundingClientRect().height,
+    innerWidth: Number.parseFloat(getComputedStyle(element, '::before').width),
+    innerHeight: Number.parseFloat(getComputedStyle(element, '::before').height),
+    background: getComputedStyle(element).backgroundColor,
+  }));
+  expect(surface.width).toBeGreaterThanOrEqual(44);
+  expect(surface.height).toBeGreaterThanOrEqual(44);
+  expect(surface.innerWidth).toBeLessThanOrEqual(surface.width - 10);
+  expect(surface.innerHeight).toBeLessThanOrEqual(surface.height - 10);
+  expect(surface.background).toBe('rgba(0, 0, 0, 0)');
+});
+
 test('a verified payment pauses for a second, slowly files the receipt and restores a fresh composer', async ({
   page,
 }, info) => {
