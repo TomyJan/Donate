@@ -9,10 +9,10 @@
     --r-accent:var(--d-accent); --r-on:var(--d-on);
     --r-danger:var(--d-danger); --r-shade:var(--d-shade);
     --r-shadow:var(--d-shadow); --r-control-radius:9px; --r-surface-radius:14px;
-    position:relative; isolation:isolate; min-width:0; margin-inline:auto; min-height:850px;
-    background:var(--r-bg); color:var(--r-ink); container-type:inline-size; container-name:receipt-page donate-shell;
+    position:relative; isolation:isolate; min-width:0; margin-inline:auto;
+    container-type:inline-size; container-name:receipt-page donate-shell;
     font:400 14px/1.6 MiSans,"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
-    display:flex; flex-direction:column; overflow-wrap:anywhere;
+    overflow-wrap:anywhere;
   }
   #receipt-refinement .r-app *, #receipt-refinement .r-app *::before, #receipt-refinement .r-app *::after { box-sizing:border-box; }
   #receipt-refinement .r-app [hidden] { display:none!important; }

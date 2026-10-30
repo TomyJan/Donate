@@ -2,7 +2,6 @@
   --a-bg:var(--d-bg); --a-paper:var(--d-paper); --a-ink:var(--d-ink);
   --a-muted:var(--d-muted); --a-line:var(--d-line); --a-soft:var(--d-soft);
   --a-accent:var(--d-accent); --a-danger:var(--d-danger);
-  display:flex; flex-direction:column; min-height:100dvh; color:var(--d-ink); background:var(--d-bg);
   font:400 14px/1.6 MiSans,"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
   container-type:inline-size; container-name:admin-page donate-shell;
 }
