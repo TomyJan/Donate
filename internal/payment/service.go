@@ -61,7 +61,7 @@ func (s *Service) Start(ctx context.Context, id, userID string) (Checkout, error
 	lease := storage.NewID().String()
 	now := s.Orders.Now()
 	e = s.Orders.Store.Write(ctx, func(tx *sql.Tx) error {
-		r, e := tx.ExecContext(ctx, "UPDATE orders SET submission_lease=?,submission_lease_until=?,submission_status=CASE WHEN submission_status='new' THEN 'submitting' ELSE submission_status END WHERE id=? AND user_id=? AND status='pending' AND expires_at>? AND (submission_lease IS NULL OR submission_lease_until<=?) AND NOT EXISTS(SELECT 1 FROM jobs WHERE order_id=orders.id AND kind='close' AND status IN ('ready','running')) AND EXISTS(SELECT 1 FROM users WHERE id=? AND status='active')", lease, now.Add(time.Minute).Unix(), bid, uid, now.Unix(), now.Unix(), uid)
+		r, e := tx.ExecContext(ctx, "UPDATE orders SET submission_lease=?,submission_lease_until=? WHERE id=? AND user_id=? AND status='pending' AND expires_at>? AND (submission_lease IS NULL OR submission_lease_until<=?) AND NOT EXISTS(SELECT 1 FROM jobs WHERE order_id=orders.id AND kind='close' AND status IN ('ready','running')) AND EXISTS(SELECT 1 FROM users WHERE id=? AND status='active')", lease, now.Add(time.Minute).Unix(), bid, uid, now.Unix(), now.Unix(), uid)
 		if e != nil {
 			return e
 		}
@@ -69,16 +69,35 @@ func (s *Service) Start(ctx context.Context, id, userID string) (Checkout, error
 		if n != 1 {
 			return order.ErrBusy
 		}
-		return nil
+		// Another start may have completed since the initial read. Keep the
+		// current submission state before marking a fresh submission in progress.
+		o, e = order.Scan(tx.QueryRowContext(ctx, "SELECT "+order.Columns+" FROM orders WHERE id=?", bid))
+		if e != nil {
+			return e
+		}
+		_, e = tx.ExecContext(ctx, "UPDATE orders SET submission_status='submitting' WHERE id=? AND submission_status='new'", bid)
+		return e
 	})
 	if e != nil {
 		return Checkout{}, e
 	}
 	release := func(status string) {
-		_, err := s.Orders.Store.DB.ExecContext(ctx, "UPDATE orders SET submission_status=?,submission_lease=NULL,submission_lease_until=NULL WHERE id=? AND submission_lease=?", status, bid, lease)
+		_, err := s.Orders.Store.DB.ExecContext(context.WithoutCancel(ctx), "UPDATE orders SET submission_status=?,submission_lease=NULL,submission_lease_until=NULL WHERE id=? AND submission_lease=?", status, bid, lease)
 		if err != nil {
 			s.Orders.Log.Error(fmt.Sprintf("订单 %s 的支付提交租约释放失败", id), "order_id", id)
 		}
+	}
+	releaseStatus := o.SubmissionStatus
+	defer func() { release(releaseStatus) }()
+	if e = s.Gateway.account(o); e != nil {
+		return Checkout{}, e
+	}
+	if e = s.payable(ctx, id, userID); e != nil {
+		return Checkout{}, e
+	}
+	if o.CheckoutURL != "" && s.Gateway.validRedirect(o.CheckoutURL) {
+		releaseStatus = "submitted"
+		return Checkout{Mode: "redirect", URL: o.CheckoutURL}, nil
 	}
 	if o.SubmissionStatus != "new" {
 		obs, err := s.Gateway.Query(ctx, o)
@@ -99,6 +118,7 @@ func (s *Service) Start(ctx context.Context, id, userID string) (Checkout, error
 			return Checkout{}, order.ErrNotPayable
 		}
 	}
+	releaseStatus = "unknown"
 	checkout, trade, e := s.Gateway.Create(ctx, o)
 	if e != nil {
 		release("unknown")
