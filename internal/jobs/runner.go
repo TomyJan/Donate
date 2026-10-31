@@ -437,7 +437,24 @@ func (r *Runner) geolocate(ctx context.Context, j Job, o order.Order) {
 	if e == nil && p.Verification == "conflict" {
 		e = geo.ErrConflict
 	}
-	if saveErr := r.saveGeoResult(ctx, j, o, p, e == nil, refresh); saveErr != nil {
+	saveErr := r.saveGeoResult(ctx, j, o, p, e == nil, refresh)
+	if e != nil && errors.Is(ctx.Err(), context.Canceled) {
+		// Shutdown is not a failed lookup. Refund only the retry budget; the
+		// history's total_attempts still records this interrupted execution.
+		recovery, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+		defer cancel()
+		if saveErr != nil {
+			r.Queue.Log.Warn(fmt.Sprintf("订单 %s 的属地任务 %s 保存中断诊断失败", o.ID, j.ID), "order_id", o.ID, "job_id", j.ID, "error", taskDiagnostic(saveErr))
+		}
+		j.Diagnostic = taskDiagnostic(ctx.Err())
+		if changed, err := r.Queue.finish(recovery, j, "ready", "source_unavailable", r.Queue.Now(), true); err != nil {
+			r.Queue.Log.Error(fmt.Sprintf("订单 %s 的属地任务 %s 中断后重新排队失败，保留租约等待恢复", o.ID, j.ID), "order_id", o.ID, "job_id", j.ID, "error", taskDiagnostic(err))
+		} else if changed {
+			r.Queue.Log.Warn(fmt.Sprintf("订单 %s 的属地任务 %s 因停机中断，已退还重试次数并重新排队", o.ID, j.ID), "order_id", o.ID, "job_id", j.ID)
+		}
+		return
+	}
+	if saveErr != nil {
 		r.finish(ctx, j, "failed", "save_failed", time.Time{}, saveErr)
 		return
 	}

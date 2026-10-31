@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/TomyJan/Donate/internal/geo"
+	"github.com/TomyJan/Donate/internal/storage"
 )
 
 func TestGeoCheckPersistsConflictAndPreservesSnapshot(t *testing.T) {
@@ -104,11 +105,116 @@ func TestGeoCheckCancellationKeepsRetryBudget(t *testing.T) {
 	}}}
 	r.Execute(ctx, j)
 	got, err := q.Get(context.Background(), j.ID)
-	if err != nil || got.Status != "ready" || got.Attempts != 1 || got.Result != "source_unavailable" {
+	if err != nil || got.Status != "ready" || got.Attempts != 0 || got.Result != "source_unavailable" {
 		t.Fatalf("cancelled lookup exhausted retry budget: %+v %v", got, err)
 	}
 	var n int
 	if err = db.DB.QueryRow("SELECT count(*) FROM order_location_checks").Scan(&n); err != nil || n != 1 {
 		t.Fatal("cancelled query diagnostics missing", n, err)
+	}
+}
+
+func TestGeoShutdownRestoresRetryBudgetAcrossRestart(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		failures int
+	}{{"first-attempt", 0}, {"last-attempt", 2}} {
+		t.Run(tc.name, func(t *testing.T) {
+			db, orders, q, now, id := geoRefreshSetup(t)
+			jid := queueSyntheticRefresh(t, q, id, "shutdown-recovery")
+			r := Runner{Queue: q, Orders: orders, Geo: syntheticLocator{refresh: func() (geo.Location, error) {
+				return geo.Location{}, geo.ErrUnavailable
+			}}}
+			for range tc.failures {
+				j, err := q.Claim(context.Background(), []string{"geo"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				r.Execute(context.Background(), j)
+				next, err := q.Get(context.Background(), jid)
+				if err != nil || next.Status != "ready" {
+					t.Fatal(next, err)
+				}
+				*now = next.RunAt
+			}
+			j, err := q.Claim(context.Background(), []string{"geo"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			r.Geo = syntheticLocator{refresh: func() (geo.Location, error) {
+				cancel()
+				return geo.Location{Verification: "unavailable"}, context.Canceled
+			}}
+			r.Execute(ctx, j)
+			got, err := q.Get(context.Background(), jid)
+			if err != nil || got.Status != "ready" || got.Attempts != tc.failures || got.LeaseToken != "" {
+				t.Fatalf("shutdown consumed retry budget: %+v %v", got, err)
+			}
+			var total, failed int
+			if err = db.DB.QueryRow("SELECT total_attempts,(SELECT count(*) FROM task_events WHERE event='failed') FROM jobs").Scan(&total, &failed); err != nil || total != tc.failures+1 || failed != 0 {
+				t.Fatal("interruption lost actual execution history", total, failed, err)
+			}
+			var seq int
+			var name, path string
+			if err = db.DB.QueryRow("PRAGMA database_list").Scan(&seq, &name, &path); err != nil {
+				t.Fatal(err)
+			}
+			if err = db.Close(); err != nil {
+				t.Fatal(err)
+			}
+			reopened, err := storage.Open(context.Background(), path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer reopened.Close()
+			q.Store, orders.Store = reopened, reopened
+			*now = now.Add(2 * time.Minute)
+			recovered, err := q.Claim(context.Background(), []string{"geo"})
+			if err != nil || recovered.ID != jid || recovered.Attempts != tc.failures+1 {
+				t.Fatal("interrupted task cannot resume after restart", recovered, err)
+			}
+			r.Geo = syntheticLocator{refresh: func() (geo.Location, error) {
+				return geo.Location{Country: "中国", Province: "广东", Source: "xdb"}, nil
+			}}
+			r.Execute(context.Background(), recovered)
+			got, err = q.Get(context.Background(), jid)
+			if err != nil || got.Status != "done" {
+				t.Fatal(got, err)
+			}
+			var province string
+			if err = reopened.DB.QueryRow("SELECT province FROM order_locations").Scan(&province); err != nil || province != "广东" {
+				t.Fatal(province, err)
+			}
+		})
+	}
+}
+
+func TestGeoProviderErrorsStillExhaustRetryBudget(t *testing.T) {
+	for _, cause := range []error{geo.ErrUnavailable, context.DeadlineExceeded, context.Canceled} {
+		t.Run(cause.Error(), func(t *testing.T) {
+			_, orders, q, now, id := geoRefreshSetup(t)
+			jid := queueSyntheticRefresh(t, q, id, "upstream-failure")
+			r := Runner{Queue: q, Orders: orders, Geo: syntheticLocator{refresh: func() (geo.Location, error) {
+				return geo.Location{}, cause
+			}}}
+			for attempt := 1; attempt <= 3; attempt++ {
+				j, err := q.Claim(context.Background(), []string{"geo"})
+				if err != nil {
+					t.Fatal(err)
+				}
+				r.Execute(context.Background(), j)
+				got, err := q.Get(context.Background(), jid)
+				want := "ready"
+				if attempt == 3 {
+					want = "failed"
+				}
+				if err != nil || got.Status != want || got.Attempts != attempt {
+					t.Fatal("provider failure incorrectly refunded", got, err)
+				}
+				*now = got.RunAt
+			}
+		})
 	}
 }

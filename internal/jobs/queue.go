@@ -159,6 +159,10 @@ func (q *Queue) Claim(ctx context.Context, kinds []string) (Job, error) {
 	return out, e
 }
 func (q *Queue) Finish(ctx context.Context, j Job, status, result string, next time.Time) (bool, error) {
+	return q.finish(ctx, j, status, result, next, false)
+}
+
+func (q *Queue) finish(ctx context.Context, j Job, status, result string, next time.Time, refundAttempt bool) (bool, error) {
 	id, e := storage.ParseID(j.ID)
 	if e != nil {
 		return false, e
@@ -187,7 +191,11 @@ func (q *Queue) Finish(ctx context.Context, j Job, status, result string, next t
 		if next.IsZero() {
 			run = now.Unix()
 		}
-		r, e := tx.ExecContext(ctx, "UPDATE jobs SET status=?,last_result=?,last_error=?,run_at=?,lease_token=NULL,lease_until=NULL,rerun=0,updated_at=? WHERE id=? AND lease_token=?", status, result, j.Diagnostic, run, now.Unix(), id, j.LeaseToken)
+		refund := 0
+		if refundAttempt {
+			refund = 1
+		}
+		r, e := tx.ExecContext(ctx, "UPDATE jobs SET status=?,last_result=?,last_error=?,run_at=?,attempts=max(0,attempts-?),lease_token=NULL,lease_until=NULL,rerun=0,updated_at=? WHERE id=? AND lease_token=?", status, result, j.Diagnostic, run, refund, now.Unix(), id, j.LeaseToken)
 		if e != nil {
 			return e
 		}
