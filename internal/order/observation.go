@@ -50,11 +50,18 @@ func (s *Service) Apply(ctx context.Context, o Observation) (Applied, error) {
 		id, _ := storage.ParseID(v.ID)
 		result.OrderID = v.ID
 		result.State = v.Status
-		if v.AmountFen != o.AmountFen || v.MerchantID != o.MerchantID || v.GatewayID != o.GatewayID || v.Channel != o.Channel || v.TradeNo != "" && o.TradeNo != "" && v.TradeNo != o.TradeNo {
+		if v.AmountFen != o.AmountFen || v.MerchantID != o.MerchantID || v.GatewayID != o.GatewayID || v.Channel != o.Channel || v.TradeNo != "" && o.TradeNo != "" && v.TradeNo != o.TradeNo || v.APITradeNo != "" && o.APITradeNo != "" && v.APITradeNo != o.APITradeNo {
 			return ErrMismatch
 		}
 		if o.State == "paid" && o.TradeNo == "" {
 			return ErrMismatch
+		}
+		if o.State == "paid" && v.Status == "paid" && v.APITradeNo == "" && o.APITradeNo != "" {
+			// A later verified observation may enrich payment evidence without
+			// replaying the paid transition or changing its original timestamp.
+			if _, e = tx.ExecContext(ctx, "UPDATE orders SET api_trade_no=?,version=version+1 WHERE id=?", o.APITradeNo, id); e != nil {
+				return e
+			}
 		}
 		if o.State == "paid" && v.Status != "paid" {
 			at := o.PaidAt
