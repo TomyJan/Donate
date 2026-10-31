@@ -262,6 +262,9 @@ func run() error {
 			return e
 		}
 	}
+	if e = seedTaskQueue(db); e != nil {
+		return e
+	}
 	db.Close()
 	private := pem.EncodeToMemory(&pem.Block{Type: "RSA PRIVATE KEY", Bytes: x509.MarshalPKCS1PrivateKey(key)})
 	public, _ := x509.MarshalPKIXPublicKey(&key.PublicKey)
@@ -275,6 +278,13 @@ func run() error {
 		return e
 	}
 	env := map[string]string{"APP_ENV": "development", "PUBLIC_URL": app, "DATA_DIR": dir, "GEO_MODE": "disabled", "OIDC_ISSUER": issuer, "OIDC_CLIENT_ID": "donate-test", "ADMIN_USER_IDS": creds.Session.UserID, "EPAY_URL": issuer, "EPAY_PID": "1001", "EPAY_PROTOCOL": "v2", "EPAY_PRIVATE_KEY_FILE": privatePath, "EPAY_PUBLIC_KEY_FILE": publicPath}
+	// Offline synthetic MMDB enables real geo task retries without external lookup.
+	geoPath, e := filepath.Abs("internal/geo/testdata/synthetic-city.mmdb")
+	if e != nil {
+		return e
+	}
+	env["GEO_MODE"] = "local"
+	env["GEO_DATABASE"] = geoPath
 	env["OIDC_ID"] = "fixture-login"
 	env["OIDC_NAME"] = "OIDC"
 	env["UMAMI_SCRIPT_URL"] = issuer + "/analytics/script.js"
