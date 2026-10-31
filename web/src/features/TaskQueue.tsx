@@ -1,30 +1,19 @@
-import * as Popover from '@radix-ui/react-popover';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  ArrowDown,
-  ArrowDownUp,
-  ArrowUp,
-  CalendarRange,
-  Ellipsis,
-  RefreshCw,
-  RotateCcw,
-  Search,
-  X,
-} from 'lucide-react';
+import { ArrowDown, ArrowDownUp, ArrowUp, Check, Ellipsis, RotateCcw } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../app/context';
 import { ActionConfirm } from '../components/ActionConfirm';
 import { AdminHeading } from '../components/AdminHeading';
 import { AdminLoading } from '../components/AdminLoading';
 import { DialogActions } from '../components/DialogActions';
-import { DateTimeField, SelectField } from '../components/forms';
 import { OrderDialog } from '../components/OrderDialog';
 import { type OverviewPeriod, OverviewRange } from '../components/OverviewRange';
 import { RequestError } from '../components/RequestError';
-import { Button, Empty, Modal, Pagination, portal } from '../components/ui';
+import { Button, Empty, Modal, Pagination } from '../components/ui';
 import { api, dateTime, query } from '../lib/api';
 import type { Page, TaskDetail, TaskItem, TaskOverview, TaskRetryResult } from '../lib/types';
 import { TaskQueueDetail } from './TaskQueueDetail';
+import { TaskQueueFilters } from './TaskQueueFilters';
 import { TaskQueueTrend } from './TaskQueueTrend';
 import './TaskQueue.css';
 
@@ -56,7 +45,6 @@ export function TaskQueue() {
     document.addEventListener('visibilitychange', changed);
     return () => document.removeEventListener('visibilitychange', changed);
   }, []);
-  const [auto, setAuto] = useState(true);
   const [period, setPeriod] = useState<OverviewPeriod>({ range: '7d' });
   const [filters, setFilters] = useState({ search: '', kind: '', status: '', source: '', from: '', to: '' });
   const [sort, setSort] = useState({ key: 'created_at', direction: 'desc' as 'asc' | 'desc' });
@@ -68,7 +56,6 @@ export function TaskQueue() {
   const [results, setResults] = useState<{ result: TaskRetryResult; names: Record<string, string> } | null>(
     null,
   );
-  const [lastUpdated, setLastUpdated] = useState('');
   const queryRoot = ['admin-tasks', scope];
   const list = useQuery({
     queryKey: [...queryRoot, 'list', filters, sort, page, size],
@@ -101,16 +88,13 @@ export function TaskQueue() {
   });
   const refresh = () => client.invalidateQueries({ queryKey: queryRoot });
   useEffect(() => {
-    if (!scope || !auto || !visible) return;
+    if (!scope || !visible) return;
     const timer = window.setInterval(() => {
       // Slow requests must finish before another automatic poll starts one.
       void client.invalidateQueries({ queryKey: ['admin-tasks', scope] }, { cancelRefetch: false });
     }, 5000);
     return () => window.clearInterval(timer);
-  }, [scope, auto, visible, client]);
-  useEffect(() => {
-    if (list.dataUpdatedAt) setLastUpdated(new Date(list.dataUpdatedAt).toISOString());
-  }, [list.dataUpdatedAt]);
+  }, [scope, visible, client]);
   useEffect(() => {
     if (list.data && !list.isPlaceholderData)
       setPage((value) => Math.min(value, Math.max(1, Math.ceil(list.data.total / size))));
@@ -176,18 +160,23 @@ export function TaskQueue() {
   const retryButton = (ids: string[], label: string, compact = false, ready = false) => (
     <ActionConfirm
       scopeKey={`${scope}:${ids.join(',')}`}
-      title={t(ids.length > 1 ? 'taskRetrySelected' : ready ? 'taskRunNow' : 'taskRetry')}
+      title={t(!compact ? 'taskRetrySelected' : ready ? 'taskRunNow' : 'taskRetry')}
       prepare={async () => crypto.randomUUID()}
       onConfirm={(key) => retry(ids, key)}
       trigger={
         <Button
-          disabled={!!list.error || !!overview.error || list.isPlaceholderData}
-          className={compact ? 'd-ghost a-icon' : 'a-batch-trigger'}
+          disabled={!ids.length || !!list.error || !!overview.error || list.isPlaceholderData}
+          className={compact ? 'd-ghost a-icon' : 'task-batch-trigger'}
           aria-label={label}
           title={label}
         >
           <RotateCcw />
-          {!compact && <span>{t('taskRetrySelected')}</span>}
+          {!compact && (
+            <>
+              <span>{t('taskRetrySelected')}</span>
+              {ids.length > 0 && <small aria-hidden="true">{ids.length}</small>}
+            </>
+          )}
         </Button>
       }
     />
@@ -204,39 +193,8 @@ export function TaskQueue() {
   ];
   return (
     <div className="task-workspace">
-      <AdminHeading title={t('tasks')}>
-        {selection.size > 0 && (
-          <>
-            <span className="a-selection-count">
-              {t('selected')} {selection.size}
-            </span>
-            <Button
-              className="d-ghost a-icon"
-              aria-label={t('clear')}
-              onClick={() => setSelection(new Set())}
-            >
-              <X />
-            </Button>
-            {retryButton([...selection], t('taskRetrySelected'))}
-          </>
-        )}
-        <Button
-          className="d-ghost a-icon"
-          aria-label={t('taskRefresh')}
-          title={t('taskRefresh')}
-          disabled={list.isFetching || overview.isFetching}
-          onClick={() => void refresh()}
-        >
-          <RefreshCw />
-        </Button>
-      </AdminHeading>
-      <div className="task-current-heading">
-        <span>{t('taskCurrentQueue')}</span>
-        <label className="task-auto">
-          <input type="checkbox" checked={auto} onChange={(event) => setAuto(event.target.checked)} />
-          {t('taskAutoRefresh')}
-        </label>
-      </div>
+      <AdminHeading title={t('tasks')} />
+      <div className="task-current-heading">{t('taskCurrentQueue')}</div>
       {overview.error && (
         <RequestError
           error={overview.error}
@@ -282,54 +240,14 @@ export function TaskQueue() {
           </div>
           <OverviewRange value={period} onChange={setPeriod} />
         </div>
-        {stats && <TaskQueueTrend data={stats.trend} />}
+        {stats && <TaskQueueTrend data={stats.trend} recordingSince={stats.recording_since} />}
       </section>
       <section className="task-list-panel" aria-label={t('taskList')}>
-        <div className="a-tools task-tools">
-          <label className="a-search">
-            <Search />
-            <input
-              aria-label={t('taskSearch')}
-              placeholder={t('taskSearch')}
-              value={filters.search}
-              onChange={(event) => change({ search: event.target.value })}
-            />
-          </label>
-          <SelectField
-            label={t('taskKind')}
-            value={filters.kind}
-            onValue={(kind) => change({ kind })}
-            options={['', 'payment', 'geo', 'close'].map((key) => [
-              key,
-              key ? taskLabel(t, 'kind', key) : t('taskAllKinds'),
-            ])}
-          />
-          <SelectField
-            label={t('status')}
-            value={filters.status}
-            onValue={(status) => change({ status })}
-            options={['', 'ready', 'running', 'done', 'failed'].map((key) => [
-              key,
-              key ? taskLabel(t, 'status', key) : t('allStatus'),
-            ])}
-          />
-          <SelectField
-            label={t('taskSource')}
-            value={filters.source}
-            onValue={(source) => change({ source })}
-            options={[
-              '',
-              'automatic',
-              'manual',
-              'browser_return',
-              'admin',
-              'admin_retry',
-              'admin_refresh',
-              'close_followup',
-            ].map((key) => [key, key ? taskLabel(t, 'source', key) : t('taskAllSources')])}
-          />
-          <TaskDates from={filters.from} to={filters.to} onChange={(from, to) => change({ from, to })} />
-        </div>
+        <TaskQueueFilters
+          value={filters}
+          onChange={change}
+          retry={retryButton([...selection], t('taskRetrySelected'))}
+        />
         {list.error && (
           <RequestError error={list.error} busy={list.isFetching} onRetry={() => void list.refetch()} />
         )}
@@ -341,21 +259,24 @@ export function TaskQueue() {
               <thead>
                 <tr>
                   <th data-field="select">
-                    <input
-                      className="custom-check"
-                      type="checkbox"
-                      aria-label={t('taskSelectAll')}
-                      checked={rows.length > 0 && rows.every((row) => selection.has(row.id))}
-                      onChange={() =>
-                        setSelection((old) => {
-                          const next = new Set(old);
-                          if (rows.every((row) => next.has(row.id)))
-                            for (const row of rows) next.delete(row.id);
-                          else for (const row of rows) if (next.size < 100) next.add(row.id);
-                          return next;
-                        })
-                      }
-                    />
+                    <span className="task-check">
+                      <input
+                        className="custom-check"
+                        type="checkbox"
+                        aria-label={t('taskSelectAll')}
+                        checked={rows.length > 0 && rows.every((row) => selection.has(row.id))}
+                        onChange={() =>
+                          setSelection((old) => {
+                            const next = new Set(old);
+                            if (rows.every((row) => next.has(row.id)))
+                              for (const row of rows) next.delete(row.id);
+                            else for (const row of rows) if (next.size < 100) next.add(row.id);
+                            return next;
+                          })
+                        }
+                      />
+                      <Check aria-hidden="true" />
+                    </span>
                   </th>
                   {headers.map(([key, label]) => (
                     <th
@@ -399,13 +320,16 @@ export function TaskQueue() {
                 {rows.map((task) => (
                   <tr key={task.id} className={selection.has(task.id) ? 'a-selected' : ''}>
                     <td data-field="select">
-                      <input
-                        className="custom-check"
-                        type="checkbox"
-                        aria-label={`${t('taskSelect')} ${taskTarget(task)}`}
-                        checked={selection.has(task.id)}
-                        onChange={() => toggle(task.id)}
-                      />
+                      <span className="task-check">
+                        <input
+                          className="custom-check"
+                          type="checkbox"
+                          aria-label={`${t('taskSelect')} ${taskTarget(task)}`}
+                          checked={selection.has(task.id)}
+                          onChange={() => toggle(task.id)}
+                        />
+                        <Check aria-hidden="true" />
+                      </span>
                     </td>
                     <td data-field="created_at" data-label={t('taskCreatedAt')}>
                       <time>{dateTime(task.created_at)}</time>
@@ -491,10 +415,6 @@ export function TaskQueue() {
           />
         )}
       </section>
-      <p className="task-update" role="status">
-        {lastUpdated ? `${t('taskUpdated')} ${dateTime(lastUpdated)}` : ''}
-        {auto && ` · ${t(visible ? 'taskEveryFiveSeconds' : 'taskPollingPaused')}`}
-      </p>
       <TaskQueueDetail
         id={detailID}
         scope={scope}
@@ -526,80 +446,5 @@ export function TaskQueue() {
         </DialogActions>
       </Modal>
     </div>
-  );
-}
-function TaskDates({
-  from,
-  to,
-  onChange,
-}: {
-  from: string;
-  to: string;
-  onChange: (from: string, to: string) => void;
-}) {
-  const { t, notify } = useApp();
-  const [open, setOpen] = useState(false);
-  const [draft, setDraft] = useState({ from, to });
-  return (
-    <Popover.Root
-      open={open}
-      onOpenChange={(next) => {
-        if (next) setDraft({ from, to });
-        setOpen(next);
-      }}
-    >
-      <Popover.Trigger asChild>
-        <Button className="task-date-toggle" aria-label={t('taskCreatedRange')}>
-          <CalendarRange />
-          {t('taskCreatedRange')}
-          {(from || to) && <i />}
-        </Button>
-      </Popover.Trigger>
-      <Popover.Portal container={portal()}>
-        <Popover.Content
-          className="d-pop range-pop"
-          align="end"
-          sideOffset={8}
-          collisionPadding={12}
-          aria-label={t('taskCreatedRange')}
-        >
-          {(['from', 'to'] as const).map((key) => (
-            <div className="range-field" key={key}>
-              <span>{t(key)}</span>
-              <DateTimeField
-                label={t(key)}
-                value={draft[key]}
-                onValue={(value) => setDraft((old) => ({ ...old, [key]: value }))}
-              />
-            </div>
-          ))}
-          <div className="task-date-actions">
-            <Button
-              className="d-ghost"
-              onClick={() => {
-                onChange('', '');
-                setDraft({ from: '', to: '' });
-                setOpen(false);
-              }}
-            >
-              {t('reset')}
-            </Button>
-            <Button
-              className="d-primary"
-              onClick={() => {
-                if (draft.from && draft.to && Date.parse(draft.from) >= Date.parse(draft.to)) {
-                  notify(t('dateRule'), true);
-                  return;
-                }
-                onChange(draft.from, draft.to);
-                setOpen(false);
-              }}
-            >
-              {t('apply')}
-            </Button>
-          </div>
-        </Popover.Content>
-      </Popover.Portal>
-    </Popover.Root>
   );
 }

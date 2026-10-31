@@ -4,7 +4,7 @@ import { StrictMode } from 'react';
 import { BrowserRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AppProvider } from '../app/context';
-import type { Order, Page, Profile, TaskItem } from '../lib/types';
+import type { Order, Page, Profile, TaskItem, TaskOverview } from '../lib/types';
 import { Admin } from './Admin';
 
 const task = {
@@ -34,6 +34,7 @@ const profile: Profile = {
   bindings: [],
 };
 const clients: QueryClient[] = [];
+const originalScroll = Element.prototype.scrollIntoView;
 let client: QueryClient;
 let requests: URL[];
 let retries: { ids: string[]; idempotency_key: string }[];
@@ -44,8 +45,12 @@ let holdDetail: ((value: Response) => void) | undefined;
 let delayDetail: boolean;
 let delayRetry: boolean;
 let finishRetry: ((value: Response) => void) | undefined;
+let trend: TaskOverview['trend'];
+let filterWidth: number;
+let resizeFilters: (() => void) | undefined;
 const ok = (data: unknown) => Response.json({ code: 'OK', data });
 beforeEach(() => {
+  Element.prototype.scrollIntoView = vi.fn();
   task.status = 'failed';
   localStorage.clear();
   localStorage.setItem('donate-language', 'en');
@@ -58,10 +63,19 @@ beforeEach(() => {
   delayRetry = false;
   finishRetry = undefined;
   holdDetail = undefined;
+  trend = [{ date: '2026-10-30', created: 2, started: 1, completed: 1, failed: 0, retried: 0 }];
+  filterWidth = 1000;
+  resizeFilters = undefined;
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(function (this: HTMLElement) {
+    return this.classList.contains('task-filters') ? filterWidth : 760;
+  });
   vi.stubGlobal(
     'ResizeObserver',
     class {
-      observe() {}
+      constructor(private callback: () => void) {}
+      observe(element: Element) {
+        if (element.classList.contains('task-filters')) resizeFilters = this.callback;
+      }
       unobserve() {}
       disconnect() {}
     },
@@ -96,7 +110,7 @@ beforeEach(() => {
         recording_since: '2026-10-30T00:00:00Z',
         from: '2026-10-25T00:00:00Z',
         to: '2026-11-01T00:00:00Z',
-        trend: [{ date: '2026-10-30', created: 2, started: 1, completed: 1, failed: 0, retried: 0 }],
+        trend,
       });
     if (url.pathname.endsWith('/task/detail')) {
       if (failDetail) return new Response('unavailable', { status: 503 });
@@ -149,6 +163,7 @@ it('offers immediate execution for a scheduled ready task', async () => {
 });
 afterEach(() => {
   cleanup();
+  Element.prototype.scrollIntoView = originalScroll;
   for (const item of clients.splice(0)) item.clear();
   vi.useRealTimers();
   vi.restoreAllMocks();
@@ -195,7 +210,7 @@ it('shows current queue counts and resets page and selection when filters change
         ?.searchParams.get('page'),
     ).toBe('1'),
   );
-  expect(screen.queryByRole('button', { name: 'Retry selected' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Retry selected' })).toBeDisabled();
 });
 it('loads real detail and paginates execution history', async () => {
   await openTasks();
@@ -208,6 +223,137 @@ it('loads real detail and paginates execution history', async () => {
     await within(dialog).findByText('Upgrade snapshot', { selector: '.task-event-message' }),
   ).toBeInTheDocument();
   expect(within(dialog).getByText(/History recorded since/)).toBeInTheDocument();
+});
+it('polls automatically without refresh controls or an update footer', async () => {
+  vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+  await openTasks();
+  expect(screen.queryByRole('button', { name: 'Refresh tasks' })).not.toBeInTheDocument();
+  expect(screen.queryByRole('checkbox', { name: 'Auto refresh' })).not.toBeInTheDocument();
+  expect(document.querySelector('.task-update')).not.toBeInTheDocument();
+  const polls = requests.filter((url) => url.pathname.endsWith('/task/list')).length;
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(5001);
+  });
+  expect(requests.filter((url) => url.pathname.endsWith('/task/list')).length).toBe(polls + 1);
+});
+it('explains a period without recorded events and keeps truthful zero data available', async () => {
+  trend = [{ date: '2026-10-30', created: 0, started: 0, completed: 0, failed: 0, retried: 0 }];
+  await openTasks();
+  expect(await screen.findByText('No task events in this period')).toBeInTheDocument();
+  expect(screen.getByText(/Recording started:/)).toHaveTextContent('2026');
+  expect(screen.queryByRole('img', { name: 'Execution trend' })).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'View trend data' }));
+  const table = screen.getByRole('region', { name: 'View trend data' });
+  expect(within(table).getAllByText('0', { selector: 'td' })).toHaveLength(5);
+});
+it('keeps accessible trend data expanded and its initial curve across polling updates', async () => {
+  await openTasks();
+  const toggle = screen.getByRole('button', { name: 'View trend data' });
+  const panel = document.getElementById(toggle.getAttribute('aria-controls') ?? '');
+  expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  expect(panel).toHaveAttribute('inert');
+  fireEvent.click(toggle);
+  expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  expect(panel).not.toHaveAttribute('inert');
+  const curve = document.querySelector('.task-trend polyline');
+  trend = [{ date: '2026-10-30', created: 2, started: 3, completed: 2, failed: 1, retried: 0 }];
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: ['admin-tasks'] });
+  });
+  expect(document.querySelector('.task-trend polyline')).toBe(curve);
+  expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  fireEvent.click(toggle);
+  expect(panel).toHaveAttribute('aria-hidden', 'true');
+  expect(panel).toHaveAttribute('inert');
+});
+it.each(['created', 'started', 'completed', 'failed', 'retried'] as const)(
+  'plots a real %s event even if all other series are zero',
+  async (event) => {
+    trend = [{ date: '2026-10-30', created: 0, started: 0, completed: 0, failed: 0, retried: 0, [event]: 1 }];
+    await openTasks();
+    expect(screen.getByRole('img', { name: 'Execution trend' })).toBeInTheDocument();
+    expect(screen.queryByText('No task events in this period')).not.toBeInTheDocument();
+  },
+);
+it('shows an empty trend for an empty event series', async () => {
+  trend = [];
+  await openTasks();
+  expect(screen.getByText('No task events in this period')).toBeInTheDocument();
+  expect(screen.getByText(/Recording started:/)).toBeInTheDocument();
+});
+it('keeps bulk retry after search and checked selection out of the heading', async () => {
+  await openTasks();
+  const retry = screen.getByRole('button', { name: 'Retry selected' });
+  expect(retry).toBeDisabled();
+  const tools = screen.getByRole('textbox', { name: 'Search tasks' }).closest('.task-tools');
+  expect(tools?.children[1]).toContainElement(retry);
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select task DONATE-101' }));
+  expect(retry).toBeEnabled();
+  expect(screen.getByRole('checkbox', { name: 'Select task DONATE-101' })).toBeChecked();
+  expect(
+    screen.getByRole('checkbox', { name: 'Select task DONATE-101' }).parentElement?.querySelector('svg'),
+  ).not.toBeNull();
+  expect(document.querySelector('.task-workspace .a-heading')).not.toContainElement(retry);
+});
+it('tucks filters progressively into an inert animated panel at narrow widths', async () => {
+  await openTasks();
+  expect(screen.getByRole('combobox', { name: 'Task type' })).toBeInTheDocument();
+  expect(screen.getByRole('combobox', { name: 'Status' })).toBeInTheDocument();
+  expect(screen.getByRole('combobox', { name: 'Source' })).toBeInTheDocument();
+  act(() => {
+    filterWidth = 700;
+    resizeFilters?.();
+  });
+  expect(screen.getByRole('combobox', { name: 'Task type' })).toBeInTheDocument();
+  expect(screen.queryByRole('combobox', { name: 'Status' })).not.toBeInTheDocument();
+  act(() => {
+    filterWidth = 280;
+    resizeFilters?.();
+  });
+  expect(screen.queryByRole('combobox', { name: 'Task type' })).not.toBeInTheDocument();
+  const more = screen.getByRole('button', { name: 'More filters' });
+  fireEvent.click(more);
+  expect(more).toHaveAttribute('aria-expanded', 'true');
+  expect(screen.getByRole('combobox', { name: 'Status' })).toBeInTheDocument();
+  fireEvent.click(more);
+  const panel = document.getElementById(more.getAttribute('aria-controls') ?? '');
+  expect(panel).toHaveAttribute('aria-hidden', 'true');
+  expect(panel).toHaveAttribute('inert');
+});
+it('places type and status in one title row and retry beside history pagination', async () => {
+  await openTasks();
+  fireEvent.click(screen.getByRole('button', { name: 'Task details DONATE-101' }));
+  const detail = await screen.findByRole('dialog', { name: 'Task details' });
+  await within(detail).findByText('request-101');
+  const title = within(detail).getByRole('heading', { name: 'Payment verification' }).parentElement;
+  expect(title).toHaveClass('task-detail-title');
+  expect(title).toHaveTextContent('Failed');
+  const retry = within(detail).getByRole('button', { name: 'Retry' });
+  const footer = retry.closest('.task-detail-footer');
+  expect(footer).not.toBeNull();
+  expect(footer).toContainElement(within(detail).getByRole('button', { name: 'Next' }));
+  expect(footer?.children[0]).toContainElement(retry);
+});
+it('clears selected tasks on sort and page changes', async () => {
+  await openTasks();
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select task DONATE-101' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Recorded executions' }));
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Retry selected' })).toBeDisabled());
+  await waitFor(() => expect(client.isFetching({ queryKey: ['admin-tasks'] })).toBe(0));
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select task DONATE-101' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+  expect(screen.getByRole('button', { name: 'Retry selected' })).toBeDisabled();
+});
+it('keeps the status filter and status cards in sync and clears selection', async () => {
+  await openTasks();
+  fireEvent.click(screen.getByRole('checkbox', { name: 'Select task DONATE-101' }));
+  fireEvent.click(document.querySelector('.task-stat.task-failed') as HTMLElement);
+  expect(screen.getByRole('button', { name: 'Retry selected' })).toBeDisabled();
+  expect(screen.getByRole('combobox', { name: 'Status' })).toHaveTextContent('Failed');
+  fireEvent.keyDown(screen.getByRole('combobox', { name: 'Status' }), { key: 'ArrowDown' });
+  fireEvent.click(await screen.findByRole('option', { name: 'Ready' }));
+  expect(document.querySelector('.task-stat.task-ready')).toHaveAttribute('aria-pressed', 'true');
+  expect(document.querySelector('.task-stat.task-failed')).toHaveAttribute('aria-pressed', 'false');
 });
 it('keeps one retry intent key after network failure and shows per-item results', async () => {
   failRetry = true;
@@ -285,9 +431,11 @@ it('retains retry result identity for a detail task no longer on the current lis
 it('recovers a failed list without resetting filters', async () => {
   await openTasks();
   fireEvent.change(screen.getByRole('textbox', { name: 'Search tasks' }), { target: { value: 'Alice' } });
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh tasks' })).not.toBeDisabled());
+  await waitFor(() => expect(client.isFetching({ queryKey: ['admin-tasks'] })).toBe(0));
   failList = true;
-  fireEvent.click(screen.getByRole('button', { name: 'Refresh tasks' }));
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: ['admin-tasks'] });
+  });
   await screen.findByText('The server is busy. Please try again shortly.');
   failList = false;
   failDetail = false;

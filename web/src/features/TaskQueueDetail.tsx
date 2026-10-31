@@ -119,24 +119,8 @@ function TaskDetailContent({
       ) : (
         <>
           <div className="task-detail-title">
-            <div>
-              <span className={`a-badge task-${task.status}`}>{taskLabel(t, 'status', task.status)}</span>
-              <h3>{taskLabel(t, 'kind', task.kind)}</h3>
-            </div>
-            {task.retryable && (
-              <ActionConfirm
-                scopeKey={`${scope}:${id}`}
-                title={t(task.status === 'ready' ? 'taskRunNow' : 'taskRetry')}
-                prepare={async () => crypto.randomUUID()}
-                onConfirm={(key) => onRetry([id], key)}
-                trigger={
-                  <Button disabled={!retryAllowed || !!detail.error || !!history.error} className="d-ghost">
-                    <RotateCcw />
-                    {t(task.status === 'ready' ? 'taskRunNow' : 'taskRetryAction')}
-                  </Button>
-                }
-              />
-            )}
+            <h3>{taskLabel(t, 'kind', task.kind)}</h3>
+            <span className={`a-badge task-${task.status}`}>{taskLabel(t, 'status', task.status)}</span>
           </div>
           <dl className="task-detail-grid">
             <div>
@@ -227,6 +211,24 @@ function TaskDetailContent({
         ) : (
           !history.error && <Empty />
         )}
+      </section>
+      <div className="task-detail-footer">
+        {task?.retryable && (
+          <div className="task-detail-retry">
+            <ActionConfirm
+              scopeKey={`${scope}:${id}`}
+              title={t(task.status === 'ready' ? 'taskRunNow' : 'taskRetry')}
+              prepare={async () => crypto.randomUUID()}
+              onConfirm={(key) => onRetry([id], key)}
+              trigger={
+                <Button disabled={!retryAllowed || !!detail.error || !!history.error} className="d-ghost">
+                  <RotateCcw />
+                  {t(task.status === 'ready' ? 'taskRunNow' : 'taskRetryAction')}
+                </Button>
+              }
+            />
+          </div>
+        )}
         {history.data && (
           <Pagination
             page={page}
@@ -239,7 +241,7 @@ function TaskDetailContent({
             }}
           />
         )}
-      </section>
+      </div>
     </div>
   );
 }
