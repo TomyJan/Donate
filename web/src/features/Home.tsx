@@ -12,7 +12,7 @@ import { RequestError } from '../components/RequestError';
 import { SelectionButton, SelectionGroup } from '../components/SelectionGroup';
 import { Button, Empty, Menu } from '../components/ui';
 import { acceptAmountEdit, amountFen, yearAmount } from '../lib/amount';
-import { api, money, query } from '../lib/api';
+import { APIError, api, money, query } from '../lib/api';
 import { errorMessage } from '../lib/errors';
 import type { Order, RecordItem, Records } from '../lib/types';
 import { HomeReceipt, ReceiptBody } from './HomeReceipt';
@@ -23,6 +23,7 @@ import { usePaymentTransfer } from './usePaymentTransfer';
 import './payment-return.css';
 
 type Draft = { amount: string; message: string; channel: string };
+const terminalOrder = (order: Order) => order.status === 'closed' || order.status === 'paid';
 function initialDraft(): Draft {
   try {
     const v = JSON.parse(sessionStorage.getItem('donate-draft') ?? 'null');
@@ -222,6 +223,11 @@ export function Home() {
     const fen = amountFen(draft.amount);
     if (fen === null || busy || payment.locked || !isCurrent()) return;
     setBusy(true);
+    const key = requestKey.current;
+    const invalidateIntent = () => {
+      if (isCurrent() && requestKey.current === key) requestKey.current = crypto.randomUUID();
+    };
+    let created: Order | undefined;
     try {
       const order = await api<Order>(
         'order/create',
@@ -229,14 +235,40 @@ export function Home() {
           amount_fen: fen,
           channel: draft.channel,
           message: draft.message,
-          idempotency_key: requestKey.current,
+          idempotency_key: key,
         },
         undefined,
         isCurrent,
       );
       if (!isCurrent()) return;
+      created = order;
+      if (terminalOrder(order)) {
+        invalidateIntent();
+        throw new APIError('ORDER_NOT_PAYABLE', '', 200);
+      }
       await checkout(order.id, isCurrent);
     } catch (e) {
+      if (
+        isCurrent() &&
+        created?.status === 'pending' &&
+        e instanceof APIError &&
+        e.code === 'ORDER_NOT_PAYABLE'
+      ) {
+        // A close job or an unknown gateway outcome can also block checkout.
+        // Rotate only after the server confirms a terminal order, never retry
+        // automatically within this click.
+        try {
+          const latest = await api<Order>(
+            `order/detail?${query({ id: created.id })}`,
+            undefined,
+            undefined,
+            isCurrent,
+          );
+          if (terminalOrder(latest)) invalidateIntent();
+        } catch {
+          // Keep the same intent when the authoritative state remains unknown.
+        }
+      }
       if (isCurrent()) {
         report(e);
         await list.refetch();
