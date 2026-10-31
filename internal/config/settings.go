@@ -17,15 +17,15 @@ var settings = []setting{
 	{"APP_NAME", "donate", "程序标识：小写字母和 -，字母开头结尾，最多 63 位。"},
 	{"LISTEN_ADDR", "127.0.0.1:8080", "监听地址。"},
 	{"PUBLIC_URL", "https://donate.example.com", "对外站点地址，生产环境使用 HTTPS。"},
+	{"REAL_IP_HEADER", "", "真实 IP 头，如 X-Real-IP；留空用连接 IP，反代须覆盖。"},
 	{"DATA_DIR", "data", "数据库与锁目录；文件名为 APP_NAME.db / .lock。"},
-	{"LOG_DIR", "data/logs", "日志目录；每日同时保存 .log 和 .jsonl。\n单文件 20 MiB，续卷追加 .2、.3。"},
-	{"LOG_LEVEL", "INFO", "日志级别：DEBUG / INFO / WARN / ERROR。"},
-	{"LOG_RETENTION_DAYS", "30", "日志保留天数；0 不清理，仅处理当前 APP_NAME。"},
 	{"BACKUP_DIR", "data/backups", "数据库备份目录。"},
 	{"BACKUP_RETENTION_DAYS", "7", "备份保留天数；0 不自动清理。"},
+	{"LOG_DIR", "data/logs", "文件日志目录；每天新建，单卷 20 MiB。\n续卷追加 .2、.3。"},
+	{"LOG_LEVEL", "INFO", "日志级别：DEBUG / INFO / WARN / ERROR。"},
+	{"LOG_RETENTION_DAYS", "30", "日志保留天数；0 不清理，仅处理当前 APP_NAME。"},
 	{"APP_SECRET", "", "Base64 编码的 32 字节密钥，生产必填且保持不变。\n生成：openssl rand -base64 32"},
 	{"ADMIN_USER_IDS", "", "管理员站内 ID，逗号分隔；可先留空，登录后取得。"},
-	{"REAL_IP_HEADER", "", "真实 IP 头，如 X-Real-IP；留空用连接 IP，反代须覆盖。"},
 	{"UMAMI_SCRIPT_URL", "", "Umami 脚本 HTTPS 地址；与网站 ID 同填或同空。"},
 	{"UMAMI_WEBSITE_ID", "", "Umami 网站 ID。"},
 	{"OIDC_ISSUER", "", "OIDC 发行者地址；留空关闭 OIDC 登录。"},
@@ -57,10 +57,26 @@ var settings = []setting{
 	{"GEO_DATABASE_URL", "", "City MMDB 下载地址；生产使用 HTTPS。"},
 }
 
+var settingSections = map[string]string{
+	"APP_ENV":          "基础配置",
+	"DATA_DIR":         "数据库与备份",
+	"LOG_DIR":          "日志",
+	"APP_SECRET":       "安全与权限",
+	"UMAMI_SCRIPT_URL": "访问统计",
+	"OIDC_ISSUER":      "OIDC 登录",
+	"QQ_APP_ID":        "QQ 登录",
+	"EPAY_URL":         "易支付",
+	"GEO_MODE":         "IP 属地",
+	"GEO_UPDATE_DAYS":  "IP 库更新",
+}
+
 func Example() []byte {
 	var out strings.Builder
 	out.WriteString("# 保留所有键，不启用的可选项留空；修改后重启。\n# 相对路径以启动目录为准；密钥与凭据不要公开。\n\n")
 	for _, s := range settings {
+		if section := settingSections[s.key]; section != "" {
+			fmt.Fprintf(&out, "# ==================== %s ====================\n\n", section)
+		}
 		value := s.value
 		if value == "" || strings.ContainsAny(value, " \t\r\n") {
 			value = strconv.Quote(value)
