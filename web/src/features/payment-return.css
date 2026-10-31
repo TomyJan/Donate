@@ -117,7 +117,7 @@
 }
 #receipt-refinement .r-index-entry {
   overflow: clip;
-  overflow-clip-margin: 4px;
+  overflow-clip-margin: 5px;
 }
 #receipt-refinement .r-index-entry:not(:last-child) > .r-index-row {
   border-bottom: 1px solid var(--r-line);
