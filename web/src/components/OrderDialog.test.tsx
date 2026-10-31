@@ -2,20 +2,20 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { translate } from '../lib/i18n';
-import type { Order } from '../lib/types';
+import type { Order, Profile } from '../lib/types';
 import { OrderDialog, orderCopyText } from './OrderDialog';
 
 const { report, notify, session } = vi.hoisted(() => ({
   report: vi.fn(),
   notify: vi.fn(),
-  session: { profile: null as { id: string; csrf_token: string } | null },
+  session: { profile: null as Pick<Profile, 'id' | 'csrf_token' | 'admin'> | null },
 }));
 vi.mock('../app/context', () => ({
   useApp: () => ({ t: (key: string) => translate(key, 'en'), report, notify, profile: session.profile }),
 }));
 const clients: QueryClient[] = [];
 beforeEach(() => {
-  session.profile = null;
+  session.profile = { id: 'alice', csrf_token: 'current-session', admin: true };
   vi.stubGlobal(
     'ResizeObserver',
     class {
@@ -36,6 +36,7 @@ afterEach(() => {
 function renderOrder(admin = false) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   clients.push(client);
+  client.setQueryData(['profile'], session.profile);
   const view = render(
     <QueryClientProvider client={client}>
       <div className="d-app">
@@ -48,6 +49,7 @@ function renderOrder(admin = false) {
 const response = (data: unknown) => new Response(JSON.stringify({ code: 'OK', data }), { status: 200 });
 
 function rerenderOrder(view: ReturnType<typeof renderOrder>, id: string | null = 'order-uuid') {
+  view.client.setQueryData(['profile'], session.profile);
   view.rerender(
     <QueryClientProvider client={view.client}>
       <div className="d-app">
@@ -73,7 +75,7 @@ it.each([
   ['execute', 403, 'unmount'],
   ['reconcile', 401, 'unmount'],
 ] as const)('ignores an old %s HTTP %s denial after %s', async (endpoint, status, boundary) => {
-  session.profile = { id: 'alice', csrf_token: 'old-session' };
+  session.profile = { id: 'alice', csrf_token: 'old-session', admin: true };
   let finish: ((value: Response) => void) | undefined;
   vi.stubGlobal('fetch', async (input: string) => {
     const path = String(input);
@@ -102,7 +104,7 @@ it.each([
     await waitFor(() => expect(finish).toBeTypeOf('function'));
     if (boundary === 'unmount') view.unmount();
     else {
-      session.profile = { id: 'alice', csrf_token: 'replacement-session' };
+      session.profile = { id: 'alice', csrf_token: 'replacement-session', admin: true };
       rerenderOrder(view);
       await screen.findByRole('button', { name: 'Hide order' });
     }
@@ -129,7 +131,7 @@ it.each([
   ['execute', 'reopen'],
   ['reconcile', 'reopen'],
 ] as const)('ignores old successful %s effects after %s', async (endpoint, boundary) => {
-  session.profile = { id: 'alice', csrf_token: 'old-session' };
+  session.profile = { id: 'alice', csrf_token: 'old-session', admin: true };
   let finish: ((value: Response) => void) | undefined;
   vi.stubGlobal('fetch', async (input: string) => {
     const path = String(input);
@@ -149,7 +151,8 @@ it.each([
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
   }
   await waitFor(() => expect(finish).toBeTypeOf('function'));
-  if (boundary === 'credentials') session.profile = { id: 'bob', csrf_token: 'replacement-session' };
+  if (boundary === 'credentials')
+    session.profile = { id: 'bob', csrf_token: 'replacement-session', admin: true };
   else rerenderOrder(view, null);
   rerenderOrder(view);
   await waitFor(() => expect(screen.getByRole('button', { name: 'Hide order' })).toBeEnabled());
@@ -165,7 +168,7 @@ it.each([
 });
 
 it.each(['bob', 'alice'])('isolates owner details after switching credentials to %s', async (id) => {
-  session.profile = { id: 'alice', csrf_token: 'old-session' };
+  session.profile = { id: 'alice', csrf_token: 'old-session', admin: true };
   let requests = 0;
   let oldSignal: AbortSignal | null | undefined;
   vi.stubGlobal('fetch', async (_path: string, init?: RequestInit) => {
@@ -179,7 +182,8 @@ it.each(['bob', 'alice'])('isolates owner details after switching credentials to
     void view.client.invalidateQueries({ queryKey: ['order-detail'] });
   });
   await waitFor(() => expect(requests).toBe(2));
-  session.profile = { id, csrf_token: 'replacement-session' };
+  session.profile = { id, csrf_token: 'replacement-session', admin: true };
+  view.client.setQueryData(['profile'], session.profile);
   view.rerender(
     <QueryClientProvider client={view.client}>
       <div className="d-app">

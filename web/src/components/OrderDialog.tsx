@@ -1,7 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Download, ExternalLink, LocateFixed, RefreshCw } from 'lucide-react';
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { useApp } from '../app/context';
+import { useRequestScope } from '../app/useRequestScope';
 import { APIError, api, dateTime, downloadExport, money, query } from '../lib/api';
 import { locationResultKey } from '../lib/operation-results';
 import { rememberPayment } from '../lib/payment-return';
@@ -72,23 +73,12 @@ export function OrderDialog({
   const client = useQueryClient();
   const [busy, setBusy] = useState(false),
     [pollUntil, setPollUntil] = useState(0);
-  const scopeKey = JSON.stringify([id, admin, identity]);
-  const current = useRef({ key: scopeKey });
-  if (current.current.key !== scopeKey) current.current = { key: scopeKey };
-  const scope = current.current;
-  const alive = useRef(true);
-  useEffect(() => {
-    alive.current = true;
-    return () => {
-      alive.current = false;
-    };
-  }, []);
+  const { scopeKey, scope, isCurrent } = useRequestScope(id ? JSON.stringify([id, admin]) : null, admin);
   // biome-ignore lint/correctness/useExhaustiveDependencies: A new scope revokes pending mutation state, including reopening the same order.
   useEffect(() => {
     setBusy(false);
     setPollUntil(0);
   }, [scope]);
-  const isCurrent = () => alive.current && current.current === scope && !!id;
   const detail = useQuery({
     queryKey: ['order-detail', admin, id, identity],
     queryFn: ({ signal }) =>
@@ -98,7 +88,7 @@ export function OrderDialog({
         signal,
         isCurrent,
       ),
-    enabled: !!id,
+    enabled: !!id && !!profile && (!admin || !!profile.admin),
     refetchInterval: () => (Date.now() < pollUntil ? 2000 : false),
     retry: false,
   });
@@ -198,6 +188,7 @@ export function OrderDialog({
       <ActionConfirm
         key={`${o.id}:${action}`}
         scopeKey={`${scopeKey}:${action}`}
+        isCurrent={isCurrent}
         title={label}
         description={t(action === 'delete' ? 'deleteHint' : action === 'close' ? 'closeHint' : 'confirm')}
         trigger={

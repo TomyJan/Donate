@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { StrictMode } from 'react';
 import { BrowserRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { AppProvider } from '../app/context';
+import { AppProvider, useApp } from '../app/context';
 import type { Order, Page, Profile, TaskItem, TaskOverview } from '../lib/types';
 import { Admin } from './Admin';
 
@@ -215,6 +215,7 @@ async function openTasks() {
           <BrowserRouter>
             <div className="d-app">
               <Admin />
+              <ObserveTaskToasts />
             </div>
           </BrowserRouter>
         </AppProvider>
@@ -224,6 +225,59 @@ async function openTasks() {
   fireEvent.click(await screen.findByRole('button', { name: 'Tasks' }));
   await screen.findAllByRole('button', { name: 'Task details DONATE-101' });
 }
+function ObserveTaskToasts() {
+  return (
+    <div data-testid="task-toasts">
+      {useApp().toasts.map((toast) => (
+        <p key={toast.id}>{toast.text}</p>
+      ))}
+    </div>
+  );
+}
+
+it.each([false, true].flatMap((detail) => [200, 401, 403].map((status) => ({ detail, status }))))(
+  'revokes retry HTTP $status before replacement credentials render (detail=$detail)',
+  async ({ detail, status }) => {
+    delayRetry = true;
+    await openTasks();
+    if (detail) {
+      fireEvent.click(screen.getByRole('button', { name: 'Task details DONATE-101' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Task details' });
+      fireEvent.click(await within(dialog).findByRole('button', { name: 'Retry' }));
+    } else fireEvent.click(screen.getByRole('button', { name: 'Retry DONATE-101' }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Retry task' });
+    await waitFor(() => expect(within(confirmation).getByRole('button', { name: 'Confirm' })).toBeEnabled());
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Confirm' }));
+    await waitFor(() => expect(finishRetry).toBeTypeOf('function'));
+    const fixtureFetch = globalThis.fetch;
+    const replacement = { ...profile, csrf_token: 'replacement-csrf' };
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) =>
+      String(input).endsWith('/user/profile') ? ok(replacement) : fixtureFetch(input, init),
+    );
+    let released = false;
+    const unsubscribe = client.getQueryCache().subscribe(() => {
+      if (!released && client.getQueryData<Profile>(['profile'])?.csrf_token === replacement.csrf_token) {
+        released = true;
+        finishRetry?.(
+          status === 200
+            ? ok({ queued: 1, items: [{ id: task.id, result: 'queued' }] })
+            : Response.json({ code: status === 401 ? 'UNAUTHORIZED' : 'FORBIDDEN', data: null }, { status }),
+        );
+      }
+    });
+    try {
+      fireEvent(window, new Event('focus'));
+      await waitFor(() =>
+        expect(client.getQueryData<Profile>(['profile'])?.csrf_token).toBe(replacement.csrf_token),
+      );
+      expect(released).toBe(true);
+      expect(screen.getByTestId('task-toasts')).toBeEmptyDOMElement();
+      expect(screen.queryByRole('dialog', { name: 'Results' })).not.toBeInTheDocument();
+    } finally {
+      unsubscribe();
+    }
+  },
+);
 it('shows current queue counts and resets page and selection when filters change', async () => {
   await openTasks();
   expect(screen.getByRole('img', { name: 'Execution trend' })).toBeInTheDocument();

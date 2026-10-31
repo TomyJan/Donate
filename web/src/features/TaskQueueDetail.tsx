@@ -1,7 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { RotateCcw } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useApp } from '../app/context';
+import { useRequestScope } from '../app/useRequestScope';
 import { ActionConfirm } from '../components/ActionConfirm';
 import { AdminLoading } from '../components/AdminLoading';
 import { RequestError } from '../components/RequestError';
@@ -65,20 +66,15 @@ function TaskDetailContent({
 }) {
   const { t, profile } = useApp();
   const client = useQueryClient();
-  const current = useRef(scope);
-  current.current = profile?.admin ? `${profile.id}:${profile.csrf_token}` : '';
+  const { isCurrent } = useRequestScope(id, true);
+  const enabled = !!scope && scope === (profile?.admin ? `${profile.id}:${profile.csrf_token}` : '');
   const [page, setPage] = useState(1);
   const [size, setSize] = useState(10);
   const detail = useQuery({
     queryKey: ['admin-tasks', scope, 'detail', id],
     queryFn: ({ signal }) =>
-      api<TaskDetail>(
-        `admin/task/detail?${query({ id })}`,
-        undefined,
-        signal,
-        () => current.current === scope,
-      ),
-    enabled: !!scope && current.current === scope,
+      api<TaskDetail>(`admin/task/detail?${query({ id })}`, undefined, signal, isCurrent),
+    enabled,
     retry: false,
   });
   const history = useQuery({
@@ -88,9 +84,9 @@ function TaskDetailContent({
         `admin/task/history?${query({ id, page, page_size: size })}`,
         undefined,
         signal,
-        () => current.current === scope,
+        isCurrent,
       ),
-    enabled: !!scope && current.current === scope,
+    enabled,
     retry: false,
   });
   const missing = [detail.error, history.error].some(
@@ -217,6 +213,7 @@ function TaskDetailContent({
           <div className="task-detail-retry">
             <ActionConfirm
               scopeKey={`${scope}:${id}`}
+              isCurrent={isCurrent}
               title={t(task.status === 'ready' ? 'taskRunNow' : 'taskRetry')}
               prepare={async () => crypto.randomUUID()}
               onConfirm={(key) => onRetry([id], key)}

@@ -121,6 +121,7 @@ beforeEach(() => {
     if (path.endsWith('/admin/user/list')) return ok({ items: [donor], total: 1, page: 1, page_size: 20 });
     if (path.endsWith('/admin/user/detail')) return ok(donor);
     if (path.endsWith('/admin/order/list')) return ok({ items: [order], total: 1, page: 1, page_size: 20 });
+    if (path.endsWith('/admin/order/detail')) return ok(order);
     if (path.endsWith('/admin/order/action/preview')) return ok(operation);
     if (path.endsWith('/admin/order/action/execute') || path.endsWith('/admin/operation/detail'))
       return ok({
@@ -431,3 +432,60 @@ it.each([false, true])(
     expect(client.getQueryData(['profile'])).toBeNull();
   },
 );
+
+it.each([
+  ['preview', 403],
+  ['execute', 200],
+  ['execute', 401],
+  ['execute', 403],
+] as const)(
+  'revokes order-dialog %s HTTP %s before a replacement profile renders',
+  async (endpoint, status) => {
+    heldPath = `/api/v1/admin/order/action/${endpoint}`;
+    await openOrders();
+    fireEvent.click(screen.getByRole('button', { name: 'Order details order-on' }));
+    const detail = await screen.findByRole('dialog', { name: 'Order details' });
+    fireEvent.click(await within(detail).findByRole('button', { name: 'Export' }));
+    if (endpoint === 'execute') {
+      const confirmation = await screen.findByRole('dialog', { name: 'Export' });
+      await waitFor(() =>
+        expect(within(confirmation).getByRole('button', { name: 'Confirm' })).toBeEnabled(),
+      );
+      fireEvent.click(within(confirmation).getByRole('button', { name: 'Confirm' }));
+    }
+    await waitFor(() => expect(finish).toBeTypeOf('function'));
+    let released = false;
+    const unsubscribe = client.getQueryCache().subscribe(() => {
+      if (!released && client.getQueryData<Profile>(['profile'])?.csrf_token === b.csrf_token) {
+        released = true;
+        finish?.(
+          status === 200
+            ? ok({ ...operation, confirmed: true })
+            : Response.json({ code: status === 401 ? 'UNAUTHORIZED' : 'FORBIDDEN', data: null }, { status }),
+        );
+      }
+    });
+    try {
+      await replaceFromOtherTab();
+      expect(released).toBe(true);
+      expect(requests.filter((path) => path.endsWith('/admin/order/export'))).toHaveLength(0);
+      expect(screen.queryAllByTestId('toast')).toHaveLength(0);
+      expect(client.getQueryData<Profile>(['profile'])?.id).toBe(b.id);
+    } finally {
+      unsubscribe();
+    }
+  },
+);
+
+it('still exports from the order dialog for the current administrator', async () => {
+  await openOrders();
+  fireEvent.click(screen.getByRole('button', { name: 'Order details order-on' }));
+  const detail = await screen.findByRole('dialog', { name: 'Order details' });
+  fireEvent.click(await within(detail).findByRole('button', { name: 'Export' }));
+  const confirmation = await screen.findByRole('dialog', { name: 'Export' });
+  await waitFor(() => expect(within(confirmation).getByRole('button', { name: 'Confirm' })).toBeEnabled());
+  fireEvent.click(within(confirmation).getByRole('button', { name: 'Confirm' }));
+  await waitFor(() => expect(HTMLAnchorElement.prototype.click).toHaveBeenCalledOnce());
+  expect(requests.filter((path) => path.endsWith('/admin/order/export'))).toHaveLength(1);
+  expect(client.getQueryData<Profile>(['profile'])?.id).toBe(a.id);
+});

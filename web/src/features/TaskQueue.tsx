@@ -1,7 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowDown, ArrowDownUp, ArrowUp, Check, Ellipsis, RotateCcw } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useApp } from '../app/context';
+import { useRequestScope } from '../app/useRequestScope';
 import { ActionConfirm } from '../components/ActionConfirm';
 import { AdminHeading } from '../components/AdminHeading';
 import { AdminLoading } from '../components/AdminLoading';
@@ -30,15 +31,7 @@ export function TaskQueue() {
   const { profile, t, notify } = useApp();
   const client = useQueryClient();
   const scope = profile?.admin ? `${profile.id}:${profile.csrf_token}` : '';
-  const current = useRef(scope);
-  current.current = scope;
-  const alive = useRef(true);
-  useEffect(() => {
-    alive.current = true;
-    return () => {
-      alive.current = false;
-    };
-  }, []);
+  const { isCurrent } = useRequestScope('task-queue', true);
   const [visible, setVisible] = useState(!document.hidden);
   useEffect(() => {
     const changed = () => setVisible(!document.hidden);
@@ -65,7 +58,7 @@ export function TaskQueue() {
           query({ ...filters, sort: sort.key, direction: sort.direction, page, page_size: size }),
         undefined,
         signal,
-        () => current.current === scope && alive.current,
+        isCurrent,
       ),
     enabled: !!scope,
     retry: false,
@@ -75,12 +68,7 @@ export function TaskQueue() {
   const overview = useQuery({
     queryKey: [...queryRoot, 'overview', period],
     queryFn: ({ signal }) =>
-      api<TaskOverview>(
-        `admin/task/overview?${query(period)}`,
-        undefined,
-        signal,
-        () => current.current === scope && alive.current,
-      ),
+      api<TaskOverview>(`admin/task/overview?${query(period)}`, undefined, signal, isCurrent),
     enabled: !!scope,
     retry: false,
     placeholderData: (previous, previousQuery) =>
@@ -123,15 +111,7 @@ export function TaskQueue() {
       return next;
     });
   const retry = async (ids: string[], key: string) => {
-    if (
-      !scope ||
-      current.current !== scope ||
-      !alive.current ||
-      list.error ||
-      overview.error ||
-      list.isPlaceholderData
-    )
-      return;
+    if (!scope || !isCurrent() || list.error || overview.error || list.isPlaceholderData) return;
     // Snapshot identity before the mutation: polling may remove this task from
     // the visible page, while its scoped detail is still open.
     const names = Object.fromEntries(
@@ -149,9 +129,9 @@ export function TaskQueue() {
       'admin/task/retry',
       { ids, idempotency_key: key },
       undefined,
-      () => current.current === scope && alive.current,
+      isCurrent,
     );
-    if (current.current !== scope || !alive.current) return;
+    if (!isCurrent()) return;
     setResults({ result, names });
     setSelection(new Set());
     notify(t('taskRetryFinished'));
@@ -160,6 +140,7 @@ export function TaskQueue() {
   const retryButton = (ids: string[], label: string, compact = false, ready = false) => (
     <ActionConfirm
       scopeKey={`${scope}:${ids.join(',')}`}
+      isCurrent={isCurrent}
       title={t(!compact ? 'taskRetrySelected' : ready ? 'taskRunNow' : 'taskRetry')}
       prepare={async () => crypto.randomUUID()}
       onConfirm={(key) => retry(ids, key)}

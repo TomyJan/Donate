@@ -21,6 +21,7 @@ export type ActionConfirmProps<T = undefined> = {
   onConfirm: (prepared: T) => Promise<void>;
   expiresAt?: (prepared: T) => string | number | undefined;
   scopeKey?: string;
+  isCurrent?: () => boolean;
   danger?: boolean;
   children?: ReactNode;
 };
@@ -33,6 +34,7 @@ export function ActionConfirm<T = undefined>({
   onConfirm,
   expiresAt,
   scopeKey,
+  isCurrent,
   danger = false,
   children,
 }: ActionConfirmProps<T>) {
@@ -68,7 +70,7 @@ export function ActionConfirm<T = undefined>({
     invalidate();
   }, [disabled, busy, invalidate]);
   const prepareCurrent = async () => {
-    if (disabled) return false;
+    if (disabled || isCurrent?.() === false) return false;
     const current = ++version.current;
     setPrepared(undefined);
     setError('');
@@ -76,17 +78,17 @@ export function ActionConfirm<T = undefined>({
     working.current = true;
     try {
       const value = prepare ? await prepare() : (undefined as T);
-      if (current !== version.current) return false;
+      if (current !== version.current || isCurrent?.() === false) return false;
       setPrepared({ value });
       return true;
     } catch (failure) {
-      if (current === version.current) {
+      if (current === version.current && isCurrent?.() !== false) {
         setError(t('error'));
         report(failure);
       }
       return false;
     } finally {
-      if (current === version.current) {
+      if (current === version.current && isCurrent?.() !== false) {
         setPreparing(false);
         working.current = false;
       }
@@ -99,7 +101,7 @@ export function ActionConfirm<T = undefined>({
     else invalidate();
   };
   const confirm = async () => {
-    if (disabled || !prepared || working.current) return;
+    if (disabled || !prepared || working.current || isCurrent?.() === false) return;
     const expiry = expiresAt?.(prepared.value);
     const expiryTime = typeof expiry === 'string' ? Date.parse(expiry) : expiry;
     if (expiryTime !== undefined && (!Number.isFinite(expiryTime) || expiryTime <= Date.now())) {
@@ -112,16 +114,16 @@ export function ActionConfirm<T = undefined>({
     setError('');
     try {
       await onConfirm(prepared.value);
-      if (current !== version.current) return;
+      if (current !== version.current || isCurrent?.() === false) return;
       setOpen(false);
       invalidate();
     } catch (failure) {
-      if (current === version.current) {
+      if (current === version.current && isCurrent?.() !== false) {
         setError(t('error'));
         report(failure);
       }
     } finally {
-      if (current === version.current) {
+      if (current === version.current && isCurrent?.() !== false) {
         working.current = false;
         setBusy(false);
       }
