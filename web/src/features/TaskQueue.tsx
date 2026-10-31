@@ -266,6 +266,7 @@ export function TaskQueue() {
                         className="custom-check"
                         type="checkbox"
                         aria-label={t('taskSelectAll')}
+                        disabled={list.isPlaceholderData}
                         checked={rows.length > 0 && rows.every((row) => selection.has(row.id))}
                         onChange={() =>
                           setSelection((old) => {
@@ -327,6 +328,7 @@ export function TaskQueue() {
                           className="custom-check"
                           type="checkbox"
                           aria-label={`${t('taskSelect')} ${taskTarget(task)}`}
+                          disabled={list.isPlaceholderData}
                           checked={selection.has(task.id)}
                           onChange={() => toggle(task.id)}
                         />

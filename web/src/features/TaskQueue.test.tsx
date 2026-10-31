@@ -157,6 +157,42 @@ beforeEach(() => {
   });
   clients.push(client);
 });
+it('disables selection of placeholder rows while a different task page is loading', async () => {
+  const fixtureFetch = globalThis.fetch;
+  let resolvePage: ((response: Response) => void) | undefined;
+  vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input), 'http://localhost');
+    if (url.pathname.endsWith('/task/list') && url.searchParams.get('page') === '2')
+      return new Promise<Response>((resolve) => {
+        resolvePage = resolve;
+      });
+    return fixtureFetch(input, init);
+  });
+  await openTasks();
+  fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+  await waitFor(() => expect(resolvePage).toBeTypeOf('function'));
+  const row = screen.getByRole('checkbox', { name: 'Select task DONATE-101' });
+  const all = screen.getByRole('checkbox', { name: 'Select tasks on this page' });
+  expect(row).toBeDisabled();
+  expect(all).toBeDisabled();
+  fireEvent.click(row);
+  fireEvent.click(all);
+  await act(async () => {
+    resolvePage?.(
+      ok({
+        items: [{ ...task, id: 'task-two', merchant_order_no: 'DONATE-202' }],
+        total: 41,
+        page: 2,
+        page_size: 20,
+      }),
+    );
+  });
+  const nextRow = await screen.findByRole('checkbox', { name: 'Select task DONATE-202' });
+  expect(nextRow).toBeEnabled();
+  expect(nextRow).not.toBeChecked();
+  expect(screen.getByRole('button', { name: 'Retry selected' })).toBeDisabled();
+  expect(retries).toHaveLength(0);
+});
 it('offers immediate execution for a scheduled ready task', async () => {
   task.status = 'ready';
   await openTasks();
