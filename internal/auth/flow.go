@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strings"
 	"time"
@@ -305,34 +306,68 @@ func (s *Service) exchangeOIDC(ctx context.Context, code string, f flow) (Identi
 	if e != nil || verified.Nonce != f.Nonce {
 		return Identity{}, ErrUnauthorized
 	}
-	type profileClaims struct {
-		Name      string `json:"name"`
-		Preferred string `json:"preferred_username"`
-		Picture   string `json:"picture"`
-	}
-	var claims profileClaims
+	var claims oidcProfileClaims
 	if e = verified.Claims(&claims); e != nil {
 		return Identity{}, ErrUnauthorized
 	}
-	if claims.Name == "" && claims.Preferred == "" || claims.Picture == "" {
-		if info, e := p.UserInfo(ctx, oauth2.StaticTokenSource(token)); e == nil && info.Subject == verified.Subject {
-			var additional profileClaims
-			if e := info.Claims(&additional); e == nil {
+	var additional oidcProfileClaims
+	userInfoStatus := "not_needed"
+	tokenPicture, _ := safeOIDCAvatar(claims.Picture)
+	if claims.Name == "" && claims.Preferred == "" || tokenPicture == "" {
+		info, err := p.UserInfo(ctx, oauth2.StaticTokenSource(token))
+		switch {
+		case err != nil:
+			userInfoStatus = "unavailable"
+		case info.Subject != verified.Subject:
+			userInfoStatus = "subject_mismatch"
+		default:
+			var enriched oidcProfileClaims
+			if err := info.Claims(&enriched); err != nil {
+				userInfoStatus = "invalid_claims"
+			} else {
+				userInfoStatus, additional = "accepted", enriched
 				// UserInfo only enriches this verified subject; it cannot replace
-				// identity keys or profile fields already present in the ID token.
+				// identity keys or a name already supplied by the ID token.
 				if claims.Name == "" && claims.Preferred == "" {
 					claims.Name, claims.Preferred = additional.Name, additional.Preferred
-				}
-				if claims.Picture == "" {
-					claims.Picture = additional.Picture
 				}
 			}
 		}
 	}
+	// Prefer usable standard picture claims before the Casdoor avatar alias.
+	avatar, source, rejected := selectOIDCAvatar(
+		oidcAvatarClaim{source: "id_token.picture", value: claims.Picture},
+		oidcAvatarClaim{source: "userinfo.picture", value: additional.Picture},
+		claims.avatarClaim("id_token"), additional.avatarClaim("userinfo"),
+	)
+	status, reason := "accepted", ""
+	level := slog.LevelInfo
+	if avatar == "" {
+		status, reason = "missing", "avatar_absent"
+		if userInfoStatus != "accepted" && userInfoStatus != "not_needed" {
+			reason = "userinfo_" + userInfoStatus
+		}
+	}
+	if rejected != "" {
+		level = slog.LevelWarn
+		if avatar == "" {
+			reason = "avatar_rejected"
+		}
+	}
+	if userInfoStatus == "subject_mismatch" || userInfoStatus == "invalid_claims" || avatar == "" && userInfoStatus == "unavailable" {
+		level = slog.LevelWarn
+	}
+	// Only fixed diagnostic values and the verified identity are logged, never
+	// upstream errors (which can contain response bodies), tokens, or avatar URLs.
+	s.Log.Log(ctx, level, fmt.Sprintf("OIDC 提供方 %s，已验证 subject %s：头像 %s，来源 %s，原因 %s，拒绝 %s，UserInfo %s", s.Config.OIDCProviderID(), verified.Subject, status, source, reason, rejected, userInfoStatus),
+		"provider_id", s.Config.OIDCProviderID(), "subject", verified.Subject,
+		"avatar_status", status, "avatar_source", source, "avatar_reason", reason, "avatar_rejections", rejected, "userinfo_status", userInfoStatus,
+		"id_token_picture_present", claims.Picture != "", "id_token_avatar_present", len(claims.Avatar) > 0,
+		"userinfo_picture_present", additional.Picture != "", "userinfo_avatar_present", len(additional.Avatar) > 0)
 	if claims.Name == "" {
 		claims.Name = claims.Preferred
 	}
-	return Identity{Provider: "oidc", Issuer: s.Config.OIDCissuer, Subject: verified.Subject, Nickname: claims.Name, AvatarURL: SafeAvatar(claims.Picture)}, nil
+	return Identity{Provider: "oidc", Issuer: s.Config.OIDCissuer, Subject: verified.Subject, Nickname: claims.Name, AvatarURL: avatar}, nil
 }
 func (s *Service) finishFlow(ctx context.Context, f flow, p Identity) (FlowResult, error) {
 	// A one-way stage claim prevents replay even if the process stops before sending the cookie.
