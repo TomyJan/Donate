@@ -58,7 +58,7 @@ GEO_ONLINE_FALLBACK=true
 ```
 
 - 默认文件在 `data/ipdb/`；可填写其他路径，含空格时加引号。不使用的库路径应留空。
-- 按需填写 `GEO_XDB_IPV4_URL`、`GEO_XDB_IPV6_URL`、`GEO_DATABASE_URL`；`GEO_UPDATE_DAYS=7` 表示每 7 天更新。支持原始文件、gzip、tar.gz、zip，验证后热重载，失败保留旧库；0 或空 URL 关闭对应下载。
+- 按需填写 `GEO_XDB_IPV4_URL`、`GEO_XDB_IPV6_URL`、`GEO_DATABASE_URL`；`GEO_UPDATE_DAYS=7` 表示每 7 天更新。支持原始文件、gzip、tar.gz、zip，按内容识别，无需 URL 扩展名。MaxMind 选择 City MMDB 的 `suffix=tar.gz` 下载并提供认证，程序自动提取 `.mmdb`；[官方来源与配置示例](ip-geolocation.md#官方下载来源与示例)。验证后热重载，失败保留旧库；0 或空 URL 关闭对应下载。
 - 本地按对应协议 XDB → MMDB 选择；MMDB 可留空，XDB 可只配一种协议。`GEO_ONLINE_FALLBACK=true` 允许在线补充和省级核验；纯本地查询设 `false`，不影响显式配置的库下载。缺失文件仅在启用对应下载时自动获取；否则缺失、损坏或协议不匹配会启动失败。
 - 关闭查询设 `GEO_MODE=disabled`。前台最多展示省级，后台展示库里实际存在的字段；更新库不会重算历史订单。
 - 已有订单可在订单详情或批量操作中“刷新属地”，绕过缓存。失败、缺省份或分歧未解决时重试并保留原属地，后台可展开查看最近一次核验依据；不改变支付状态。换库或重启不会自动刷新旧订单。
