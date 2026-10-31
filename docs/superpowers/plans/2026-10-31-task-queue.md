@@ -1,0 +1,52 @@
+# 任务队列管理实现计划
+
+> 使用 subagent-driven-development 实现；用户已要求自主完成，所有选择按现有项目和 docs/task-queue-design.md 决定，无需等待确认。
+
+**目标：** 为现有持久队列补齐真实历史、管理接口和完整后台界面。
+**规格：** docs/task-queue-design.md。
+**架构：** 不替换执行器；新增持久观测和管理员操作层，前端复用既有后台布局与组件。
+**基线：** df197ae316e59acdef332957cfe7fd7215c5e11e（v0.1.1）。
+
+## 全局约束
+
+- master 本地提交，不推送、不发版；签名不可用时允许单次绕过。真实数据库/.env 不动。
+- 沿用 Go/React/SQLite，pnpm 与项目 Node 26，默认不新增依赖。Go API DTO 生成 OpenAPI/TypeScript。
+- UUID 标识；只用 GET/POST；鉴权、CSRF、幂等和租约栅栏不得退化。
+- TDD：测试先跑 RED，真实症状消失后 GREEN；命令输出保存到本计划忽略工作目录，不倾倒完整日志。
+
+## 任务 1：持久历史与管理员接口
+
+**所有权：** internal/storage/migrations/00005_task_history.sql，internal/jobs 的历史/重试模块及必要状态机挂点，internal/admin/tasks*.go，internal/httpapi/tasks*.go/路由/DTO，cmd/contractgen，api/openapi.json，web/src/generated/api.ts，web/src/lib/types.ts。
+
+- [ ] 先写迁移/历史测试：新建任务会有 created，领取 started，租约恢复 recovered；Finish 重试/成功/失败有正确历史；支付回调直接结束任务也记录；陈旧租约不写；事务回滚不留事件；历史级联删除；旧数据只有快照且 UUID 合法。先运行并确认 RED。
+- [ ] 以事务一致的方式补齐所有路径，消息带 job/order 标识，错误脱敏。新增任务总次数与时间线查询。go test ./internal/jobs ./internal/storage ./internal/order 通过。
+- [ ] 先写管理员/API测试：四状态/三类型筛选、搜索/排序/分页/日期验证、趋势零补齐与分桶、未登录401/非管理员403/CSRF403、失效权限、失败重试/ready提前执行/执行中和完成跳过、重复幂等键/冲突键/同类活动任务冲突。先确认 RED。
+- [ ] 实现设计契约五条路由和生成类型，补充 task.retry 审计，不改变既有重试窗口和支付行为。go test ./...，pnpm check:generated 通过。
+- [ ] 按“持久历史”和“管理接口”分至少两笔原子化提交。更新实现报告并请求任务审查。
+
+**接口产出：** 规格中全部 Task* DTO 与路径。前端实现可依据冻结契约并行，禁止自行变更字段；需要调整先通知控制者。
+
+## 任务 2：管理台任务工作区
+
+**所有权：** web/src/features/TaskQueue*.tsx/.css 及单测，必要的 components/Task*.tsx，Admin.tsx 导航接入，lib/i18n.ts 的新任务文案，web/e2e/task-queue.spec.ts，必要 e2e fixture 扩展。不修改任务 1 的生成文件、共享 types.ts。
+
+- [ ] 先写 RED 行为测试：任务导航/四状态、筛选改变归一页码和选择；详情历史分页；失败恢复；nonce 重试稳定；权限撤销清理；后台刷新只改当前任务数据；隐藏页停止轮询。
+- [ ] 实现任务工作区、四状态统计、可访问趋势图、表头排序/筛选/分页、紧凑批量确认、任务详情和复用订单详情、时间线与重试。无 uuid 用户文案。趋势范围说明简短。默认每 5 秒轮询，仅页面可见且管理员进入任务页时，支持关闭自动刷新。
+- [ ] 新增导航保持高度和现有选中滑块动画，窄屏不溢出；弹窗/浮层有阴影且焦点不裁切；操作区自适应整行/多行；reduced motion 不强制动画。
+- [ ] 真实 API E2E 与可控队列 fixture，涵盖单项/批重试、历史、筛选、趋势、窄屏/深浅色及错误恢复。先失败后通过，pnpm check、pnpm test、相关E2E通过。
+- [ ] 按“工作区展示”和“管理操作/浏览器回归”分原子提交，更新报告并请求任务审查。
+
+## 任务 3：集成验证与最终审查
+
+- [ ] 跑 gofmt、go test -count=1 ./...、go vet ./...、pnpm check、pnpm test、pnpm test:tooling、pnpm check:generated、python docs/design/build.py --check、pnpm build、完整 pnpm test:e2e。支持时额外 race；不具备工具链时明确说明。
+- [ ] 浏览器实看320/390/768/1280、亮暗、筛选展开/详情/批操作/会话失效；记录截图和结构检查结果，不能仅靠 mock 宣称完整。
+- [ ] 最终宽范围独立审查，核实所有实际发现并修复，补对应 RED→GREEN，必要复审。
+- [ ] 必要部署/设计文档更新保持简洁；本地原子提交，工作区干净，列出签名/未签名提交和验证结果。不推送。
+
+## 审查重点
+
+1. 回调付款和任务执行竞争：不能被管理重试/日志写入覆盖付款结果或过期租约。
+2. 多次点击、网络重放和活动同类任务：不能重置二次预算、双重调度或盗取租约。
+3. SQLite 单连接：行迭代期间不能嵌套查询导致死锁；复杂统计不能无限增长或暴露秘密。
+4. 日志真实：升级前历史不伪造，回调/关单/属地路径都覆盖，统计不能把快照当成功。
+5. 页面切换/隐藏/权限撤销时晚到响应：停止轮询、隔离旧用户数据、清理操作和弹窗，无页面重挂载闪动。
