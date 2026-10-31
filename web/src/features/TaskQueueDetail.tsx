@@ -1,12 +1,12 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { RotateCcw } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../app/context';
 import { ActionConfirm } from '../components/ActionConfirm';
 import { AdminLoading } from '../components/AdminLoading';
 import { RequestError } from '../components/RequestError';
 import { Button, Empty, Modal, Pagination } from '../components/ui';
-import { api, dateTime, query } from '../lib/api';
+import { APIError, api, dateTime, query } from '../lib/api';
 import type { Page, TaskDetail, TaskEvent } from '../lib/types';
 import { taskLabel, taskTarget } from './TaskQueue';
 
@@ -39,6 +39,7 @@ export function TaskQueueDetail({
           key={`${scope}:${id}`}
           id={id}
           scope={scope}
+          onClose={onClose}
           onOrder={onOrder}
           onRetry={onRetry}
           retryAllowed={retryAllowed}
@@ -50,17 +51,20 @@ export function TaskQueueDetail({
 function TaskDetailContent({
   id,
   scope,
+  onClose,
   onOrder,
   onRetry,
   retryAllowed,
 }: {
   id: string;
   scope: string;
+  onClose: () => void;
   onOrder: (id: string) => void;
   onRetry: (ids: string[], key: string) => Promise<void>;
   retryAllowed: boolean;
 }) {
   const { t, profile } = useApp();
+  const client = useQueryClient();
   const current = useRef(scope);
   current.current = profile?.admin ? `${profile.id}:${profile.csrf_token}` : '';
   const [page, setPage] = useState(1);
@@ -89,6 +93,21 @@ function TaskDetailContent({
     enabled: !!scope && current.current === scope,
     retry: false,
   });
+  const missing = [detail.error, history.error].some(
+    (error) => error instanceof APIError && error.code === 'NOT_FOUND',
+  );
+  useEffect(() => {
+    if (!missing) return;
+    // A deleted order also removes its tasks. Revoke every cached history page
+    // and cancel in-flight responses before the dialog unmounts.
+    for (const kind of ['detail', 'history']) {
+      const queryKey = ['admin-tasks', scope, kind, id];
+      void client.cancelQueries({ queryKey });
+      client.removeQueries({ queryKey });
+    }
+    onClose();
+  }, [missing, client, scope, id, onClose]);
+  if (missing) return null;
   const task = detail.data;
   return (
     <div className="task-detail">

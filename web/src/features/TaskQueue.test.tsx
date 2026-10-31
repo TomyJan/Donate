@@ -4,7 +4,7 @@ import { StrictMode } from 'react';
 import { BrowserRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AppProvider } from '../app/context';
-import type { Page, Profile, TaskItem } from '../lib/types';
+import type { Order, Page, Profile, TaskItem } from '../lib/types';
 import { Admin } from './Admin';
 
 const task = {
@@ -419,7 +419,167 @@ it('retains cached detail after a background detail failure and disables its ret
       .getAllByRole('button', { name: 'Retry' })
       .some((button) => button.hasAttribute('disabled')),
   ).toBe(true);
+  failDetail = false;
+  await act(async () => {
+    await client.invalidateQueries({
+      predicate: (item) => item.queryKey[0] === 'admin-tasks' && item.queryKey[2] === 'detail',
+    });
+  });
+  await waitFor(() =>
+    expect(
+      within(detail).queryByText('The server is busy. Please try again shortly.'),
+    ).not.toBeInTheDocument(),
+  );
+  expect(within(detail).getByText('request-101')).toBeInTheDocument();
+  expect(within(detail).getByRole('button', { name: 'Retry' })).toBeEnabled();
 });
+it('retains cached history through a temporary refresh error and recovers', async () => {
+  const fixtureFetch = globalThis.fetch;
+  let failed = false;
+  vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) =>
+    failed && String(input).includes('/task/history?')
+      ? new Response('unavailable', { status: 503 })
+      : fixtureFetch(input, init),
+  );
+  await openTasks();
+  fireEvent.click(screen.getByRole('button', { name: 'Task details DONATE-101' }));
+  const detail = await screen.findByRole('dialog', { name: 'Task details' });
+  await within(detail).findByText('Gateway unavailable');
+  failed = true;
+  await act(async () => {
+    await client.invalidateQueries({
+      queryKey: ['admin-tasks', `${profile.id}:${profile.csrf_token}`, 'history', task.id],
+    });
+  });
+  await within(detail).findByText('The server is busy. Please try again shortly.');
+  expect(within(detail).getByText('Gateway unavailable')).toBeInTheDocument();
+  expect(within(detail).getByText('request-101')).toBeInTheDocument();
+  expect(within(detail).getByRole('button', { name: 'Next' })).toBeEnabled();
+  failed = false;
+  await act(async () => {
+    await client.invalidateQueries({
+      queryKey: ['admin-tasks', `${profile.id}:${profile.csrf_token}`, 'history', task.id],
+    });
+  });
+  await waitFor(() =>
+    expect(
+      within(detail).queryByText('The server is busy. Please try again shortly.'),
+    ).not.toBeInTheDocument(),
+  );
+  expect(within(detail).getByText('Gateway unavailable')).toBeInTheDocument();
+  expect(within(detail).getByRole('button', { name: 'Retry' })).toBeEnabled();
+});
+it.each(['detail', 'history'])(
+  'revokes only deleted task caches after a successful detail receives %s NOT_FOUND',
+  async (missingEndpoint) => {
+    const fixtureFetch = globalThis.fetch;
+    const scope = `${profile.id}:${profile.csrf_token}`;
+    const taskRoot = ['admin-tasks', scope];
+    const detailKey = [...taskRoot, 'detail', task.id];
+    const historyKeys = [
+      [...taskRoot, 'history', task.id, 1, 10],
+      [...taskRoot, 'history', task.id, 2, 10],
+      [...taskRoot, 'history', task.id, 7, 50],
+    ];
+    const otherKeys = [
+      [...taskRoot, 'detail', 'other-task'],
+      [...taskRoot, 'history', 'other-task', 1, 10],
+      ['admin-tasks', 'other-admin:other-session', 'detail', task.id],
+      ['admin-tasks', 'other-admin:other-session', 'history', task.id, 1, 10],
+    ];
+    const operation = {
+      id: 'delete-operation',
+      action: 'delete',
+      expires_at: '2099-01-01T00:00:00Z',
+      items: [{ id: task.order_id, result: 'ready' }],
+    };
+    const order: Order = {
+      id: task.order_id,
+      user_id: 'donor-one',
+      nickname: 'Alice',
+      avatar_url: '',
+      amount_fen: 100,
+      channel: 'alipay',
+      status: 'paid',
+      merchant_order_no: task.merchant_order_no,
+      api_trade_no: 'api-trade-one',
+      trade_no: 'trade-one',
+      province: '广东',
+      created_at: task.created_at,
+      expires_at: '2099-01-01T00:00:00Z',
+      protocol: 'v2',
+      gateway_status: 'paid',
+      remote_close_status: '',
+      hidden_order: false,
+      hidden_message: false,
+      close_reason: '',
+      message: 'Original order',
+    };
+    let deleted = false;
+    let finishLate: ((value: Response) => void) | undefined;
+    let lateSignal: AbortSignal | null | undefined;
+    const missing = () => Response.json({ code: 'NOT_FOUND', data: null }, { status: 404 });
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = String(input);
+      if (path.includes('/admin/order/detail?')) return deleted ? missing() : ok(order);
+      if (path.endsWith('/admin/order/action/preview')) return ok(operation);
+      if (path.endsWith('/admin/order/action/execute')) {
+        deleted = true;
+        return ok({ ...operation, items: [{ id: task.order_id, result: 'deleted' }] });
+      }
+      if (deleted && /\/task\/(detail|history)\?/.test(path)) {
+        if (path.includes(`/task/${missingEndpoint}?`)) return missing();
+        lateSignal = init?.signal;
+        return new Promise<Response>((resolve) => {
+          finishLate = resolve;
+        });
+      }
+      if (deleted && path.includes('/task/list?')) return ok({ items: [], total: 0, page: 1, page_size: 20 });
+      return fixtureFetch(input, init);
+    });
+    await openTasks();
+    fireEvent.click(screen.getByRole('button', { name: 'Task details DONATE-101' }));
+    const detail = await screen.findByRole('dialog', { name: 'Task details' });
+    await within(detail).findByText('request-101');
+    await within(detail).findByText('Gateway unavailable');
+    fireEvent.click(within(detail).getByRole('button', { name: 'Next' }));
+    await within(detail).findByText('Upgrade snapshot', { selector: '.task-event-message' });
+    act(() => {
+      client.setQueryData(historyKeys[2], { items: [{ id: 'old-history-page' }], total: 301 });
+      for (const key of otherKeys) client.setQueryData(key, { preserved: key });
+    });
+    fireEvent.click(within(detail).getByRole('button', { name: 'AliceDONATE-101' }));
+    const orderDialog = await screen.findByRole('dialog', { name: 'Order details' });
+    fireEvent.click(await within(orderDialog).findByRole('button', { name: 'Delete order' }));
+    const confirmation = await screen.findByRole('dialog', { name: 'Delete order' });
+    await waitFor(() => expect(within(confirmation).getByRole('button', { name: 'Confirm' })).toBeEnabled());
+    fireEvent.click(within(confirmation).getByRole('button', { name: 'Confirm' }));
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Task details' })).not.toBeInTheDocument(),
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Order details' })).not.toBeInTheDocument(),
+    );
+    expect(lateSignal?.aborted).toBe(true);
+    await act(async () => {
+      finishLate?.(
+        ok(
+          missingEndpoint === 'history'
+            ? { ...task, request_id: 'late-deleted-detail' }
+            : { items: [{ id: 'late-event', message: 'Late deleted history' }], total: 1 },
+        ),
+      );
+    });
+    expect(screen.queryByText('request-101')).not.toBeInTheDocument();
+    expect(
+      screen.queryByText('Upgrade snapshot', { selector: '.task-event-message' }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('late-deleted-detail')).not.toBeInTheDocument();
+    expect(screen.queryByText('Late deleted history')).not.toBeInTheDocument();
+    for (const key of [detailKey, ...historyKeys]) expect(client.getQueryData(key)).toBeUndefined();
+    for (const key of otherKeys) expect(client.getQueryData(key)).toEqual({ preserved: key });
+  },
+);
 it.each([200, 403])(
   'isolates an old retry HTTP %s response after session credentials change',
   async (status) => {
