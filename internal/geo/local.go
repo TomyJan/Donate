@@ -86,23 +86,29 @@ func (x *xdbReader) lookup(a netip.Addr) (Location, error) {
 
 func (s *Service) openLocal() (err error) {
 	for _, db := range []struct {
-		path, name string
-		version    *xdb.Version
-		target     **xdbReader
+		path, name, kind string
+		version          *xdb.Version
+		target           **xdbReader
 	}{
-		{s.config.GeoXDBv4, "GEO_XDB_IPV4", xdb.IPv4, &s.xdb4},
-		{s.config.GeoXDBv6, "GEO_XDB_IPV6", xdb.IPv6, &s.xdb6},
+		{s.config.GeoXDBv4, "GEO_XDB_IPV4", "xdb4", xdb.IPv4, &s.xdb4},
+		{s.config.GeoXDBv6, "GEO_XDB_IPV6", "xdb6", xdb.IPv6, &s.xdb6},
 	} {
 		if db.path == "" {
 			continue
 		}
-		*db.target, err = openXDB(db.path, db.version)
+		err = validateDatabase(db.path, db.kind)
+		if err == nil {
+			*db.target, err = openXDB(db.path, db.version)
+		}
 		if err != nil {
 			return fmt.Errorf("加载 %s 的 XDB 文件 %q 失败: %w", db.name, db.path, err)
 		}
 	}
 	if s.config.GeoPath != "" {
-		s.local, err = maxminddb.Open(s.config.GeoPath)
+		err = validateDatabase(s.config.GeoPath, "mmdb")
+		if err == nil {
+			s.local, err = maxminddb.Open(s.config.GeoPath)
+		}
 		if err != nil {
 			return fmt.Errorf("加载 GEO_DATABASE 的 MMDB 文件 %q 失败: %w", s.config.GeoPath, err)
 		}
