@@ -25,13 +25,15 @@ export function useSessionRenewal(
     if (!userID || !csrfToken || !expiresAt) return;
     let disposed = false;
     let busy = false;
+    let returnRevision = 0;
+    let profileRevision = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const liveProfile = () => {
       const value = client.getQueryData<Profile | null>(['profile']);
       return value?.id === userID && value.csrf_token === csrfToken ? value : null;
     };
     const active = () => !document.hidden && Date.now() - activity.current.at <= activityWindow;
-    const renew = async () => {
+    const renew = async (verify = false) => {
       const live = liveProfile();
       const expiry = Date.parse(live?.expires_at ?? '');
       if (
@@ -40,8 +42,7 @@ export function useSessionRenewal(
         !live ||
         !active() ||
         !Number.isFinite(expiry) ||
-        expiry - Date.now() > renewalWindow ||
-        Date.now() < activity.current.retryAfter
+        (!verify && (expiry - Date.now() > renewalWindow || Date.now() < activity.current.retryAfter))
       )
         return;
       busy = true;
@@ -49,17 +50,29 @@ export function useSessionRenewal(
         let pending = renewals.get(identity);
         if (!pending) {
           const readProfile = async () => {
-            try {
-              return await api<Profile>('user/profile');
-            } catch (error) {
-              if (error instanceof APIError && (error.status === 401 || error.code === 'ACCOUNT_BANNED'))
-                return null;
-              throw error;
+            while (!disposed && active() && liveProfile()) {
+              const revision = returnRevision;
+              profileRevision = revision;
+              let fresh: Profile | null;
+              try {
+                fresh = await api<Profile>('user/profile');
+              } catch (error) {
+                if (error instanceof APIError && (error.status === 401 || error.code === 'ACCOUNT_BANNED'))
+                  fresh = null;
+                else if (revision !== returnRevision) continue;
+                else throw error;
+              }
+              if (disposed || !liveProfile()) return undefined;
+              // A second return may follow another tab changing the cookie while
+              // this GET is pending. Validate again before installing its result.
+              if (revision === returnRevision) return fresh;
             }
+            return undefined;
           };
           const refresh = async () => {
             if (disposed || !active() || !liveProfile()) return undefined;
-            activity.current.retryAfter = Date.now() + 60000;
+            const canRenew = Date.now() >= activity.current.retryAfter;
+            if (!verify) activity.current.retryAfter = Date.now() + 60000;
             // Re-read while holding the cross-tab lock: a business POST or another
             // tab may have extended the cookie since this tab loaded its profile.
             // Do not let a delayed response install itself into the shared cache
@@ -68,8 +81,15 @@ export function useSessionRenewal(
             if (disposed || !liveProfile()) return undefined;
             if (!fresh || fresh.id !== userID || fresh.csrf_token !== csrfToken) return fresh;
             const remaining = Date.parse(fresh.expires_at) - Date.now();
-            if (remaining > 0 && remaining <= renewalWindow && active() && liveProfile()) {
-              await api('user/session/renew', {}, undefined, () => !!liveProfile());
+            if (remaining > 0 && remaining <= renewalWindow && canRenew && active() && liveProfile()) {
+              activity.current.retryAfter = Date.now() + 60000;
+              const revision = returnRevision;
+              await api(
+                'user/session/renew',
+                {},
+                undefined,
+                () => revision === returnRevision && !!liveProfile(),
+              );
               if (disposed || !liveProfile()) return undefined;
               fresh = await readProfile();
               if (disposed || !liveProfile()) return undefined;
@@ -90,7 +110,10 @@ export function useSessionRenewal(
         const fresh = await pending;
         if (!fresh) {
           if (fresh === null && !disposed && liveProfile()) clearSession();
-        } else if (!disposed && liveProfile() && fresh.id === userID && fresh.csrf_token === csrfToken) {
+        } else if (!disposed && liveProfile() && (fresh.id !== userID || fresh.csrf_token !== csrfToken)) {
+          clearSession();
+          client.setQueryData(['profile'], fresh);
+        } else if (!disposed && liveProfile()) {
           client.setQueryData(['profile'], fresh);
           if (fresh.expires_at !== live.expires_at) {
             try {
@@ -108,17 +131,26 @@ export function useSessionRenewal(
           }
         }
       } catch (error) {
-        if (!disposed && liveProfile()) report(error);
+        if (!disposed && liveProfile() && profileRevision === returnRevision) report(error);
       } finally {
         busy = false;
+        // A return during a pending POST must be checked even if that POST fails.
+        if (!disposed && liveProfile() && active() && profileRevision !== returnRevision) void renew(true);
       }
     };
     const onActivity = () => {
       activity.current.at = Date.now();
       void renew();
     };
+    const onReturn = () => {
+      activity.current.at = Date.now();
+      returnRevision++;
+      // Revalidate identity after another tab may have changed the shared cookie.
+      // The fresh server expiry still decides whether a renewal POST is needed.
+      void renew(true);
+    };
     const onVisibility = () => {
-      if (!document.hidden) onActivity();
+      if (!document.hidden) onReturn();
     };
     const onStorage = (event: StorageEvent) => {
       if (event.key !== renewedStorageKey || !event.newValue) return;
@@ -150,15 +182,17 @@ export function useSessionRenewal(
     };
     schedule();
     void renew();
-    for (const type of ['pointerdown', 'keydown', 'touchstart', 'focus'])
+    for (const type of ['pointerdown', 'keydown', 'touchstart'])
       window.addEventListener(type, onActivity, { passive: true });
+    window.addEventListener('focus', onReturn);
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('storage', onStorage);
     return () => {
       disposed = true;
       clearTimeout(timer);
-      for (const type of ['pointerdown', 'keydown', 'touchstart', 'focus'])
+      for (const type of ['pointerdown', 'keydown', 'touchstart'])
         window.removeEventListener(type, onActivity);
+      window.removeEventListener('focus', onReturn);
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('storage', onStorage);
     };

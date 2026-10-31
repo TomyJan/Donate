@@ -201,6 +201,54 @@ it('does not request renewal outside the window and renews at the exact threshol
   fixture.client.clear();
 });
 
+it('validates a returning tab without extending a fresh session and observes a subsequent sign-out', async () => {
+  const fixture = renewalFixture(30 * day);
+  await flushSession();
+  fireEvent.focus(window);
+  fireEvent(document, new Event('visibilitychange'));
+  await flushSession();
+  expect(fixture.requests.filter((path) => path.endsWith('user/profile'))).toHaveLength(1);
+  expect(fixture.renewals()).toBe(0);
+  expect(screen.getByText('Alice')).toBeInTheDocument();
+  fixture.invalidate();
+  // Returning within the renewal retry interval must still notice another tab signing out.
+  fireEvent.focus(window);
+  await flushSession();
+  expect(screen.getByText('guest')).toBeInTheDocument();
+  expect(fixture.renewals()).toBe(0);
+  fixture.client.clear();
+});
+
+it('revalidates on focus but preserves the renewal retry delay after a failed POST', async () => {
+  const fixture = renewalFixture(20 * day);
+  const profile = fixture.client.getQueryData<Profile>(['profile']);
+  vi.stubGlobal('fetch', async (path: string) => {
+    fixture.requests.push(path);
+    return path.endsWith('user/session/renew')
+      ? Response.json({ code: 'SERVER_UNAVAILABLE', data: null }, { status: 503 })
+      : Response.json({ code: 'OK', data: profile });
+  });
+  await flushSession();
+  expect(fixture.renewals()).toBe(1);
+  fireEvent.focus(window);
+  await flushSession();
+  expect(fixture.requests.filter((path) => path.endsWith('user/profile'))).toHaveLength(2);
+  expect(fixture.renewals()).toBe(1);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(59999);
+  });
+  fireEvent.focus(window);
+  await flushSession();
+  expect(fixture.renewals()).toBe(1);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(1);
+  });
+  fireEvent.focus(window);
+  await flushSession();
+  expect(fixture.renewals()).toBe(2);
+  fixture.client.clear();
+});
+
 it('waits for fresh visible activity after entering the window while idle', async () => {
   const fixture = renewalFixture(20 * day + 6 * 60000);
   await flushSession();
@@ -288,6 +336,7 @@ it('does not keep an idle tab logged in through background renewal timers', asyn
 it('uses a renewal received from another tab before the boundary timer fires', async () => {
   const fixture = renewalFixture(20 * day + 1000);
   await flushSession();
+  fixture.setServerExpiry('2027-01-31T00:00:00.000Z');
   fireEvent(
     window,
     new StorageEvent('storage', {

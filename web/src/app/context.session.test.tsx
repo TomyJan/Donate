@@ -200,12 +200,156 @@ it('keeps a replacement session when an earlier anonymous sign-in is waiting for
   await waitFor(() => expect(location.hash).toBe('#bound'));
 });
 
+it.each(
+  ['guest', 'alice', 'bob'].flatMap((replacementID) =>
+    ['OK', 'UNAUTHORIZED'].map((oldCode) => ({ replacementID, oldCode })),
+  ),
+)(
+  'rechecks a returning tab after a pending $oldCode response and replacement $replacementID',
+  async ({ replacementID, oldCode }) => {
+    const alice: Profile = {
+      id: 'alice',
+      nickname: 'Alice',
+      csrf_token: 'alice-csrf',
+      expires_at: new Date(Date.now() + 30 * 86400000).toISOString(),
+      avatar_url: '',
+      provider: 'oidc',
+      admin: false,
+      bindings: [],
+    };
+    const replacement: Profile | null =
+      replacementID === 'guest'
+        ? null
+        : {
+            ...alice,
+            id: replacementID,
+            nickname: 'Replacement',
+            csrf_token: 'replacement-csrf',
+          };
+    let serverProfile: Profile | null = alice;
+    let holdNext = false;
+    let finishOld: ((response: Response) => void) | undefined;
+    let renewals = 0;
+    const ok = (data: unknown) => Response.json({ code: 'OK', data });
+    vi.stubGlobal('fetch', async (path: string) => {
+      if (path.endsWith('site/info')) return ok({ csrf_token: 'guest-csrf' });
+      if (path.endsWith('user/profile')) {
+        if (holdNext) {
+          holdNext = false;
+          return new Promise<Response>((resolve) => {
+            finishOld = resolve;
+          });
+        }
+        return serverProfile
+          ? ok(serverProfile)
+          : Response.json({ code: 'UNAUTHORIZED', data: null }, { status: 401 });
+      }
+      if (path.endsWith('user/session/renew')) {
+        renewals++;
+        return ok(null);
+      }
+      throw new Error(`Unexpected synthetic request: ${path}`);
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: 15000, refetchOnWindowFocus: false } },
+    });
+    clients.push(client);
+    render(
+      <QueryClientProvider client={client}>
+        <AppProvider>
+          <Account />
+        </AppProvider>
+      </QueryClientProvider>,
+    );
+    await screen.findByText('Alice');
+    client.setQueryData(['order-detail', false, 'private-order'], { ip: '192.0.2.17' });
+    holdNext = true;
+    fireEvent.focus(window);
+    await waitFor(() => expect(finishOld).toBeTypeOf('function'));
+    serverProfile = replacement;
+    fireEvent.focus(window);
+    await act(async () =>
+      finishOld?.(
+        Response.json(
+          { code: oldCode, data: oldCode === 'OK' ? alice : null },
+          { status: oldCode === 'OK' ? 200 : 401 },
+        ),
+      ),
+    );
+    await screen.findByText(replacement ? 'Replacement' : 'guest');
+    expect(client.getQueryData(['profile'])).toEqual(replacement);
+    expect(client.getQueryData(['order-detail', false, 'private-order'])).toBeUndefined();
+    expect(renewals).toBe(0);
+  },
+);
+
 const denials = [
   { status: 401, code: 'UNAUTHORIZED', json: true },
   { status: 403, code: 'ACCOUNT_BANNED', json: true },
   { status: 200, code: 'ACCOUNT_BANNED', json: true },
   { status: 401, code: 'UNAUTHORIZED', json: false },
 ];
+it.each([...denials, { status: 503, code: 'SERVER_UNAVAILABLE', json: true }])(
+  'validates a new tab return after a pending renewal fails with $status/$code (JSON=$json)',
+  async ({ status, code, json }) => {
+    const alice: Profile = {
+      id: 'alice',
+      nickname: 'Alice',
+      csrf_token: 'alice-csrf',
+      expires_at: new Date(Date.now() + 20 * 86400000).toISOString(),
+      avatar_url: '',
+      provider: 'oidc',
+      admin: false,
+      bindings: [],
+    };
+    const replacement: Profile = {
+      ...alice,
+      id: 'bob',
+      nickname: 'Replacement',
+      csrf_token: 'replacement-csrf',
+      expires_at: new Date(Date.now() + 30 * 86400000).toISOString(),
+    };
+    let serverProfile = alice;
+    let finishRenew: ((response: Response) => void) | undefined;
+    let renewals = 0;
+    const ok = (data: unknown) => Response.json({ code: 'OK', data });
+    vi.stubGlobal('fetch', async (path: string) => {
+      if (path.endsWith('site/info')) return ok({ csrf_token: 'guest-csrf' });
+      if (path.endsWith('user/profile')) return ok(serverProfile);
+      if (path.endsWith('user/session/renew')) {
+        renewals++;
+        return new Promise<Response>((resolve) => {
+          finishRenew = resolve;
+        });
+      }
+      throw new Error(`Unexpected synthetic request: ${path}`);
+    });
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: 15000, refetchOnWindowFocus: false } },
+    });
+    clients.push(client);
+    render(
+      <QueryClientProvider client={client}>
+        <AppProvider>
+          <Account />
+        </AppProvider>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(finishRenew).toBeTypeOf('function'));
+    client.setQueryData(['order-detail', false, 'private-order'], { ip: '192.0.2.17' });
+    serverProfile = replacement;
+    fireEvent.focus(window);
+    await act(async () =>
+      finishRenew?.(
+        json ? Response.json({ code, data: null }, { status }) : new Response('expired', { status }),
+      ),
+    );
+    await screen.findByText('Replacement');
+    expect(client.getQueryData(['profile'])).toEqual(replacement);
+    expect(client.getQueryData(['order-detail', false, 'private-order'])).toBeUndefined();
+    expect(renewals).toBe(1);
+  },
+);
 it.each(denials)(
   'revokes the current session on renewal $status/$code (JSON=$json)',
   async ({ status, code, json }) => {
