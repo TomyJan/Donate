@@ -23,7 +23,7 @@ import { type OverviewPeriod, OverviewRange } from '../components/OverviewRange'
 import { RequestError } from '../components/RequestError';
 import { Button, Empty, Modal, Pagination, portal } from '../components/ui';
 import { api, dateTime, query } from '../lib/api';
-import type { Page, TaskItem, TaskOverview, TaskRetryResult } from '../lib/types';
+import type { Page, TaskDetail, TaskItem, TaskOverview, TaskRetryResult } from '../lib/types';
 import { TaskQueueDetail } from './TaskQueueDetail';
 import { TaskQueueTrend } from './TaskQueueTrend';
 import './TaskQueue.css';
@@ -148,7 +148,19 @@ export function TaskQueue() {
       list.isPlaceholderData
     )
       return;
-    const names = Object.fromEntries(rows.map((item) => [item.id, taskTarget(item)]));
+    // Snapshot identity before the mutation: polling may remove this task from
+    // the visible page, while its scoped detail is still open.
+    const names = Object.fromEntries(
+      ids.map((id, index) => {
+        const item =
+          rows.find((row) => row.id === id) ??
+          client.getQueryData<TaskDetail>(['admin-tasks', scope, 'detail', id]);
+        const label = item
+          ? `${taskLabel(t, 'kind', item.kind)} · ${taskTarget(item)}`
+          : t('taskItemNumber').replace('{number}', String(index + 1));
+        return [id, `${label} · ${id.slice(-8)}`];
+      }),
+    );
     const result = await api<TaskRetryResult>(
       'admin/task/retry',
       { ids, idempotency_key: key },

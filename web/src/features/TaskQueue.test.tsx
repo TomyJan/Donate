@@ -4,7 +4,7 @@ import { StrictMode } from 'react';
 import { BrowserRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { AppProvider } from '../app/context';
-import type { Profile } from '../lib/types';
+import type { Page, Profile, TaskItem } from '../lib/types';
 import { Admin } from './Admin';
 
 const task = {
@@ -169,7 +169,7 @@ async function openTasks() {
     </StrictMode>,
   );
   fireEvent.click(await screen.findByRole('button', { name: 'Tasks' }));
-  await screen.findByRole('button', { name: 'Task details DONATE-101' });
+  await screen.findAllByRole('button', { name: 'Task details DONATE-101' });
 }
 it('shows current queue counts and resets page and selection when filters change', async () => {
   await openTasks();
@@ -222,6 +222,65 @@ it('keeps one retry intent key after network failure and shows per-item results'
   expect(retries).toHaveLength(2);
   expect(retries[0].idempotency_key).toBe(retries[1].idempotency_key);
   expect(retries[0].ids).toEqual(['task-one']);
+});
+it('distinguishes mixed retry outcomes for different tasks on one order', async () => {
+  const fixtureFetch = globalThis.fetch;
+  vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    if (path.includes('/task/list?'))
+      return ok({
+        items: [task, { ...task, id: 'task-two', kind: 'geo' }],
+        total: 2,
+        page: 1,
+        page_size: 20,
+      });
+    if (path.endsWith('/task/retry'))
+      return ok({
+        queued: 1,
+        items: [
+          { id: 'task-one', result: 'queued' },
+          { id: 'task-two', result: 'not_applicable' },
+        ],
+      });
+    return fixtureFetch(input, init);
+  });
+  await openTasks();
+  for (const checkbox of screen.getAllByRole('checkbox', { name: 'Select task DONATE-101' }))
+    fireEvent.click(checkbox);
+  fireEvent.click(screen.getByRole('button', { name: 'Retry selected' }));
+  const confirm = await screen.findByRole('dialog', { name: 'Retry selected' });
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Confirm' }));
+  const result = await screen.findByRole('dialog', { name: 'Results' });
+  const queued = within(result).getByText('Queued').closest('div');
+  const skipped = within(result).getByText('Not applicable').closest('div');
+  expect(queued).toHaveTextContent('Payment verification');
+  expect(queued).toHaveTextContent('DONATE-101');
+  expect(queued).toHaveTextContent('task-one');
+  expect(skipped).toHaveTextContent('Location lookup');
+  expect(skipped).toHaveTextContent('DONATE-101');
+  expect(skipped).toHaveTextContent('task-two');
+});
+it('retains retry result identity for a detail task no longer on the current list', async () => {
+  await openTasks();
+  fireEvent.click(screen.getByRole('button', { name: 'Task details DONATE-101' }));
+  const detail = await screen.findByRole('dialog', { name: 'Task details' });
+  await within(detail).findByText('request-101');
+  act(() => {
+    client.setQueriesData<Page<TaskItem>>(
+      { predicate: (item) => item.queryKey[0] === 'admin-tasks' && item.queryKey[2] === 'list' },
+      (previous) =>
+        previous && { ...previous, items: [{ ...task, id: 'other-task', merchant_order_no: 'DONATE-202' }] },
+    );
+  });
+  await waitFor(() => expect(document.querySelector('.task-table tbody')).toHaveTextContent('DONATE-202'));
+  fireEvent.click(within(detail).getByRole('button', { name: 'Retry' }));
+  const confirm = await screen.findByRole('dialog', { name: 'Retry task' });
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Confirm' }));
+  const result = await screen.findByRole('dialog', { name: 'Results' });
+  const queued = within(result).getByText('Queued').closest('div');
+  expect(queued).toHaveTextContent('Payment verification');
+  expect(queued).toHaveTextContent('DONATE-101');
+  expect(queued).toHaveTextContent('task-one');
 });
 it('recovers a failed list without resetting filters', async () => {
   await openTasks();
