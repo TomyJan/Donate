@@ -168,14 +168,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
     let valid = true;
     const sameSession = () => {
       const live = client.getQueryData<Profile | null>(['profile']);
-      return !!current && live?.id === current.id && live.csrf_token === current.csrf_token;
+      return current ? live?.id === current.id && live.csrf_token === current.csrf_token : !live;
     };
-    const isCurrent = () => !bind || (valid && sameSession() && (isBindingCurrent?.() ?? true));
-    const unsubscribe = bind
-      ? client.getQueryCache().subscribe((event) => {
-          if (event.query.queryKey[0] === 'profile' && !sameSession()) valid = false;
-        })
-      : () => {};
+    const isCurrent = () =>
+      valid && sameSession() && (!bind || (!!current && (isBindingCurrent?.() ?? true)));
+    const unsubscribe = client.getQueryCache().subscribe((event) => {
+      // Revoke synchronously, including an account switch away and back before
+      // React rerenders or an anonymous request resumes its preflight await.
+      if (event.query.queryKey[0] === 'profile' && !sameSession()) valid = false;
+    });
     try {
       if (!isCurrent()) return;
       const payment = paymentReturnTarget();
@@ -187,7 +188,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
         returnTo = paymentLoginReturnPath() || '/';
         if (returnTo === '/') {
           try {
-            const flow = await api<{ return_to: string }>('user/login/status');
+            const flow = await api<{ return_to: string }>(
+              'user/login/status',
+              undefined,
+              undefined,
+              isCurrent,
+            );
             returnTo = paymentLoginReturnPath(flow.return_to) || '/';
           } catch {
             // An expired authorization can still start a normal sign-in.
@@ -200,7 +206,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           queryFn: ({ signal }) => api<Site>('site/info', undefined, signal),
           staleTime: 60000,
         });
-        if (client.getQueryData<Profile | null>(['profile'])) return;
+        if (!isCurrent()) return;
         setCSRF(anonymous.csrf_token);
       }
       if (!isCurrent()) return;
