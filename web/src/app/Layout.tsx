@@ -143,9 +143,6 @@ export function Layout() {
             </a>
           </span>
           <LegalLinks />
-          <Button className="text-button footer-cookie" onClick={() => setCookieAcknowledged(false)}>
-            Cookie
-          </Button>
         </footer>
         <CookieNotice open={!cookieAcknowledged} onDismiss={() => setCookieAcknowledged(true)} />
         <LoginDialog />

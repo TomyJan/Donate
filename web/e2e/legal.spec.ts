@@ -90,11 +90,12 @@ test('legal documents load directly, retain shared navigation and expose both po
   await expect(page.locator('main')).toContainText('IP');
 });
 
-test('cookie notice is bottom-floating, responsive, remembers dismissal and can be reopened', async ({
+test('cookie notice is bottom-floating, responsive and remembers dismissal without a footer entry', async ({
   page,
 }) => {
   await page.goto('/');
   const notice = page.getByRole('region', { name: 'Cookie 与本地存储' });
+  await expect(page.locator('footer').getByRole('button', { name: 'Cookie', exact: true })).toHaveCount(0);
   for (const width of [1280, 390, 320]) {
     await page.setViewportSize({ width, height: 900 });
     await expect(notice).toBeVisible();
@@ -107,12 +108,12 @@ test('cookie notice is bottom-floating, responsive, remembers dismissal and can 
   }
   await page.getByRole('button', { name: '切换外观' }).click();
   await page.getByRole('menuitem', { name: '深色', exact: true }).click();
+  await notice.getByRole('link', { name: '隐私政策', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '隐私政策', exact: true, level: 1 })).toBeVisible();
+  await expect(notice).toBeVisible();
   await notice.getByRole('button', { name: '知道了', exact: true }).click();
   await expect(notice).toHaveCount(0);
   await page.reload();
   await expect(notice).toHaveCount(0);
-  await page.locator('footer').getByRole('button', { name: 'Cookie', exact: true }).click();
-  await expect(notice).toBeVisible();
-  await notice.getByRole('link', { name: '隐私政策', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '隐私政策', exact: true, level: 1 })).toBeVisible();
+  await expect(page.locator('footer').getByRole('button', { name: 'Cookie', exact: true })).toHaveCount(0);
 });
