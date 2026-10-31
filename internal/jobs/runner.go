@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand/v2"
+	"strings"
 	"sync"
 	"time"
 
@@ -379,6 +380,9 @@ func (r *Runner) geolocate(ctx context.Context, j Job, o order.Order) {
 		if e == nil && p.Country == "" {
 			e = geo.ErrUnavailable
 		}
+		if e == nil && strings.TrimSpace(p.Province) == "" {
+			e = geo.ErrIncomplete
+		}
 	} else {
 		p, e = r.Geo.Lookup(ctx, o.IP)
 	}
@@ -387,6 +391,9 @@ func (r *Runner) geolocate(ctx context.Context, j Job, o order.Order) {
 		return
 	}
 	if e != nil {
+		if errors.Is(e, geo.ErrIncomplete) {
+			r.Queue.Log.Warn("订单 "+o.ID+" 的 IP "+o.IP+" 刷新属地未取得省级信息，保留原属地", "order_id", o.ID, "ip", o.IP, "job_id", j.ID, "source", p.Source)
+		}
 		if j.Attempts >= 3 {
 			r.finish(ctx, j, "failed", "unknown", time.Time{})
 		} else {

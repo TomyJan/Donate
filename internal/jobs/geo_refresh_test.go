@@ -149,7 +149,7 @@ func geoRefreshSetup(t *testing.T) (*storage.Store, *order.Service, *Queue, *tim
 }
 
 func TestGeoRefreshReplacesExistingLocationAndPreservesOnFailure(t *testing.T) {
-	for _, mode := range []string{"refresh", "automatic", "failure", "empty"} {
+	for _, mode := range []string{"refresh", "automatic", "failure", "empty", "incomplete"} {
 		t.Run(mode, func(t *testing.T) {
 			db, orders, q, now, id := geoRefreshSetup(t)
 			source := "admin_refresh"
@@ -170,11 +170,14 @@ func TestGeoRefreshReplacesExistingLocationAndPreservesOnFailure(t *testing.T) {
 				if mode == "empty" {
 					return geo.Location{Source: "unavailable"}, nil
 				}
+				if mode == "incomplete" {
+					return geo.Location{Country: "中国", Source: "mmdb", QueriedAt: q.Now()}, nil
+				}
 				lat, lng, radius := 31.2, 121.5, 10.0
 				return geo.Location{Country: "中国", Province: "新省", City: "合成市", District: "合成区", Street: "合成街道", ISP: "合成网络", ASN: "AS1", Latitude: &lat, Longitude: &lng, AccuracyRadius: &radius, Source: "fresh-synthetic", Version: "synthetic-v2", QueriedAt: q.Now()}, nil
 			}}}
 			r.Execute(context.Background(), j)
-			if mode == "failure" || mode == "empty" {
+			if mode == "failure" || mode == "empty" || mode == "incomplete" {
 				for range 2 {
 					pending, err := q.Get(context.Background(), j.ID)
 					if err != nil {
@@ -203,10 +206,10 @@ func TestGeoRefreshReplacesExistingLocationAndPreservesOnFailure(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if (mode == "failure" || mode == "empty") && result.Status == "done" {
+			if (mode == "failure" || mode == "empty" || mode == "incomplete") && result.Status == "done" {
 				t.Fatal("failed refresh falsely succeeded", result)
 			}
-			if (mode == "failure" || mode == "empty") && (result.Status != "failed" || result.Attempts != 3 || result.Result != "unknown") {
+			if (mode == "failure" || mode == "empty" || mode == "incomplete") && (result.Status != "failed" || result.Attempts != 3 || result.Result != "unknown") {
 				t.Fatal("refresh retry budget", result)
 			}
 			if mode == "refresh" {
@@ -289,7 +292,7 @@ func TestGeoRefreshLegacyOrderWithoutLocationUsesRealMMDB(t *testing.T) {
 	if _, err := db.DB.Exec("DELETE FROM order_locations"); err != nil {
 		t.Fatal(err)
 	}
-	locator, err := geo.New(config.Config{GeoMode: "local", GeoPath: "../geo/testdata/synthetic-city.mmdb"}, q.Log)
+	locator, err := geo.New(config.Config{GeoMode: "local", GeoPath: "../geo/testdata/synthetic-province.mmdb"}, q.Log)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -301,10 +304,10 @@ func TestGeoRefreshLegacyOrderWithoutLocationUsesRealMMDB(t *testing.T) {
 	}
 	r := Runner{Queue: q, Orders: orders, Geo: locator}
 	r.Execute(context.Background(), j)
-	var country, source string
+	var country, province, source string
 	var radius float64
-	if err = db.DB.QueryRow("SELECT country,source,accuracy_radius FROM order_locations").Scan(&country, &source, &radius); err != nil || country != "中国" || source != "mmdb" || radius != 10 {
-		t.Fatal(country, source, radius, err)
+	if err = db.DB.QueryRow("SELECT country,province,source,accuracy_radius FROM order_locations").Scan(&country, &province, &source, &radius); err != nil || country != "中国" || province != "合成省" || source != "mmdb" || radius != 10 {
+		t.Fatal(country, province, source, radius, err)
 	}
 	got, err := q.Get(context.Background(), jid)
 	if err != nil || got.Status != "done" {

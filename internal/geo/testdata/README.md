@@ -13,3 +13,8 @@ The uint16 encoding is intentional: decoding it directly into a floating-point
 Go field fails before the rest of the record can be returned. The public JSON
 field remains an optional number after conversion. Tests open this checked-in
 fixture directly and never depend on `.tools` or external IP services.
+
+`synthetic-province.mmdb` contains the same fabricated record plus
+`subdivisions[0].names.zh-CN: 合成省`. Together they test that a country-only
+local result falls back online when enabled, while a province-level result
+stays local. No real IP location is represented by either fixture.

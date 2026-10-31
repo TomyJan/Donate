@@ -23,6 +23,7 @@ import (
 
 var ErrUnavailable = errors.New("属地查询暂不可用")
 var ErrDisabled = errors.New("属地查询已禁用")
+var ErrIncomplete = errors.New("属地查询未取得省级信息")
 
 type Location struct {
 	Country        string    `json:"country"`
@@ -152,15 +153,20 @@ func (s *Service) lookup(ctx context.Context, ip string, force bool) (Location, 
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		defer cancel()
 		var out Location
+		var partial Location
 		var err error
 		if s.local != nil {
 			out, err = s.lookupLocal(a)
 			if err == nil && out.Country != "" {
-				return remember(out, nil), nil
+				if strings.TrimSpace(out.Province) != "" {
+					return remember(out, nil), nil
+				}
+				partial = out
 			}
 			if !s.config.GeoOnlineFallback {
 				return remember(out, err), err
 			}
+			s.log.Debug("IP "+ip+" 的本地属地缺少省级信息，继续在线查询", "ip", ip, "country", out.Country, "source", out.Source, "error", err)
 		}
 		for _, src := range s.sources {
 			if src.v4only && !a.Is4() {
@@ -168,8 +174,18 @@ func (s *Service) lookup(ctx context.Context, ip string, force bool) (Location, 
 			}
 			out, err = s.lookupOnline(ctx, src, ip)
 			if err == nil {
-				return remember(out, nil), nil
+				if strings.TrimSpace(out.Province) != "" {
+					return remember(out, nil), nil
+				}
+				if partial.Country == "" {
+					partial = out
+				}
+				s.log.Debug("IP "+ip+" 的在线属地缺少省级信息，继续下一个来源", "ip", ip, "source", src.name, "country", out.Country)
 			}
+		}
+		if partial.Country != "" {
+			s.log.Warn("IP "+ip+" 的属地来源均未取得省级信息，暂保留 "+partial.Source+" 的部分结果", "ip", ip, "source", partial.Source, "country", partial.Country)
+			return remember(partial, nil), nil
 		}
 		out = Location{Source: "unknown", QueriedAt: time.Now().UTC()}
 		remember(out, ErrUnavailable)
@@ -185,6 +201,9 @@ func (s *Service) lookup(ctx context.Context, ip string, force bool) (Location, 
 		out := r.Val.(Location)
 		if force && r.Err == nil && out.Country == "" {
 			return out, ErrUnavailable
+		}
+		if force && r.Err == nil && strings.TrimSpace(out.Province) == "" {
+			return out, ErrIncomplete
 		}
 		return out, r.Err
 	}
@@ -216,7 +235,7 @@ func (s *Service) remember(ip string, p Location, e error, revision uint64, forc
 		}
 	}
 	ttl := 24 * time.Hour
-	if e != nil || p.Country == "" {
+	if e != nil || p.Country == "" || strings.TrimSpace(p.Province) == "" {
 		ttl = 5 * time.Minute
 	}
 	s.cache[ip] = cached{value: p, until: time.Now().Add(ttl), err: e, revision: revision}
