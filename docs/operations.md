@@ -6,9 +6,10 @@
 
 `APP_SECRET` 使用 `openssl rand -base64 32` 生成，部署后保持不变。完整配置见 [`.env.example`](../.env.example)。
 
-- 自动读取当前工作目录的 `.env`，进程环境变量优先；修改配置后重启。
-- 默认生成 `donate.db`、`donate.log`、`donate.lock` 和 `backups/`；可用 `DATA_DIR` 修改保存位置，相对路径以工作目录为准。
-- 默认监听 `127.0.0.1:8080`，单实例运行。旧部署更换数据位置前先停服、备份并迁移数据，或继续设置原 `DATA_DIR`。
+- `.env` 必须声明模板中每个键；可选值可留空，进程环境变量优先。缺文件、缺键、格式或读取权限错误时，写出最新 `.env.example` 后退出；不修改 `.env`，示例不含实际凭据。修改配置后重启。
+- `APP_NAME=donate` 用作文件标识，仅限小写字母与单个连字符分段，最多 63 位。默认数据库 `data/donate.db`、锁 `data/donate.lock`、日志 `data/logs/`、备份 `data/backups/`；分别用 `DATA_DIR`、`LOG_DIR`、`BACKUP_DIR` 改目录，相对路径以工作目录为准。
+- `DATA_DIR` 不影响日志、备份或 IP 库路径。更改 `APP_NAME` 会使用另一组数据库与文件，不自动迁移旧数据。
+- 默认监听 `127.0.0.1:8080`，单实例运行。旧部署先停服备份，再移动数据库及配套文件，或显式保留原目录配置。
 - 使用 HTTPS 反代，`PUBLIC_URL` 填对外站点地址。`REAL_IP_HEADER` 可填 `X-Real-IP` 等请求头，逗号分隔的 IP 取首项；反代须覆盖该头并限制源站直连。留空使用连接 IP。API、登录和支付回调不缓存，运行目录不要作为静态站点根目录。
 - 首次登录后，从账号信息复制 ID，填入 `ADMIN_USER_IDS` 并重启即可获得管理权限。
 - 健康检查：`GET /health/live`、`GET /health/ready`。
@@ -27,7 +28,9 @@
 
 ## 日志
 
-控制台输出文本，`donate.log` 保存 JSON；`LOG_LEVEL` 支持 `DEBUG`、`INFO`、`WARN`、`ERROR`。日志按 50 MiB 轮转，最多保留 10 份、14 天。
+控制台输出文本，同时保存 `data/logs/donate_2026-11-01.log`（同格式文本）与 `.jsonl`（JSON）。文件名使用 `APP_NAME` 和运行地日期；每天新建，单文件 20 MiB，续卷为 `.log.2` / `.jsonl.2`，重启继续写当日末卷。
+
+`LOG_LEVEL` 支持 `DEBUG`、`INFO`、`WARN`、`ERROR`。`LOG_RETENTION_DAYS=30` 保留当日及前 29 天，启动和跨日写入时清理；0 不清理。只处理当前 `APP_NAME` 的日志。初始化不可写则拒绝启动；运行中落盘失败仍输出控制台，并标记就绪降级。
 
 ## 访问统计
 
@@ -46,15 +49,15 @@ UMAMI_WEBSITE_ID=Umami 后台提供的网站 ID
 
 ```dotenv
 GEO_MODE=local
-GEO_XDB_IPV4=./ip2region_v4.xdb
-GEO_XDB_IPV6=./ip2region_v6.xdb
-GEO_DATABASE=./GeoLite2-City.mmdb
+GEO_XDB_IPV4=data/ipdb/ip2region_v4.xdb
+GEO_XDB_IPV6=data/ipdb/ip2region_v6.xdb
+GEO_DATABASE=data/ipdb/GeoLite2-City.mmdb
 GEO_ONLINE_FALLBACK=true
 ```
 
-- 示例文件放在启动程序的当前目录即可，也可填写其他相对路径或绝对路径；不要求固定目录，路径含空格时加引号。
-- 修改配置、替换库文件后重启。程序不附带库、不自动下载或更新，也不热加载。
-- 本地按对应协议 XDB → MMDB 选择；MMDB 可留空，XDB 可只配一种协议。`GEO_ONLINE_FALLBACK=true` 允许在线补充和省级交叉核验，会向第三方发送公网 IP；纯离线设为 `false`。显式配置的文件缺失、损坏或协议不匹配会启动失败。
+- 默认文件在 `data/ipdb/`；可填写其他路径，含空格时加引号。不使用的库路径应留空。
+- 按需填写 `GEO_XDB_IPV4_URL`、`GEO_XDB_IPV6_URL`、`GEO_DATABASE_URL`；`GEO_UPDATE_DAYS=7` 表示每 7 天更新。支持原始文件、gzip、tar.gz、zip，验证后热重载，失败保留旧库；0 或空 URL 关闭对应下载。
+- 本地按对应协议 XDB → MMDB 选择；MMDB 可留空，XDB 可只配一种协议。`GEO_ONLINE_FALLBACK=true` 允许在线补充和省级核验；纯本地查询设 `false`，不影响显式配置的库下载。缺失文件仅在启用对应下载时自动获取；否则缺失、损坏或协议不匹配会启动失败。
 - 关闭查询设 `GEO_MODE=disabled`。前台最多展示省级，后台展示库里实际存在的字段；更新库不会重算历史订单。
 - 已有订单可在订单详情或批量操作中“刷新属地”，绕过缓存。失败、缺省份或分歧未解决时重试并保留原属地，后台可展开查看最近一次核验依据；不改变支付状态。换库或重启不会自动刷新旧订单。
 
@@ -71,17 +74,17 @@ GEO_ONLINE_FALLBACK=true
 
 ## 备份与升级
 
-自动备份在 `backups/`，保留最近 7 份，另行做好异机备份。手动备份和恢复前先停服务，并使用相同配置：
+自动备份默认在 `data/backups/`，启动迁移前及每运行 24 小时创建。`BACKUP_RETENTION_DAYS=7` 按快照文件名的 UTC 时间保留 7 天，0 不清理；只清理当前 `APP_NAME`，不限制份数。另行做好异机备份。手动备份和恢复前先停服务，并使用相同配置：
 
 ```sh
 ./donate --version
 ./donate backup
-./donate restore backups/备份文件.db
+./donate restore data/backups/备份文件.db
 ```
 
 恢复会撤销旧会话；完成后核对恢复点后的支付、封禁和删除操作。不要在运行时只复制 `donate.db`。
 
-升级：停服 → 备份 → 替换二进制 → 启动并检查 `/health/ready`。回滚须使用旧版本兼容的备份。
+升级：停服 → 备份 → 替换二进制 → 对照新 `.env.example` 补齐所有键 → 启动并检查 `/health/ready`。回滚须使用旧版本兼容的备份。
 
 ## 发版
 

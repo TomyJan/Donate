@@ -15,17 +15,17 @@
 
 ```dotenv
 GEO_MODE=local
-GEO_XDB_IPV4=./ip2region_v4.xdb
-GEO_XDB_IPV6=./ip2region_v6.xdb
-GEO_DATABASE=./GeoLite2-City.mmdb
+GEO_XDB_IPV4=data/ipdb/ip2region_v4.xdb
+GEO_XDB_IPV6=data/ipdb/ip2region_v6.xdb
+GEO_DATABASE=data/ipdb/GeoLite2-City.mmdb
 GEO_ONLINE_FALLBACK=true
 ```
 
 3. 重启程序。后台订单详情可查看下单 IP、采用的属地与来源，以及可展开的“属地核验”记录；`xdb` / `mmdb` 是本地来源。上例的 MMDB 可选，不使用时将 `GEO_DATABASE` 留空；IPv4 / IPv6 的 XDB 也可只配一种。
 
-文件放在当前目录即可，不要求固定目录；也可使用其他相对路径或绝对路径。相对路径以**启动工作目录**为准，不是二进制所在目录或 `DATA_DIR`；路径含空格时加引号。程序不附带本地库，也不负责下载或自动更新。
+默认库目录为 `data/ipdb/`，也可使用其他路径。相对路径以**启动工作目录**为准，不是二进制目录或 `DATA_DIR`；路径含空格时加引号。程序不附带本地库，可自行放置或启用自动下载。
 
-本地顺序为 **对应协议的 XDB → MMDB**：XDB 未命中、查询失败或缺省份时继续 MMDB；另一协议未配置 XDB 时也可使用 MMDB 或允许的在线补充。任一显式配置的文件缺失、损坏或协议不匹配都会启动失败，不静默忽略。纯本地模式至少配置一个本地文件。
+本地顺序为 **对应协议的 XDB → MMDB**：XDB 未命中、查询失败或缺省份时继续 MMDB；另一协议未配置 XDB 时也可使用 MMDB 或允许的在线补充。启用对应下载时，首次缺失会尝试下载；未启用、下载失败、现有文件损坏或协议不匹配则启动失败。纯本地模式至少配置一个库；不使用的路径应留空。
 
 XDB 支持官方 v3 数据的 `国家|省份|城市|ISP|国家两字母代码`，以及旧 v2 IPv4 数据的 `国家|区域|省份|城市|ISP`。`0`、`未知` 等占位符不算有效省份；自定义字段布局不能直接使用。MMDB 仍按 **MaxMind City 字段结构**解析：`country.names`、`subdivisions[].names`、`city.names` 等，名称优先 `zh-CN`，缺失时取 `en`。不是所有 `.mmdb` 都兼容，Country / ASN 库不能当 City 库使用。
 
@@ -58,13 +58,26 @@ XDB 支持官方 v3 数据的 `国家|省份|城市|ISP|国家两字母代码`�
 
 ## 更新与验证
 
-- 按供应商要求定期更新。MaxMind 可用官方 [geoipupdate](https://dev.maxmind.com/geoip/updating-databases/) 下载；下载器的账号 / License Key 不填写到 Donate 的配置中。
-- 新库先下载并解压到临时文件，确认不是错误页面或压缩包；停服后替换对应 XDB / MMDB，再启动。保留上一份以便回退，不要原地截断或覆盖进程正在读取的文件。
-- Donate **不热加载**，更换库后需重启，已有订单不会自动重算。管理员可在订单详情或批量操作中选择“刷新属地”，包括迁移订单；绕过应用内缓存，取得可接受的国家及省份后替换快照。失败、缺省份或分歧未解决时保留原值，按现有任务策略重试：第一次失败后 1 分钟、第二次失败后 10 分钟，最多执行 3 次。禁用模式不可刷新，重复操作共享活动任务，不改变支付状态。
+在 `.env` 填写需要的库下载地址：
+
+```dotenv
+GEO_UPDATE_DAYS=7
+GEO_XDB_IPV4_URL=
+GEO_XDB_IPV6_URL=
+GEO_DATABASE_URL=
+```
+
+- 地址由供应商提供，也可使用自己的代理；生产仅 HTTPS，可包含查询密钥。修改配置后重启，密钥不要公开。MaxMind 可使用账户提供的下载地址，或继续用 [geoipupdate](https://dev.maxmind.com/geoip/updating-databases/) 在停服时更新文件。
+- 仅 `GEO_MODE=local` 启用下载。`GEO_UPDATE_DAYS=0` 关闭，URL 为空则该库不下载；对应文件路径不能留空。`GEO_ONLINE_FALLBACK=false` 不禁止这些显式配置的下载。
+- 启动补下载缺失文件；已有库按文件修改时间判断，每小时检查是否达到配置天数。失败保留旧库，下次检查重试。
+- 支持原始 XDB / MMDB、gzip、tar.gz、zip。下载与解压总量各限 512 MiB、最多 256 项，压缩包必须仅有一个匹配库。下载地址应返回文件，不能是网页。
+- 同目录暂存、验证格式及协议后替换并热重载，旧缓存同时失效；安装失败回滚旧文件。程序须有库目录写权限。手动换库仍应停服后替换并重启，不原地覆盖正在读取的文件。
+- 更新库不重算旧订单。管理员可单笔或批量“刷新属地”，绕过缓存；取得可接受省份后替换快照。失败、缺省份或分歧未解决时保留原值，失败后分别等 1 分钟、10 分钟，最多执行 3 次。禁用模式不可刷新，重复操作共享活动任务，不改变支付状态。
+
 - 可安装 `mmdblookup` 验证文件及字段，例如：
 
 ```sh
-mmdblookup --file ./GeoLite2-City.mmdb --ip 223.5.5.5
+mmdblookup --file data/ipdb/GeoLite2-City.mmdb --ip 223.5.5.5
 ```
 
 示例 IP 仅用于检查读取是否正常，不作为准确率样本。最终用自己的公网 IPv4 / IPv6 和已知实际位置核对；本机 `127.0.0.1` 或内网地址不查询属地。经反代部署时先核对 `REAL_IP_HEADER`，反代应覆盖该头并限制源站直连，避免把反代 IP 误当访客 IP。
