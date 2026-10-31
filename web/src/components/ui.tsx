@@ -75,10 +75,26 @@ export type MenuItem = {
   danger?: boolean;
   separator?: boolean;
 };
-export function Menu({ trigger, label, items }: { trigger: ReactNode; label: string; items: MenuItem[] }) {
+export function Menu({
+  trigger,
+  label,
+  items,
+  disabled = false,
+}: {
+  trigger: ReactNode;
+  label: string;
+  items: MenuItem[];
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (disabled) setOpen(false);
+  }, [disabled]);
   return (
-    <Dropdown.Root>
-      <Dropdown.Trigger asChild>{trigger}</Dropdown.Trigger>
+    <Dropdown.Root open={open && !disabled} onOpenChange={(value) => setOpen(value && !disabled)}>
+      <Dropdown.Trigger asChild disabled={disabled}>
+        {trigger}
+      </Dropdown.Trigger>
       <Dropdown.Portal container={portal()}>
         <Dropdown.Content
           className="d-pop"

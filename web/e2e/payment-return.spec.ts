@@ -354,13 +354,71 @@ test('pending payment is not declared successful from return parameters and perm
 test('an unavailable order offers recovery instead of success or duplicate payment', async ({ page }) => {
   const gateway = await prepare(page, { error: 'NOT_FOUND' });
   await page.goto(`/?payment=returned&order=${orderID}`);
-  await expect(page.locator('.payment-return-status')).toContainText('不存在');
+  await expect(page.locator('.r-pay > .r-primary')).toContainText('不存在');
+  await expect(page.locator('.payment-return-status p')).toHaveCount(0);
   await expect(page.locator('.r-pay > .r-primary')).toBeDisabled();
   gateway.recover();
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.getByRole('button', { name: '重新查询', exact: true }).click();
   await expect(page.locator('.r-write .r-ticket')).toHaveAttribute('data-payment-phase', 'complete');
   await expect(page.locator('.r-featured')).toContainText('8.88');
+});
+
+test('leaving a failed payment fades the button label and footer while the composer changes height', async ({
+  page,
+}) => {
+  await prepare(page, { error: 'NOT_FOUND' });
+  await page.setViewportSize({ width: 390, height: 900 });
+  await page.goto(`/?payment=returned&order=${orderID}`);
+  const ticket = page.locator('.r-write .r-ticket');
+  await expect(ticket).toHaveAttribute('data-payment-phase', 'error');
+  const samples = page.evaluate(async () => {
+    const frames: { phase: string | null; label: number[]; footer: number[]; height: number }[] = [];
+    for (let index = 0; index < 55; index++) {
+      await new Promise(requestAnimationFrame);
+      const card = document.querySelector('.r-write .r-ticket');
+      frames.push({
+        phase: card?.getAttribute('data-payment-phase') ?? null,
+        label: Array.from(document.querySelectorAll('.payment-button-label')).map((node) =>
+          Number(getComputedStyle(node).opacity),
+        ),
+        footer: Array.from(document.querySelectorAll('.payment-footer-content')).map((node) =>
+          Number(getComputedStyle(node).opacity),
+        ),
+        height: card?.getBoundingClientRect().height ?? 0,
+      });
+    }
+    return frames;
+  });
+  await page.getByRole('button', { name: '稍后查看', exact: true }).click();
+  const frames = (await samples).filter((frame) => frame.phase === 'idle');
+  expect(frames.some((frame) => frame.label.some((opacity) => opacity > 0.02 && opacity < 0.98))).toBe(true);
+  expect(frames.some((frame) => frame.footer.some((opacity) => opacity > 0.02 && opacity < 0.98))).toBe(true);
+  await expect(ticket.locator('.r-ticket-foot')).toBeVisible();
+  await expect(ticket.locator('.payment-return-status')).toHaveCount(0);
+  await expect(ticket.locator('.r-primary')).toBeEnabled();
+  await expect(ticket.locator('.r-channel')).toBeEnabled();
+  const heights = frames.map((frame) => frame.height);
+  const min = Math.min(...heights);
+  const max = Math.max(...heights);
+  expect(max - min).toBeGreaterThan(1);
+  expect(heights.some((height) => height > min + 0.25 && height < max - 0.25)).toBe(true);
+});
+
+test('an invalid amount disables both payment actions and cannot open the channel menu', async ({ page }) => {
+  await prepare(page);
+  await page.goto('/');
+  const amount = page.getByRole('textbox', { name: '金额（元）', exact: true });
+  const channel = page.getByRole('button', { name: '支付方式', exact: true });
+  await amount.fill('0');
+  await expect(page.locator('.r-pay > .r-primary')).toBeDisabled();
+  await expect(channel).toBeDisabled();
+  await channel.dispatchEvent('pointerdown');
+  await expect(page.getByRole('menu', { name: '支付方式' })).toHaveCount(0);
+  await amount.fill('8.88');
+  await expect(channel).toBeEnabled();
+  await channel.click();
+  await expect(page.getByRole('menuitem', { name: '微信', exact: true })).toBeVisible();
 });
 
 test('a signed-out return requests sign-in without querying private order data', async ({ page }) => {
@@ -370,7 +428,7 @@ test('a signed-out return requests sign-in without querying private order data',
     if (request.url().includes('/order/detail')) requests.push(request.url());
   });
   await page.goto(`/?payment=returned&order=${orderID}`);
-  await expect(page.locator('.payment-return-status')).toContainText('登录');
+  await expect(page.locator('.r-pay > .r-primary')).toContainText('登录');
   await expect(page.locator('.r-pay > .r-primary')).toBeDisabled();
   await page.locator('.payment-return-status').getByRole('button', { name: '登录', exact: true }).click();
   await expect(page.getByRole('dialog', { name: '登录', exact: true })).toBeVisible();
@@ -419,7 +477,7 @@ test('a readable payment owned by somebody else cannot become a personal success
   );
   await page.goto(`/?payment=returned&order=${orderID}`);
   await expect(page.locator('.r-write .r-ticket')).toHaveAttribute('data-payment-phase', 'error');
-  await expect(page.locator('.payment-return-status')).toContainText('无权访问');
+  await expect(page.locator('.r-pay > .r-primary')).toContainText('无权访问');
   await expect(page.locator('.r-featured')).toHaveCount(0);
 });
 

@@ -123,7 +123,7 @@ afterEach(async () => {
 function renderHome(
   list: (path: string) => Promise<Response>,
   mineItems: RecordItem[] = [],
-  { cached = true } = {},
+  { cached = true, detail = () => Promise.resolve(response(order)) } = {},
 ) {
   const listRequests: string[] = [];
   const client = new QueryClient({
@@ -140,7 +140,7 @@ function renderHome(
   seed(order.user_id, true, mineItems);
   vi.stubGlobal('fetch', (input: string) => {
     const path = String(input);
-    if (path.includes('/order/detail?')) return Promise.resolve(response(order));
+    if (path.includes('/order/detail?')) return detail();
     if (path.includes('/order/list?')) {
       listRequests.push(path);
       return list(path);
@@ -186,6 +186,30 @@ async function confirm() {
   await advance(1000);
   await advance(1000);
 }
+
+it('shows the payment failure reason in the disabled payment button without a duplicate footer message', async () => {
+  const view = renderHome(() => Promise.resolve(response({ items: [], next_cursor: '' })), [], {
+    detail: () => Promise.resolve(Response.json({ code: 'NOT_FOUND', data: null })),
+  });
+  await advance(1000);
+  const button = view.container.querySelector('.r-pay > .r-primary');
+  expect(button).toBeDisabled();
+  expect(button).toHaveTextContent('does not exist');
+  expect(view.container.querySelector('.payment-return-status p')).toBeNull();
+  expect(screen.getByRole('button', { name: 'Check again' })).toBeEnabled();
+});
+
+it('disables payment method selection whenever the donation button is unavailable', async () => {
+  history.replaceState(null, '', '/');
+  renderHome(() => Promise.resolve(response({ items: [], next_cursor: '' })));
+  await advance();
+  const amount = screen.getByRole('textbox', { name: 'Amount (CNY)' });
+  fireEvent.change(amount, { target: { value: '0' } });
+  expect(screen.getByRole('button', { name: 'Payment' })).toBeDisabled();
+  fireEvent.change(amount, { target: { value: '8.88' } });
+  expect(screen.getByRole('button', { name: 'Payment' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Donate · Alipay' })).toBeEnabled();
+});
 
 it('keeps the paid receipt when the landing refresh is paused offline until a real success', async () => {
   const refresh = deferred<Response>();

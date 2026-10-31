@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { useLayoutEffect, useRef, useState } from 'react';
-export function AnimatedHeight({ children }: { children: ReactNode }) {
-  const content = useRef<HTMLDivElement>(null);
+export function AnimatedHeight({ children, as: Tag = 'div' }: { children: ReactNode; as?: 'div' | 'span' }) {
+  const content = useRef<HTMLElement>(null);
   const [height, setHeight] = useState<number>();
   useLayoutEffect(() => {
     const element = content.current;
@@ -13,10 +13,15 @@ export function AnimatedHeight({ children }: { children: ReactNode }) {
     return () => observer.disconnect();
   }, []);
   return (
-    <div className="animated-height" style={{ height }}>
-      <div className="animated-height-content" ref={content}>
+    <Tag className="animated-height" style={{ height }}>
+      <Tag
+        className="animated-height-content"
+        ref={(element) => {
+          content.current = element;
+        }}
+      >
         {children}
-      </div>
-    </div>
+      </Tag>
+    </Tag>
   );
 }

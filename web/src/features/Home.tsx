@@ -1,8 +1,9 @@
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, ArrowRight, Check, ChevronDown, LoaderCircle } from 'lucide-react';
+import { ArrowLeft, ArrowRight, ChevronDown } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../app/context';
+import { AnimatedHeight } from '../components/AnimatedHeight';
 import { ConstrainedInput } from '../components/ConstrainedInput';
 import { MessageInput } from '../components/MessageInput';
 import { checkout, OrderDialog } from '../components/OrderDialog';
@@ -15,7 +16,7 @@ import { errorMessage } from '../lib/errors';
 import type { Order, RecordItem, Records } from '../lib/types';
 import { HomeReceipt, ReceiptBody } from './HomeReceipt';
 import { HomeRecordIndex } from './HomeRecordIndex';
-import { PaymentReturnStatus } from './PaymentReturnStatus';
+import { PaymentReturnLabel, PaymentReturnStatus } from './PaymentReturnStatus';
 import { usePaymentReturn } from './usePaymentReturn';
 import { usePaymentTransfer } from './usePaymentTransfer';
 import './payment-return.css';
@@ -239,6 +240,8 @@ export function Home() {
     setSelection({ selected: 0, direction: 1, previousId: null });
     setMine((v) => !v);
   };
+  const payDisabled =
+    payment.locked || busy || amountFen(shownDraft.amount) === null || !app.site?.payment_enabled;
   const slip = (
     <motion.article
       className="r-ticket"
@@ -293,42 +296,35 @@ export function Home() {
         disabled={payment.locked}
       />
       <div className="r-pay">
-        <Button
-          className="r-btn r-primary"
-          disabled={
-            payment.locked || busy || amountFen(shownDraft.amount) === null || !app.site?.payment_enabled
-          }
-          onClick={() => void pay()}
-        >
-          {payment.locked ? (
-            <>
-              {payment.phase === 'confirmed' || payment.phase === 'filing' ? (
-                <Check aria-hidden="true" />
-              ) : payment.phase === 'checking' ? (
-                <LoaderCircle className="payment-spinner" aria-hidden="true" />
-              ) : null}
-              {t(
-                payment.phase === 'confirmed'
-                  ? 'paymentConfirmed'
-                  : payment.phase === 'filing'
-                    ? 'paymentFiling'
-                    : payment.phase === 'login'
-                      ? 'paymentSignIn'
-                      : payment.phase === 'checking'
-                        ? 'paymentChecking'
-                        : 'paymentUnconfirmed',
-              )}
-            </>
-          ) : busy ? (
-            t('loading')
-          ) : (
-            `${t('donate')} · ${t(shownDraft.channel)}`
-          )}
+        <Button className="r-btn r-primary" disabled={payDisabled} onClick={() => void pay()}>
+          <span className="payment-button-content" aria-live="polite" aria-atomic="true">
+            <AnimatedHeight as="span">
+              <AnimatePresence initial={false} mode="wait">
+                <motion.span
+                  key={payment.locked ? payment.phase : busy ? 'busy' : `ready:${shownDraft.channel}`}
+                  className="payment-button-label"
+                  initial={reduced ? false : { opacity: 0, y: 5 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: reduced ? 0 : -5 }}
+                  transition={{ duration: reduced ? 0 : 0.22, ease: [0.2, 0.75, 0.25, 1] }}
+                >
+                  {payment.locked ? (
+                    <PaymentReturnLabel payment={payment} />
+                  ) : busy ? (
+                    t('loading')
+                  ) : (
+                    `${t('donate')} · ${t(shownDraft.channel)}`
+                  )}
+                </motion.span>
+              </AnimatePresence>
+            </AnimatedHeight>
+          </span>
         </Button>
         <Menu
+          disabled={payDisabled}
           label={t('channel')}
           trigger={
-            <Button className="r-icon r-channel" aria-label={t('channel')} disabled={payment.locked}>
+            <Button className="r-icon r-channel" aria-label={t('channel')}>
               <ChevronDown />
             </Button>
           }
@@ -339,17 +335,32 @@ export function Home() {
           }))}
         />
       </div>
-      {payment.locked ? (
-        <PaymentReturnStatus payment={payment} />
-      ) : (
-        <p className="r-ticket-foot">
-          {app.siteError
-            ? errorMessage(app.siteError, t)
-            : !app.site
-              ? t('loading')
-              : t(app.site.payment_enabled ? 'foot' : 'paymentDisabled')}
-        </p>
-      )}
+      <div className="payment-composer-footer">
+        <AnimatedHeight>
+          <AnimatePresence initial={false} mode="wait">
+            <motion.div
+              key={payment.locked ? 'return' : 'draft'}
+              className="payment-footer-content"
+              initial={reduced ? false : { opacity: 0, y: 5 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: reduced ? 0 : -5 }}
+              transition={{ duration: reduced ? 0 : 0.28, ease: [0.2, 0.75, 0.25, 1] }}
+            >
+              {payment.locked ? (
+                <PaymentReturnStatus payment={payment} />
+              ) : (
+                <p className="r-ticket-foot">
+                  {app.siteError
+                    ? errorMessage(app.siteError, t)
+                    : !app.site
+                      ? t('loading')
+                      : t(app.site.payment_enabled ? 'foot' : 'paymentDisabled')}
+                </p>
+              )}
+            </motion.div>
+          </AnimatePresence>
+        </AnimatedHeight>
+      </div>
     </motion.article>
   );
   return (
