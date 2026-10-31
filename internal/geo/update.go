@@ -226,6 +226,10 @@ func verifyXDBRecords(ctx context.Context, path string, version *xdb.Version) er
 	}
 	size := int64(version.SegmentIndexSize)
 	length := int64(header.EndIndexPtr) - int64(header.StartIndexPtr) + size
+	vectors := make([]byte, 256*256*8)
+	if _, err := f.ReadAt(vectors, xdb.HeaderInfoLength); err != nil {
+		return errors.New("XDB 向量索引读取失败")
+	}
 	r := bufio.NewReaderSize(contextReader{ctx, io.NewSectionReader(f, int64(header.StartIndexPtr), length)}, 64*1024)
 	segment := make([]byte, size)
 	previousEnd := make([]byte, version.Bytes)
@@ -252,6 +256,20 @@ func verifyXDBRecords(ctx context.Context, path string, version *xdb.Version) er
 			return errors.New("XDB 地址区间乱序或重叠")
 		}
 		copyAddress(previousEnd, end)
+		// Sparse prefixes may be empty, but every stored address interval must
+		// be reachable through each prefix it intersects. Pointer bounds alone
+		// cannot detect a zeroed or incorrectly narrowed vector table.
+		first := int(currentStart[0])*256 + int(currentStart[1])
+		last := int(previousEnd[0])*256 + int(previousEnd[1])
+		pointer := uint64(header.StartIndexPtr) + uint64(offset)
+		for prefix := first; prefix <= last; prefix++ {
+			vector := vectors[prefix*8:]
+			a := uint64(binary.LittleEndian.Uint32(vector))
+			b := uint64(binary.LittleEndian.Uint32(vector[4:]))
+			if a > pointer || b < pointer {
+				return errors.New("XDB 向量索引未覆盖地址区间")
+			}
+		}
 		at := version.Bytes * 2
 		dataLength := int64(binary.LittleEndian.Uint16(segment[at:]))
 		dataOffset := int64(binary.LittleEndian.Uint32(segment[at+2:]))
