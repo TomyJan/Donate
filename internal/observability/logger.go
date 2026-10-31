@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"regexp"
+	"strings"
 	"sync"
 	"sync/atomic"
 )
@@ -36,7 +37,7 @@ func (h *fileHealth) report(channel string, err error) {
 	}
 	h.degraded.Store(anyFailed)
 	if err != nil && !was {
-		fmt.Fprintf(os.Stderr, "ERROR 应用 %s 的 %s 日志写入失败，保留控制台输出，请检查磁盘与权限\n", h.app, channel)
+		fmt.Fprintf(os.Stderr, "ERROR 应用 %s 的 %s 日志写入失败，请检查磁盘与权限\n", h.app, channel)
 	}
 	if err == nil && was {
 		fmt.Fprintf(os.Stderr, "INFO 应用 %s 的 %s 日志写入已恢复\n", h.app, channel)
@@ -86,6 +87,7 @@ func (h fanout) WithGroup(g string) slog.Handler {
 }
 
 type Options struct {
+	Outputs             []string
 	Dir, AppName, Level string
 	RetentionDays       int
 }
@@ -98,18 +100,53 @@ func New(c Options, stdout io.Writer) (*slog.Logger, func() error, *atomic.Bool,
 	if c.RetentionDays < 0 || len(c.AppName) > 63 || !regexp.MustCompile(`^[a-z]+(-[a-z]+)*$`).MatchString(c.AppName) {
 		return nil, nil, nil, errors.New("日志名称或保留天数无效")
 	}
-	text := &dailyWriter{dir: c.Dir, name: c.AppName, extension: "log", retention: c.RetentionDays, maxBytes: maxLogBytes}
-	structured := &dailyWriter{dir: c.Dir, name: c.AppName, extension: "jsonl", retention: c.RetentionDays, maxBytes: maxLogBytes}
-	close := func() error { return errors.Join(text.Close(), structured.Close()) }
-	for _, w := range []*dailyWriter{text, structured} {
-		if _, err := w.Write(nil); err != nil {
-			close()
-			return nil, nil, nil, err
+	if c.Outputs == nil {
+		c.Outputs = []string{"console", "log", "jsonl"}
+	}
+	selected := map[string]bool{}
+	for _, output := range c.Outputs {
+		output = strings.TrimSpace(output)
+		if output != "console" && output != "log" && output != "jsonl" {
+			return nil, nil, nil, errors.New("日志输出仅支持 console、log、jsonl")
 		}
+		selected[output] = true
+	}
+	if len(selected) == 0 {
+		return nil, nil, nil, errors.New("至少选择一个日志输出目的")
 	}
 	degraded := &atomic.Bool{}
 	health := &fileHealth{failed: map[string]bool{}, degraded: degraded, app: c.AppName}
 	opts := &slog.HandlerOptions{Level: l}
-	logger := slog.New(fanout{[]slog.Handler{slog.NewTextHandler(stdout, opts), slog.NewTextHandler(guardedWriter{text, health, "text"}, opts), slog.NewJSONHandler(guardedWriter{structured, health, "jsonl"}, opts)}}).With("app", c.AppName)
+	var files []*dailyWriter
+	close := func() error {
+		var err error
+		for _, file := range files {
+			err = errors.Join(err, file.Close())
+		}
+		return err
+	}
+	var handlers []slog.Handler
+	for _, output := range []string{"console", "log", "jsonl"} {
+		if !selected[output] {
+			continue
+		}
+		if output == "console" {
+			handlers = append(handlers, slog.NewTextHandler(stdout, opts))
+			continue
+		}
+		file := &dailyWriter{dir: c.Dir, name: c.AppName, extension: output, retention: c.RetentionDays, maxBytes: maxLogBytes}
+		files = append(files, file)
+		if _, err := file.Write(nil); err != nil {
+			close()
+			return nil, nil, nil, err
+		}
+		writer := guardedWriter{file, health, output}
+		if output == "jsonl" {
+			handlers = append(handlers, slog.NewJSONHandler(writer, opts))
+		} else {
+			handlers = append(handlers, slog.NewTextHandler(writer, opts))
+		}
+	}
+	logger := slog.New(fanout{handlers}).With("app", c.AppName)
 	return logger, close, degraded, nil
 }

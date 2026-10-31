@@ -22,6 +22,7 @@ var settings = []setting{
 	{"BACKUP_DIR", "data/backups", "数据库备份目录。"},
 	{"BACKUP_RETENTION_DAYS", "7", "备份保留天数；0 不自动清理。"},
 	{"LOG_DIR", "data/logs", "文件日志目录；每天新建，单卷 20 MiB。\n续卷追加 .2、.3。"},
+	{"LOG_OUTPUTS", "console,log,jsonl", "输出目的：console / log / jsonl；逗号分隔，至少一项。"},
 	{"LOG_LEVEL", "INFO", "日志级别：DEBUG / INFO / WARN / ERROR。"},
 	{"LOG_RETENTION_DAYS", "30", "日志保留天数；0 不清理，仅处理当前 APP_NAME。"},
 	{"APP_SECRET", "", "Base64 编码的 32 字节密钥，生产必填且保持不变。\n生成：openssl rand -base64 32"},

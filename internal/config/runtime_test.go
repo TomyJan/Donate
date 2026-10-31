@@ -3,9 +3,41 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
+
+func TestLogOutputSelection(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		want  []string
+	}{
+		{"console", []string{"console"}},
+		{"log,jsonl", []string{"log", "jsonl"}},
+		{" console, jsonl,console ", []string{"console", "jsonl"}},
+	} {
+		t.Run(tc.value, func(t *testing.T) {
+			completeConfig(t)
+			t.Setenv("APP_ENV", "development")
+			t.Setenv("LOG_OUTPUTS", tc.value)
+			c, err := Load()
+			if err != nil || !slices.Equal(c.LogOutputs, tc.want) {
+				t.Fatal(c.LogOutputs, err)
+			}
+		})
+	}
+	for _, value := range []string{"", "file", "console,,log", "console,", "Console"} {
+		t.Run("invalid "+value, func(t *testing.T) {
+			completeConfig(t)
+			t.Setenv("APP_ENV", "development")
+			t.Setenv("LOG_OUTPUTS", value)
+			if _, err := Load(); err == nil || !strings.Contains(err.Error(), "LOG_OUTPUTS") {
+				t.Fatal("invalid output selection accepted", err)
+			}
+		})
+	}
+}
 
 func completeConfig(t *testing.T) {
 	t.Helper()
@@ -29,6 +61,9 @@ func TestRuntimeDefaultsAndEmptyOptionalKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	wd, _ := os.Getwd()
+	if !slices.Equal(c.LogOutputs, []string{"console", "log", "jsonl"}) {
+		t.Fatal("unexpected default log outputs", c.LogOutputs)
+	}
 	if c.AppName != "donate" || c.DatabasePath() != filepath.Join(wd, "data", "donate.db") || c.LockPath() != filepath.Join(wd, "data", "donate.lock") || c.LogDir != filepath.Join(wd, "data", "logs") || c.BackupDir != filepath.Join(wd, "data", "backups") || c.LogRetentionDays != 30 || c.BackupRetentionDays != 7 || c.GeoUpdateDays != 7 {
 		t.Fatalf("unexpected runtime layout: %+v", c)
 	}

@@ -28,9 +28,11 @@
 
 ## 日志
 
-控制台输出文本，同时保存 `data/logs/donate_2026-11-01.log`（同格式文本）与 `.jsonl`（JSON）。文件名使用 `APP_NAME` 和运行地日期；每天新建，单文件 20 MiB，续卷为 `.log.2` / `.jsonl.2`，重启继续写当日末卷。
+`LOG_OUTPUTS=console,log,jsonl` 默认开启全部输出，可用逗号组合，至少一项：`console` 为控制台文本，`log` 为文本文件，`jsonl` 为 JSON 文件。仅选 `console` 不创建或写入日志目录。
 
-`LOG_LEVEL` 支持 `DEBUG`、`INFO`、`WARN`、`ERROR`。`LOG_RETENTION_DAYS=30` 保留当日及前 29 天，启动和跨日写入时清理；0 不清理。只处理当前 `APP_NAME` 的日志。初始化不可写则拒绝启动；运行中落盘失败仍输出控制台，并标记就绪降级。
+文件默认在 `data/logs/`，如 `donate_2026-11-01.log` / `.jsonl`。使用 `APP_NAME` 和运行地日期命名；每天新建，单卷 20 MiB，续卷追加 `.2`、`.3`，重启续写当日末卷。
+
+`LOG_LEVEL` 支持 `DEBUG`、`INFO`、`WARN`、`ERROR`。`LOG_RETENTION_DAYS=30` 保留当日及前 29 天，启动和跨日写入时清理；0 不清理。只清理已启用格式、当前 `APP_NAME` 的日志。启用的文件输出初始化失败则拒绝启动；运行中写入失败会告警并标记就绪降级，其他输出继续。
 
 ## 访问统计
 

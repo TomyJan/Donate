@@ -21,6 +21,7 @@ import (
 )
 
 type Config struct {
+	LogOutputs                                                             []string
 	AppName, LogDir, BackupDir                                             string
 	LogRetentionDays, BackupRetentionDays, GeoUpdateDays                   int
 	GeoXDBv4URL, GeoXDBv6URL, GeoMMDBURL                                   string
@@ -246,6 +247,17 @@ func (c *Config) loadRuntime() error {
 	var level slog.Level
 	if err := level.UnmarshalText([]byte(c.LogLevel)); err != nil {
 		return errors.New("LOG_LEVEL 无效")
+	}
+	selected := map[string]bool{}
+	for _, output := range strings.Split(os.Getenv("LOG_OUTPUTS"), ",") {
+		output = strings.TrimSpace(output)
+		if output != "console" && output != "log" && output != "jsonl" {
+			return errors.New("LOG_OUTPUTS 至少选择一项 console、log、jsonl，以逗号分隔")
+		}
+		if !selected[output] {
+			c.LogOutputs = append(c.LogOutputs, output)
+			selected[output] = true
+		}
 	}
 	c.LogDir, err = filepath.Abs(env("LOG_DIR", "data/logs"))
 	if err != nil {

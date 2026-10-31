@@ -55,7 +55,7 @@ func run() error {
 		return errors.New("数据目录已有 Donate 实例运行")
 	}
 	defer lock.Unlock()
-	log, closeLog, degraded, e := observability.New(observability.Options{Dir: c.LogDir, AppName: c.AppName, Level: c.LogLevel, RetentionDays: c.LogRetentionDays}, os.Stdout)
+	log, closeLog, degraded, e := observability.New(observability.Options{Dir: c.LogDir, AppName: c.AppName, Level: c.LogLevel, Outputs: c.LogOutputs, RetentionDays: c.LogRetentionDays}, os.Stdout)
 	if e != nil {
 		return e
 	}

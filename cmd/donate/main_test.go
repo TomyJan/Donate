@@ -40,6 +40,33 @@ func TestVersionDoesNotRequireOrCreateConfiguration(t *testing.T) {
 	}
 }
 
+func TestConsoleOnlyBackupDoesNotOpenLogFiles(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile(".env", config.Example(), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile("blocked-logs", []byte("unchanged"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("APP_NAME", "console-test")
+	t.Setenv("DATA_DIR", "data")
+	t.Setenv("LOG_DIR", "blocked-logs")
+	t.Setenv("LOG_OUTPUTS", "console")
+	previous := os.Args
+	os.Args = []string{"donate", "backup"}
+	t.Cleanup(func() { os.Args = previous })
+	if err := run(); err != nil {
+		t.Fatal("console selection did not reach logger", err)
+	}
+	if _, err := os.Stat("data/console-test.db"); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := os.ReadFile("blocked-logs"); err != nil || string(data) != "unchanged" {
+		t.Fatal("console logging changed unused log path", err)
+	}
+}
+
 func TestBackupUsesWorkingDirectoryForRuntimeFiles(t *testing.T) {
 	t.Chdir(t.TempDir())
 	if err := os.WriteFile(".env", config.Example(), 0600); err != nil {
