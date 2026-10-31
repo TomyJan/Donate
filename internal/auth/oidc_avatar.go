@@ -5,6 +5,8 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
+
+	"golang.org/x/net/idna"
 )
 
 type oidcProfileClaims struct {
@@ -41,7 +43,18 @@ func safeOIDCAvatar(raw string) (string, string) {
 	if u.User != nil {
 		return "", "credentials"
 	}
-	host := strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
+	hostname := u.Hostname()
+	host := hostname
+	if _, err := netip.ParseAddr(host); err != nil {
+		// Browser host parsing applies IDNA mappings before recognizing IPs or
+		// local suffixes. Check that same ASCII name, including width/dot and
+		// ignored-character mappings; valid IPv6 literals need no IDNA mapping.
+		host, err = idna.Lookup.ToASCII(host)
+		if err != nil {
+			return "", "invalid_host"
+		}
+	}
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
 	lastLabel := host[strings.LastIndex(host, ".")+1:]
 	numericLastLabel := lastLabel != "" && strings.Trim(lastLabel, "0123456789") == ""
 	hexLastLabel := strings.HasPrefix(lastLabel, "0x") && len(lastLabel) > 2 && strings.Trim(lastLabel[2:], "0123456789abcdef") == ""
@@ -55,7 +68,10 @@ func safeOIDCAvatar(raw string) (string, string) {
 		// 0x7f.0.0.1. Never treat these as ordinary public DNS names.
 		return "", "local_address"
 	}
-	return SafeAvatar(raw), ""
+	// Persist the ASCII host that passed validation; retain the path/query,
+	// optional port, and IPv6 brackets from the parsed HTTPS URL.
+	u.Host = strings.Replace(u.Host, hostname, host, 1)
+	return SafeAvatar(u.String()), ""
 }
 
 func selectOIDCAvatar(candidates ...oidcAvatarClaim) (avatar, source, rejected string) {

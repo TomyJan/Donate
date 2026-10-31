@@ -68,6 +68,63 @@ func TestOIDCAvatarCompatibility(t *testing.T) {
 	}
 }
 
+// Exercise browser IDNA mappings through each verified profile source. Dropping
+// normalization would let Unicode local/private hosts reach persisted avatars;
+// rejecting all Unicode would break legitimate internationalized public names.
+func TestOIDCAvatarUnicodeHosts(t *testing.T) {
+	for _, tt := range []struct {
+		name, raw, want string
+	}{
+		{"mixed fullwidth loopback", "https://127.0.0.１/avatar.png", ""},
+		{"fullwidth loopback", "https://１２７.０.０.１/avatar.png", ""},
+		{"escaped fullwidth loopback", "https://127.0.0.%EF%BC%91/avatar.png", ""},
+		{"fullwidth private IP", "https://10.0.0.１/avatar.png", ""},
+		{"escaped fullwidth private IP", "https://10.0.0.%EF%BC%91/avatar.png", ""},
+		{"fullwidth localhost suffix", "https://foo.localｈost/avatar.png", ""},
+		{"escaped fullwidth localhost suffix", "https://foo.local%EF%BD%88ost/avatar.png", ""},
+		{"Unicode dot and localhost suffix", "https://foo.bar。localｈost/avatar.png", ""},
+		{"Unicode dot and local suffix", "https://foo.bar．ｌocal/avatar.png", ""},
+		{"zero width localhost suffix", "https://foo.local​host/avatar.png", ""},
+		{"public Latin IDN", "https://bücher.example/avatar.png", "https://xn--bcher-kva.example/avatar.png"},
+		{"public CJK IDN", "https://例子.测试/avatar.png", "https://xn--fsqu00a.xn--0zwm56d/avatar.png"},
+		{"public IDN keeps port and query", "https://bücher。example:8443/avatar.png?size=100#v", "https://xn--bcher-kva.example:8443/avatar.png?size=100#v"},
+		{"public IPv6 stays valid", "https://[2606:4700:4700::1111]/avatar.png", "https://[2606:4700:4700::1111]/avatar.png"},
+		{"invalid IDNA joiner rejected", "https://foo.‍example/avatar.png", ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			for _, source := range []string{"id_token.picture", "id_token.avatar", "userinfo.picture", "userinfo.avatar"} {
+				t.Run(source, func(t *testing.T) {
+					parts := strings.Split(source, ".")
+					fixture := oidcFixture{claims: map[string]any{"name": "token-name"}}
+					if parts[0] == "id_token" {
+						fixture.claims[parts[1]] = tt.raw
+						fixture.noUserInfo = true
+					} else {
+						info, err := json.Marshal(map[string]any{"sub": "user-one", parts[1]: tt.raw})
+						if err != nil {
+							t.Fatal(err)
+						}
+						fixture.userInfo = string(info)
+					}
+					s, start := startOIDCFixture(t, fixture)
+					result, err := s.Callback(context.Background(), "moeauth", start.State, "code", start.Cookie, nil)
+					if err != nil || result.Credentials == nil {
+						t.Fatal("verified login failed", err)
+					}
+					session, err := s.Resolve(context.Background(), result.Credentials.Token)
+					if err != nil || session.AvatarURL != tt.want {
+						t.Fatalf("resolved avatar=%q, want %q: %v", session.AvatarURL, tt.want, err)
+					}
+					profile, err := s.Profile(context.Background(), session)
+					if err != nil || profile.AvatarURL != tt.want || len(profile.Bindings) != 1 || profile.Bindings[0].AvatarURL != tt.want {
+						t.Fatalf("unsafe or missing profile/binding avatar: %+v %v", profile, err)
+					}
+				})
+			}
+		})
+	}
+}
+
 // Missing fields and rejected sources must be diagnosable without exposing the
 // token, UserInfo body, URL credentials, or query parameters.
 func TestOIDCAvatarDiagnostics(t *testing.T) {
