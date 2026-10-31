@@ -1,6 +1,27 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { APIError, api, downloadExport, setCSRF } from './api';
 
+it.each(['user/login/status', 'user/login/qq/complete'])(
+  'does not revoke the current user when a flow targets a banned account: %s',
+  async (path) => {
+    const invalid = vi.fn();
+    window.addEventListener('session-invalid', invalid);
+    try {
+      setCSRF('valid-current-B');
+      vi.stubGlobal(
+        'fetch',
+        vi.fn().mockResolvedValue(Response.json({ code: 'ACCOUNT_BANNED', data: null }, { status: 403 })),
+      );
+      await expect(
+        api(path, path.endsWith('complete') ? { qq_number: '12345' } : undefined),
+      ).rejects.toMatchObject({ code: 'ACCOUNT_BANNED', status: 403 });
+      expect(invalid).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener('session-invalid', invalid);
+    }
+  },
+);
+
 afterEach(() => {
   setCSRF('');
   vi.unstubAllGlobals();

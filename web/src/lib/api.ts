@@ -21,7 +21,8 @@ function signalAccessFailure(path: string, status: number, code: string, isCurre
   // does not establish that the independently authenticated user session expired.
   const flowOnly = path === 'user/login/status' || path === 'user/login/qq/complete';
   if (
-    ((status === 401 && !flowOnly) || code === 'ACCOUNT_BANNED') &&
+    (status === 401 || code === 'ACCOUNT_BANNED') &&
+    !flowOnly &&
     path !== 'site/info' &&
     path !== 'user/profile'
   )
