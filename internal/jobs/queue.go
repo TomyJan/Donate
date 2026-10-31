@@ -146,7 +146,7 @@ func (q *Queue) Claim(ctx context.Context, kinds []string) (Job, error) {
 		}
 		id, _ := storage.ParseID(j.ID)
 		lease := storage.NewID().String()
-		_, e = tx.ExecContext(ctx, "UPDATE jobs SET status='running',attempts=attempts+1,lease_token=?,lease_until=?,rerun=CASE WHEN kind='geo' THEN 0 ELSE rerun END,updated_at=? WHERE id=?", lease, now.Add(time.Minute).Unix(), now.Unix(), id)
+		_, e = tx.ExecContext(ctx, "UPDATE jobs SET status='running',attempts=attempts+1,last_error='',event_source='',event_request_id='',lease_token=?,lease_until=?,rerun=CASE WHEN kind='geo' THEN 0 ELSE rerun END,updated_at=? WHERE id=?", lease, now.Add(time.Minute).Unix(), now.Unix(), id)
 		j.Status = "running"
 		j.LeaseToken = lease
 		j.Attempts++
@@ -154,7 +154,7 @@ func (q *Queue) Claim(ctx context.Context, kinds []string) (Job, error) {
 		return e
 	})
 	if e == nil {
-		q.Log.Debug(fmt.Sprintf("任务 %s 领取订单 %s，尝试 %d", out.ID, out.OrderID, out.Attempts), "job_id", out.ID, "order_id", out.OrderID, "attempt", out.Attempts)
+		q.Log.Info(fmt.Sprintf("任务 %s 开始执行订单 %s，尝试 %d", out.ID, out.OrderID, out.Attempts), "job_id", out.ID, "order_id", out.OrderID, "attempt", out.Attempts)
 	}
 	return out, e
 }

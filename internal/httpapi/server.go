@@ -260,6 +260,11 @@ func (s *Server) Handler() http.Handler {
 		m.Post("/admin/user/identity/unbind", s.route(s.unbindIdentity, 2))
 		m.Get("/admin/overview", s.route(s.overview, 2))
 		m.Get("/admin/audit/list", s.route(s.audit, 2))
+		m.Get("/admin/task/list", s.route(s.tasks, 2))
+		m.Get("/admin/task/detail", s.route(s.task, 2))
+		m.Get("/admin/task/history", s.route(s.taskHistory, 2))
+		m.Get("/admin/task/overview", s.route(s.taskOverview, 2))
+		m.Post("/admin/task/retry", s.route(s.taskRetry, 2))
 	})
 	mux.Get("/*", s.static)
 	return mux

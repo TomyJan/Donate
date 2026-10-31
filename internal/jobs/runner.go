@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"log/slog"
 	"math/rand/v2"
 	"strings"
 	"sync"
@@ -199,9 +200,21 @@ func (r *Runner) Execute(parent context.Context, j Job) {
 	}
 	r.finish(ctx, j, "ready", obs.State, next)
 }
+func taskDiagnostic(err error) string {
+	switch {
+	case errors.Is(err, geo.ErrIncomplete):
+		return "geo_province_missing"
+	case errors.Is(err, geo.ErrDisabled):
+		return "geo_disabled"
+	case errors.Is(err, geo.ErrUnavailable):
+		return "geo_source_unavailable"
+	default:
+		return payment.Diagnostic(err)
+	}
+}
 func (r *Runner) finish(ctx context.Context, j Job, status, result string, next time.Time, causes ...error) {
 	if len(causes) > 0 {
-		j.Diagnostic = payment.Diagnostic(causes[0])
+		j.Diagnostic = taskDiagnostic(causes[0])
 	}
 	// A worker timeout must still release its valid lease and persist the result.
 	// Finish rechecks the token and expiry before writing anything.
@@ -214,13 +227,19 @@ func (r *Runner) finish(ctx context.Context, j Job, status, result string, next 
 	if e != nil {
 		r.Queue.Log.Error(fmt.Sprintf("订单 %s 的任务 %s 保存执行结果失败", j.OrderID, j.ID), "order_id", j.OrderID, "job_id", j.ID, "error", e)
 	} else if ok {
-		r.Queue.Log.Info(fmt.Sprintf("订单 %s 的任务 %s 本次结果 %s，任务状态 %s", j.OrderID, j.ID, result, status), "order_id", j.OrderID, "job_id", j.ID, "result", result, "next_at", next)
+		level := slog.LevelInfo
+		if status == "failed" {
+			level = slog.LevelError
+		} else if status == "ready" && j.Diagnostic != "" {
+			level = slog.LevelWarn
+		}
+		r.Queue.Log.Log(ctx, level, fmt.Sprintf("订单 %s 的任务 %s 本次结果 %s，任务状态 %s", j.OrderID, j.ID, result, status), "order_id", j.OrderID, "job_id", j.ID, "result", result, "next_at", next)
 	}
 }
 func (r *Runner) retry(ctx context.Context, j Job, o order.Order, result string, causes ...error) {
 	reason := ""
 	if len(causes) > 0 {
-		reason = payment.Diagnostic(causes[0])
+		reason = taskDiagnostic(causes[0])
 	}
 	j.Diagnostic = reason
 	now := r.Queue.Now()

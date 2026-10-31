@@ -71,7 +71,7 @@ func (s *Service) Apply(ctx context.Context, o Observation) (Applied, error) {
 			if e != nil {
 				return e
 			}
-			if _, e = tx.ExecContext(ctx, "UPDATE jobs SET status='done',lease_token=NULL,lease_until=NULL,last_result='paid',updated_at=? WHERE order_id=? AND kind IN ('payment','close') AND status IN ('ready','running')", now.Unix(), id); e != nil {
+			if _, e = tx.ExecContext(ctx, "UPDATE jobs SET status='done',lease_token=NULL,lease_until=NULL,last_result='paid',event_source=?,event_request_id=?,updated_at=? WHERE order_id=? AND kind IN ('payment','close') AND status IN ('ready','running')", o.Source, o.RequestID, now.Unix(), id); e != nil {
 				return e
 			}
 			if e = storage.Audit(ctx, tx, nil, "order.paid", "order", id, "paid", now.Unix()); e != nil {

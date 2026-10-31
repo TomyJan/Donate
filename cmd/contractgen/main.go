@@ -79,6 +79,9 @@ func describe(t reflect.Type) schema {
 func main() {
 	types := map[string]reflect.Type{"Profile": reflect.TypeFor[auth.Profile](), "SiteVersion": reflect.TypeFor[httpapi.Version](), "Identity": reflect.TypeFor[auth.Identity](), "RecordItem": reflect.TypeFor[order.Record](), "Records": reflect.TypeFor[order.Page](), "Order": reflect.TypeFor[admin.Detail](), "OrderPage": reflect.TypeFor[admin.Page[admin.OrderRow]](), "User": reflect.TypeFor[admin.User](), "UserPage": reflect.TypeFor[admin.Page[admin.User]](), "Audit": reflect.TypeFor[admin.Audit](), "AuditPage": reflect.TypeFor[admin.Page[admin.Audit]](), "Overview": reflect.TypeFor[admin.Overview](), "Metric": reflect.TypeFor[admin.Metric](), "Operation": reflect.TypeFor[admin.Operation](), "Location": reflect.TypeFor[geo.Location](), "Checkout": reflect.TypeFor[payment.Checkout](), "FlowStatus": reflect.TypeFor[auth.FlowStatus]()}
 	schemas := map[string]any{}
+	for name, t := range map[string]reflect.Type{"TaskItem": reflect.TypeFor[admin.TaskItem](), "TaskDetail": reflect.TypeFor[admin.TaskDetail](), "TaskEvent": reflect.TypeFor[admin.TaskEvent](), "TaskCounts": reflect.TypeFor[admin.TaskCounts](), "TaskTrend": reflect.TypeFor[admin.TaskTrend](), "TaskOverview": reflect.TypeFor[admin.TaskOverview](), "TaskRetryItem": reflect.TypeFor[admin.TaskRetryItem](), "TaskRetryResult": reflect.TypeFor[admin.TaskRetryResult](), "TaskPage": reflect.TypeFor[admin.Page[admin.TaskItem]](), "TaskEventPage": reflect.TypeFor[admin.Page[admin.TaskEvent]]()} {
+		types[name] = t
+	}
 	for name, t := range types {
 		schemas[name] = describe(t)
 	}
@@ -115,6 +118,7 @@ func main() {
 	for name, t := range requestTypes {
 		schemas[name] = describe(t)
 	}
+	schemas["TaskRetryInput"] = describe(reflect.TypeFor[httpapi.TaskRetryInput]())
 	previewProps := schemas["PreviewInput"].(schema)["properties"].(map[string]any)
 	previewProps["action"].(schema)["enum"] = []string{"close", "hide_order", "show_order", "hide_message", "show_message", "delete", "export", "refresh_location"}
 	previewProps["action"].(schema)["description"] = "refresh_location queues a forced geo lookup after confirmation, including legacy orders. Success replaces the saved location, failure preserves it; payment state is unchanged. Missing targets return not_found, disabled geo mode returns disabled without queuing. Active refresh tasks are reused."
@@ -130,6 +134,10 @@ func main() {
 		method, path, result string
 		auth                 bool
 	}{{"get", "site/info", "Site", false}, {"get", "user/profile", "Profile", true}, {"post", "user/login", "", false}, {"get", "user/login/status", "FlowStatus", false}, {"post", "user/login/qq/complete", "", false}, {"post", "user/identity/bind", "", true}, {"post", "user/session/renew", "", true}, {"post", "user/logout", "", true}, {"get", "order/list", "Records", false}, {"get", "order/detail", "Order", true}, {"post", "order/create", "Order", true}, {"post", "order/payment/start", "Checkout", true}, {"get", "admin/order/list", "OrderPage", true}, {"get", "admin/order/detail", "Order", true}, {"post", "admin/order/action/preview", "Operation", true}, {"post", "admin/order/action/execute", "Operation", true}, {"post", "admin/order/reconcile", "", true}, {"get", "admin/operation/detail", "Operation", true}, {"get", "admin/user/list", "UserPage", true}, {"get", "admin/user/detail", "User", true}, {"post", "admin/user/ban", "", true}, {"post", "admin/user/unban", "", true}, {"post", "admin/user/identity/unbind", "", true}, {"get", "admin/overview", "Overview", true}, {"get", "admin/audit/list", "AuditPage", true}}
+	routes = append(routes, []struct {
+		method, path, result string
+		auth                 bool
+	}{{"get", "admin/task/list", "TaskPage", true}, {"get", "admin/task/detail", "TaskDetail", true}, {"get", "admin/task/history", "TaskEventPage", true}, {"get", "admin/task/overview", "TaskOverview", true}, {"post", "admin/task/retry", "TaskRetryResult", true}}...)
 	for _, r := range routes {
 		data := schema{}
 		if r.result != "" {
@@ -146,6 +154,7 @@ func main() {
 
 		bodies := map[string]string{"user/login": "LoginInput", "user/identity/bind": "LoginInput", "user/login/qq/complete": "QQInput", "order/create": "CreateOrderInput", "order/payment/start": "IDInput", "admin/order/action/preview": "PreviewInput", "admin/order/action/execute": "OperationInput", "admin/order/reconcile": "ReconcileInput", "admin/user/ban": "IDInput", "admin/user/unban": "IDInput"}
 		bodies["admin/user/identity/unbind"] = "UnbindIdentityInput"
+		bodies["admin/task/retry"] = "TaskRetryInput"
 		if body := bodies[r.path]; r.method == "post" && body != "" {
 			operation["requestBody"] = schema{"required": true, "content": schema{"application/json": schema{"schema": ref(body)}}}
 		}
@@ -202,6 +211,27 @@ func main() {
 		if r.path == "admin/user/identity/unbind" {
 			operation["description"] = "Administrator only. Removes the matched user's OAuth identity atomically, invalidates all credentials using it and cancels the user's outstanding binding flows. At least one login method must remain. Business failures LAST_IDENTITY_FORBIDDEN, NOT_FOUND and VALIDATION_FAILED use HTTP 200; inspect code. Success clears the cookie if the current session used the removed identity."
 			response["content"].(schema)["application/json"].(schema)["schema"].(schema)["properties"].(schema)["data"] = schema{"nullable": true, "enum": []any{nil}}
+		}
+		if r.path == "admin/task/list" {
+			params := []any{}
+			for _, name := range []string{"status", "kind", "source", "search", "sort", "direction"} {
+				params = append(params, parameter("query", name, false, schema{"type": "string"}))
+			}
+			for _, name := range []string{"from", "to"} {
+				params = append(params, parameter("query", name, false, schema{"type": "string", "format": "date-time"}))
+			}
+			params = append(params, parameter("query", "page", false, schema{"type": "integer", "minimum": 1, "default": 1}), parameter("query", "page_size", false, schema{"type": "integer", "minimum": 1, "maximum": 100, "default": 20}))
+			operation["parameters"] = params
+		}
+		if r.path == "admin/task/history" {
+			operation["parameters"] = []any{parameter("query", "id", true, schema{"type": "string", "format": "uuid"}), parameter("query", "page", false, schema{"type": "integer", "minimum": 1, "default": 1}), parameter("query", "page_size", false, schema{"type": "integer", "minimum": 1, "maximum": 100, "default": 20})}
+		}
+		if r.path == "admin/task/overview" {
+			operation["description"] = "Current-state counts are independent of trend range. Trend uses recorded events only (never upgrade snapshots), Shanghai calendar days, zero filling and at most 90 calendar-aligned buckets. Default range is 7d."
+			operation["parameters"] = []any{parameter("query", "range", false, schema{"type": "string", "enum": []string{"today", "yesterday", "7d", "30d", "90d", "all", "custom"}, "default": "7d"}), parameter("query", "from", false, schema{"type": "string", "format": "date-time"}), parameter("query", "to", false, schema{"type": "string", "format": "date-time"})}
+		}
+		if r.path == "admin/task/retry" {
+			operation["description"] = "Retries original failed tasks, resetting their current retry budget, or advances scheduled ready tasks without resetting it. Running and completed tasks are never replayed. A persistent caller-scoped idempotency key returns the original response; changed IDs conflict. At most 100 IDs. Permission is rechecked and order-target task.retry audit is written in the transaction."
 		}
 		paths["/api/v1/"+r.path] = schema{r.method: operation}
 	}

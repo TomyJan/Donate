@@ -80,21 +80,28 @@ type Identity struct {
 }
 
 type Job struct {
-	ID         []byte
-	Kind       string
-	OrderID    []byte
-	Status     string
-	RunAt      int64
-	Attempts   int64
-	LeaseToken sql.NullString
-	LeaseUntil sql.NullInt64
-	Source     string
-	ActorID    []byte
-	RequestID  string
-	Rerun      int64
-	LastResult string
-	CreatedAt  int64
-	UpdatedAt  int64
+	ID              []byte
+	Kind            string
+	OrderID         []byte
+	Status          string
+	RunAt           int64
+	Attempts        int64
+	LeaseToken      sql.NullString
+	LeaseUntil      sql.NullInt64
+	Source          string
+	ActorID         []byte
+	RequestID       string
+	Rerun           int64
+	LastResult      string
+	CreatedAt       int64
+	UpdatedAt       int64
+	TotalAttempts   int64
+	RecordingSince  int64
+	StartedAt       sql.NullInt64
+	LastError       string
+	RetryGeneration int64
+	EventSource     string
+	EventRequestID  string
 }
 
 type Order struct {
@@ -173,6 +180,37 @@ type Session struct {
 	RenewedAt  int64
 	ExpiresAt  int64
 	RevokedAt  sql.NullInt64
+}
+
+type TaskEvent struct {
+	ID         []byte
+	JobID      []byte
+	Sequence   int64
+	Event      string
+	Status     string
+	Attempt    int64
+	Source     string
+	Result     string
+	Message    string
+	CreatedAt  int64
+	RunAt      sql.NullInt64
+	DurationMs sql.NullInt64
+	ActorID    []byte
+	RequestID  string
+}
+
+type TaskRecording struct {
+	Singleton      int64
+	RecordingSince int64
+}
+
+type TaskRetryRequest struct {
+	ID        []byte
+	ActorID   []byte
+	Key       string
+	Digest    []byte
+	Response  string
+	CreatedAt int64
 }
 
 type User struct {

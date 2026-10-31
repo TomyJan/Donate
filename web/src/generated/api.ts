@@ -160,6 +160,97 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/task/detail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** admin/task/detail */
+        get: operations["admin_task_detail_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/task/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** admin/task/history */
+        get: operations["admin_task_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/task/list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** admin/task/list */
+        get: operations["admin_task_list_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/task/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * admin/task/overview
+         * @description Current-state counts are independent of trend range. Trend uses recorded events only (never upgrade snapshots), Shanghai calendar days, zero filling and at most 90 calendar-aligned buckets. Default range is 7d.
+         */
+        get: operations["admin_task_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/task/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * admin/task/retry
+         * @description Retries original failed tasks, resetting their current retry budget, or advances scheduled ready tasks without resetting it. Running and completed tasks are never replayed. A persistent caller-scoped idempotency key returns the original response; changed IDs conflict. At most 100 IDs. Permission is rechecked and order-target task.retry audit is written in the transaction.
+         */
+        post: operations["admin_task_retry_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/user/ban": {
         parameters: {
             query?: never;
@@ -923,6 +1014,212 @@ export interface components {
             tag: string;
             version: string;
         };
+        TaskCounts: {
+            /** Format: int64 */
+            done: number;
+            /** Format: int64 */
+            failed: number;
+            /** Format: int64 */
+            ready: number;
+            /** Format: int64 */
+            running: number;
+        };
+        TaskDetail: {
+            actor_id?: string;
+            actor_name?: string;
+            /** Format: int64 */
+            attempts: number;
+            /** Format: date-time */
+            created_at: string;
+            id: string;
+            kind: string;
+            /** Format: date-time */
+            lease_until?: string | null;
+            merchant_order_no: string;
+            nickname: string;
+            order_id: string;
+            /** Format: date-time */
+            recording_since: string;
+            request_id: string;
+            result: string;
+            retryable: boolean;
+            /** Format: date-time */
+            run_at: string;
+            source: string;
+            status: string;
+            /** Format: int64 */
+            total_attempts: number;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        TaskEvent: {
+            actor_id?: string;
+            actor_name?: string;
+            /** Format: int64 */
+            attempt: number;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: int64 */
+            duration_ms?: number | null;
+            event: string;
+            id: string;
+            message: string;
+            request_id?: string;
+            result: string;
+            /** Format: date-time */
+            run_at?: string | null;
+            source: string;
+            status: string;
+        };
+        TaskEventPage: {
+            items: {
+                actor_id?: string;
+                actor_name?: string;
+                /** Format: int64 */
+                attempt: number;
+                /** Format: date-time */
+                created_at: string;
+                /** Format: int64 */
+                duration_ms?: number | null;
+                event: string;
+                id: string;
+                message: string;
+                request_id?: string;
+                result: string;
+                /** Format: date-time */
+                run_at?: string | null;
+                source: string;
+                status: string;
+            }[];
+            /** Format: int64 */
+            page: number;
+            /** Format: int64 */
+            page_size: number;
+            /** Format: int64 */
+            total: number;
+        };
+        TaskItem: {
+            /** Format: int64 */
+            attempts: number;
+            /** Format: date-time */
+            created_at: string;
+            id: string;
+            kind: string;
+            /** Format: date-time */
+            lease_until?: string | null;
+            merchant_order_no: string;
+            nickname: string;
+            order_id: string;
+            result: string;
+            retryable: boolean;
+            /** Format: date-time */
+            run_at: string;
+            source: string;
+            status: string;
+            /** Format: int64 */
+            total_attempts: number;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        TaskOverview: {
+            counts: {
+                /** Format: int64 */
+                done: number;
+                /** Format: int64 */
+                failed: number;
+                /** Format: int64 */
+                ready: number;
+                /** Format: int64 */
+                running: number;
+            };
+            /** Format: int64 */
+            due: number;
+            /** Format: date-time */
+            from: string;
+            /** Format: date-time */
+            recording_since: string;
+            /** Format: int64 */
+            scheduled: number;
+            /** Format: int64 */
+            stale_running: number;
+            /** Format: date-time */
+            to: string;
+            /** Format: int64 */
+            total: number;
+            trend: {
+                /** Format: int64 */
+                completed: number;
+                /** Format: int64 */
+                created: number;
+                date: string;
+                /** Format: int64 */
+                failed: number;
+                /** Format: int64 */
+                retried: number;
+                /** Format: int64 */
+                started: number;
+            }[];
+        };
+        TaskPage: {
+            items: {
+                /** Format: int64 */
+                attempts: number;
+                /** Format: date-time */
+                created_at: string;
+                id: string;
+                kind: string;
+                /** Format: date-time */
+                lease_until?: string | null;
+                merchant_order_no: string;
+                nickname: string;
+                order_id: string;
+                result: string;
+                retryable: boolean;
+                /** Format: date-time */
+                run_at: string;
+                source: string;
+                status: string;
+                /** Format: int64 */
+                total_attempts: number;
+                /** Format: date-time */
+                updated_at: string;
+            }[];
+            /** Format: int64 */
+            page: number;
+            /** Format: int64 */
+            page_size: number;
+            /** Format: int64 */
+            total: number;
+        };
+        TaskRetryInput: {
+            idempotency_key: string;
+            ids: string[];
+        };
+        TaskRetryItem: {
+            id: string;
+            result: string;
+        };
+        TaskRetryResult: {
+            items: {
+                id: string;
+                result: string;
+            }[];
+            /** Format: int64 */
+            queued: number;
+        };
+        TaskTrend: {
+            /** Format: int64 */
+            completed: number;
+            /** Format: int64 */
+            created: number;
+            date: string;
+            /** Format: int64 */
+            failed: number;
+            /** Format: int64 */
+            retried: number;
+            /** Format: int64 */
+            started: number;
+        };
         UnbindIdentityInput: {
             /** Format: uuid */
             id: string;
@@ -1435,6 +1732,263 @@ export interface operations {
                     "application/json": {
                         code: string;
                         data: components["schemas"]["Overview"];
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description Missing or invalid session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden, banned, or CSRF refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Infrastructure failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admin_task_detail_get: {
+        parameters: {
+            query: {
+                id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Business response; inspect code. Basic authentication failures use 401/403. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        data: components["schemas"]["TaskDetail"];
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description Missing or invalid session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden, banned, or CSRF refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Infrastructure failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admin_task_history_get: {
+        parameters: {
+            query: {
+                id: string;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Business response; inspect code. Basic authentication failures use 401/403. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        data: components["schemas"]["TaskEventPage"];
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description Missing or invalid session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden, banned, or CSRF refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Infrastructure failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admin_task_list_get: {
+        parameters: {
+            query?: {
+                status?: string;
+                kind?: string;
+                source?: string;
+                search?: string;
+                sort?: string;
+                direction?: string;
+                from?: string;
+                to?: string;
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Business response; inspect code. Basic authentication failures use 401/403. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        data: components["schemas"]["TaskPage"];
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description Missing or invalid session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden, banned, or CSRF refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Infrastructure failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admin_task_overview_get: {
+        parameters: {
+            query?: {
+                range?: "today" | "yesterday" | "7d" | "30d" | "90d" | "all" | "custom";
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Business response; inspect code. Basic authentication failures use 401/403. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        data: components["schemas"]["TaskOverview"];
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description Missing or invalid session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden, banned, or CSRF refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Infrastructure failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admin_task_retry_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskRetryInput"];
+            };
+        };
+        responses: {
+            /** @description Business response; inspect code. Basic authentication failures use 401/403. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        data: components["schemas"]["TaskRetryResult"];
                         message: string;
                         request_id: string;
                     };

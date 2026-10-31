@@ -1288,6 +1288,649 @@
         ],
         "type": "object"
       },
+      "TaskCounts": {
+        "properties": {
+          "done": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "failed": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "ready": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "running": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "done",
+          "failed",
+          "ready",
+          "running"
+        ],
+        "type": "object"
+      },
+      "TaskDetail": {
+        "properties": {
+          "actor_id": {
+            "type": "string"
+          },
+          "actor_name": {
+            "type": "string"
+          },
+          "attempts": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "lease_until": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "merchant_order_no": {
+            "type": "string"
+          },
+          "nickname": {
+            "type": "string"
+          },
+          "order_id": {
+            "type": "string"
+          },
+          "recording_since": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "run_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "total_attempts": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "attempts",
+          "created_at",
+          "id",
+          "kind",
+          "merchant_order_no",
+          "nickname",
+          "order_id",
+          "recording_since",
+          "request_id",
+          "result",
+          "retryable",
+          "run_at",
+          "source",
+          "status",
+          "total_attempts",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "TaskEvent": {
+        "properties": {
+          "actor_id": {
+            "type": "string"
+          },
+          "actor_name": {
+            "type": "string"
+          },
+          "attempt": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "duration_ms": {
+            "format": "int64",
+            "nullable": true,
+            "type": "integer"
+          },
+          "event": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "request_id": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string"
+          },
+          "run_at": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "attempt",
+          "created_at",
+          "event",
+          "id",
+          "message",
+          "result",
+          "source",
+          "status"
+        ],
+        "type": "object"
+      },
+      "TaskEventPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "properties": {
+                "actor_id": {
+                  "type": "string"
+                },
+                "actor_name": {
+                  "type": "string"
+                },
+                "attempt": {
+                  "format": "int64",
+                  "type": "integer"
+                },
+                "created_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "duration_ms": {
+                  "format": "int64",
+                  "nullable": true,
+                  "type": "integer"
+                },
+                "event": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "message": {
+                  "type": "string"
+                },
+                "request_id": {
+                  "type": "string"
+                },
+                "result": {
+                  "type": "string"
+                },
+                "run_at": {
+                  "format": "date-time",
+                  "nullable": true,
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "attempt",
+                "created_at",
+                "event",
+                "id",
+                "message",
+                "result",
+                "source",
+                "status"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "page": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "page_size": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "type": "object"
+      },
+      "TaskItem": {
+        "properties": {
+          "attempts": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "lease_until": {
+            "format": "date-time",
+            "nullable": true,
+            "type": "string"
+          },
+          "merchant_order_no": {
+            "type": "string"
+          },
+          "nickname": {
+            "type": "string"
+          },
+          "order_id": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean"
+          },
+          "run_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "total_attempts": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "attempts",
+          "created_at",
+          "id",
+          "kind",
+          "merchant_order_no",
+          "nickname",
+          "order_id",
+          "result",
+          "retryable",
+          "run_at",
+          "source",
+          "status",
+          "total_attempts",
+          "updated_at"
+        ],
+        "type": "object"
+      },
+      "TaskOverview": {
+        "properties": {
+          "counts": {
+            "properties": {
+              "done": {
+                "format": "int64",
+                "type": "integer"
+              },
+              "failed": {
+                "format": "int64",
+                "type": "integer"
+              },
+              "ready": {
+                "format": "int64",
+                "type": "integer"
+              },
+              "running": {
+                "format": "int64",
+                "type": "integer"
+              }
+            },
+            "required": [
+              "done",
+              "failed",
+              "ready",
+              "running"
+            ],
+            "type": "object"
+          },
+          "due": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "from": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "recording_since": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "scheduled": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "stale_running": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "to": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "trend": {
+            "items": {
+              "properties": {
+                "completed": {
+                  "format": "int64",
+                  "type": "integer"
+                },
+                "created": {
+                  "format": "int64",
+                  "type": "integer"
+                },
+                "date": {
+                  "type": "string"
+                },
+                "failed": {
+                  "format": "int64",
+                  "type": "integer"
+                },
+                "retried": {
+                  "format": "int64",
+                  "type": "integer"
+                },
+                "started": {
+                  "format": "int64",
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "completed",
+                "created",
+                "date",
+                "failed",
+                "retried",
+                "started"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "counts",
+          "due",
+          "from",
+          "recording_since",
+          "scheduled",
+          "stale_running",
+          "to",
+          "total",
+          "trend"
+        ],
+        "type": "object"
+      },
+      "TaskPage": {
+        "properties": {
+          "items": {
+            "items": {
+              "properties": {
+                "attempts": {
+                  "format": "int64",
+                  "type": "integer"
+                },
+                "created_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string"
+                },
+                "lease_until": {
+                  "format": "date-time",
+                  "nullable": true,
+                  "type": "string"
+                },
+                "merchant_order_no": {
+                  "type": "string"
+                },
+                "nickname": {
+                  "type": "string"
+                },
+                "order_id": {
+                  "type": "string"
+                },
+                "result": {
+                  "type": "string"
+                },
+                "retryable": {
+                  "type": "boolean"
+                },
+                "run_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                },
+                "total_attempts": {
+                  "format": "int64",
+                  "type": "integer"
+                },
+                "updated_at": {
+                  "format": "date-time",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "attempts",
+                "created_at",
+                "id",
+                "kind",
+                "merchant_order_no",
+                "nickname",
+                "order_id",
+                "result",
+                "retryable",
+                "run_at",
+                "source",
+                "status",
+                "total_attempts",
+                "updated_at"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "page": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "page_size": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "total": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "page",
+          "page_size",
+          "total"
+        ],
+        "type": "object"
+      },
+      "TaskRetryInput": {
+        "properties": {
+          "idempotency_key": {
+            "type": "string"
+          },
+          "ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "idempotency_key",
+          "ids"
+        ],
+        "type": "object"
+      },
+      "TaskRetryItem": {
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "result": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "result"
+        ],
+        "type": "object"
+      },
+      "TaskRetryResult": {
+        "properties": {
+          "items": {
+            "items": {
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "result": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id",
+                "result"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "queued": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "queued"
+        ],
+        "type": "object"
+      },
+      "TaskTrend": {
+        "properties": {
+          "completed": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "created": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "date": {
+            "type": "string"
+          },
+          "failed": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "retried": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "started": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "completed",
+          "created",
+          "date",
+          "failed",
+          "retried",
+          "started"
+        ],
+        "type": "object"
+      },
       "UnbindIdentityInput": {
         "properties": {
           "id": {
@@ -2358,6 +3001,458 @@
           }
         ],
         "summary": "admin/overview"
+      }
+    },
+    "/api/v1/admin/task/detail": {
+      "get": {
+        "operationId": "admin_task_detail_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TaskDetail"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "admin/task/detail"
+      }
+    },
+    "/api/v1/admin/task/history": {
+      "get": {
+        "operationId": "admin_task_history_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TaskEventPage"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "admin/task/history"
+      }
+    },
+    "/api/v1/admin/task/list": {
+      "get": {
+        "operationId": "admin_task_list_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "direction",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TaskPage"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "admin/task/list"
+      }
+    },
+    "/api/v1/admin/task/overview": {
+      "get": {
+        "description": "Current-state counts are independent of trend range. Trend uses recorded events only (never upgrade snapshots), Shanghai calendar days, zero filling and at most 90 calendar-aligned buckets. Default range is 7d.",
+        "operationId": "admin_task_overview_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "range",
+            "required": false,
+            "schema": {
+              "default": "7d",
+              "enum": [
+                "today",
+                "yesterday",
+                "7d",
+                "30d",
+                "90d",
+                "all",
+                "custom"
+              ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "to",
+            "required": false,
+            "schema": {
+              "format": "date-time",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TaskOverview"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "admin/task/overview"
+      }
+    },
+    "/api/v1/admin/task/retry": {
+      "post": {
+        "description": "Retries original failed tasks, resetting their current retry budget, or advances scheduled ready tasks without resetting it. Running and completed tasks are never replayed. A persistent caller-scoped idempotency key returns the original response; changed IDs conflict. At most 100 IDs. Permission is rechecked and order-target task.retry audit is written in the transaction.",
+        "operationId": "admin_task_retry_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskRetryInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/TaskRetryResult"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "admin/task/retry"
       }
     },
     "/api/v1/admin/user/ban": {

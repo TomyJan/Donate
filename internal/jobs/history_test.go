@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/TomyJan/Donate/internal/geo"
 	"github.com/TomyJan/Donate/internal/order"
 	"github.com/TomyJan/Donate/internal/storage"
 	"github.com/google/uuid"
@@ -47,6 +48,90 @@ func TestHistoryPersistsSafeDiagnosticOnRetry(t *testing.T) {
 	}
 	if !strings.Contains(message, "timeout") || !strings.Contains(message, strings.ReplaceAll(j.ID, "-", "")) || !strings.Contains(message, strings.ReplaceAll(oid.String(), "-", "")) {
 		t.Fatalf("missing diagnostic or IDs: %s", message)
+	}
+}
+
+func TestHistoryCallbackCompletionKeepsRealSourceAndDoesNotReplay(t *testing.T) {
+	ctx := context.Background()
+	db, err := storage.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now().UTC().Truncate(time.Second)
+	oid := storage.NewID()
+	if _, err = db.DB.Exec("INSERT INTO orders(id,merchant_order_no,amount_fen,channel,created_at,expires_at,request_ip) VALUES(?,'callback-history',1,'alipay',?,?,'192.0.2.1')", oid[:], now.Unix(), now.Add(time.Hour).Unix()); err != nil {
+		t.Fatal(err)
+	}
+	l := slog.New(slog.NewTextHandler(io.Discard, nil))
+	q := NewQueue(db, l)
+	q.Now = func() time.Time { return now }
+	for _, kind := range []string{"payment", "close"} {
+		if _, err = q.Enqueue(ctx, kind, oid.String(), "automatic", "", "original"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	worker, err := q.Claim(ctx, []string{"payment"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := order.New(db, l, "", "", "v2")
+	s.Now = q.Now
+	obs := order.Observation{MerchantOrderNo: "callback-history", TradeNo: "callback-trade", Channel: "alipay", AmountFen: 1, State: "paid", Source: "notify", RequestID: "callback-request", Verified: true}
+	for range 2 {
+		if _, err = s.Apply(ctx, obs); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if changed, err := q.Finish(ctx, worker, "failed", "late-worker", time.Time{}); err != nil || changed {
+		t.Fatal(changed, err)
+	}
+	rows, err := db.DB.Query("SELECT e.source,e.request_id,e.event FROM task_events e JOIN jobs j ON j.id=e.job_id WHERE j.order_id=? AND e.event='completed'", oid[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for rows.Next() {
+		var source, request, event string
+		if err = rows.Scan(&source, &request, &event); err != nil {
+			t.Fatal(err)
+		}
+		if source != "notify" || request != "callback-request" {
+			t.Errorf("completion incorrectly attributed to %s / %s", source, request)
+		}
+		n++
+	}
+	rows.Close()
+	if n != 2 {
+		t.Fatal(n)
+	}
+}
+func TestHistoryGeoFailureRetainsSafeActionableDiagnostic(t *testing.T) {
+	ctx := context.Background()
+	db, err := storage.Open(ctx, filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	now := time.Now().UTC().Truncate(time.Second)
+	oid := storage.NewID()
+	if _, err = db.DB.Exec("INSERT INTO orders(id,merchant_order_no,amount_fen,channel,created_at,expires_at,request_ip) VALUES(?,'geo-diagnostic',1,'alipay',?,?,'192.0.2.1')", oid[:], now.Unix(), now.Add(time.Hour).Unix()); err != nil {
+		t.Fatal(err)
+	}
+	q := NewQueue(db, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if _, err = q.Enqueue(ctx, "geo", oid.String(), "admin_refresh", "", "geo"); err != nil {
+		t.Fatal(err)
+	}
+	j, err := q.Claim(ctx, []string{"geo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := Runner{Queue: q}
+	r.finish(ctx, j, "failed", "unknown", time.Time{}, geo.ErrIncomplete)
+	var message string
+	bid, _ := storage.ParseID(j.ID)
+	if err = db.DB.QueryRow("SELECT message FROM task_events WHERE job_id=? ORDER BY sequence DESC LIMIT 1", bid).Scan(&message); err != nil || !strings.Contains(message, "geo_province_missing") {
+		t.Fatal(message, err)
 	}
 }
 
