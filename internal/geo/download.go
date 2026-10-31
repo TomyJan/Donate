@@ -26,6 +26,12 @@ func (u *Updater) download(ctx context.Context, lib databaseSource) (stage strin
 	if err != nil {
 		return "", errors.New("下载地址无效")
 	}
+	// Seed the original headers so net/http can retain authentication on
+	// same-host absolute redirects and strip it when the host changes.
+	if user := req.URL.User; user != nil {
+		password, _ := user.Password()
+		req.SetBasicAuth(user.Username(), password)
+	}
 	resp, err := u.HTTP.Do(req)
 	if err != nil {
 		if ctx.Err() != nil {
