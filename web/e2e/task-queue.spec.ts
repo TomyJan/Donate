@@ -58,9 +58,6 @@ test('real task API reads and persistent history link to existing order detail',
     Math.abs(titleBounds[0].y + titleBounds[0].height / 2 - titleBounds[1].y - titleBounds[1].height / 2),
   ).toBeLessThan(2);
   await expect(
-    detail.locator('.task-detail-footer').getByRole('button', { name: '重试', exact: true }),
-  ).toBeVisible();
-  await expect(
     detail.locator('.task-detail-footer').getByRole('button', { name: '下一页', exact: true }),
   ).toBeVisible();
   await detail.getByRole('button', { name: '下一页', exact: true }).click();
@@ -94,7 +91,7 @@ test('polls task data without remounting and revokes dialogs when access is lost
   await detail.getByRole('button', { name: '关闭', exact: true }).click();
   await expect(detail).toHaveCount(0);
   await page.getByRole('button', { name: '查看趋势数据', exact: true }).click();
-  const curve = page.locator('.task-trend polyline').first();
+  const curve = page.locator('.task-trend > svg[role="img"] polyline').first();
   await curve.evaluate((element) => element.setAttribute('data-poll-identity', 'original'));
   const polled = page.waitForResponse((res) => res.url().includes('/admin/task/list?'));
   await page.clock.runFor(5000);
@@ -138,7 +135,29 @@ test('single and bulk retries use real API and show each result', async ({ page 
   const before = await readTasks(page, 'status=failed');
   const task = before.find((item) => item.retryable);
   if (!task) throw new Error('The real fixture must expose a retryable failed task');
-  await page.getByRole('button', { name: `重试 ${task.merchant_order_no}`, exact: true }).click();
+  await page.getByRole('button', { name: `任务详情 ${task.merchant_order_no}`, exact: true }).click();
+  const detail = page.getByRole('dialog', { name: '任务详情', exact: true });
+  const footer = detail.locator('.task-detail-footer');
+  const retry = footer.getByRole('button', { name: '重试', exact: true });
+  await expect(retry).toBeVisible();
+  await expect(retry).toBeEnabled();
+  await expect(footer.getByRole('button', { name: '下一页', exact: true })).toBeVisible();
+  const footerGeometry = await footer.evaluate((element) => {
+    const action = element.querySelector('.task-detail-retry');
+    const pagination = element.querySelector('.a-foot');
+    if (!action || !pagination) throw new Error('Retryable task must expose retry and history pagination');
+    const left = action.getBoundingClientRect();
+    const right = pagination.getBoundingClientRect();
+    return {
+      actionRight: left.right,
+      pagerLeft: right.left,
+      actionCenter: left.y + left.height / 2,
+      pagerCenter: right.y + right.height / 2,
+    };
+  });
+  expect(footerGeometry.actionRight).toBeLessThanOrEqual(footerGeometry.pagerLeft);
+  expect(Math.abs(footerGeometry.actionCenter - footerGeometry.pagerCenter)).toBeLessThan(2);
+  await retry.click();
   const confirm = page.getByRole('dialog', { name: '重试任务', exact: true });
   await expect(confirm).toBeVisible();
   expect(await confirm.evaluate((el) => getComputedStyle(el).boxShadow)).not.toBe('none');
@@ -146,6 +165,8 @@ test('single and bulk retries use real API and show each result', async ({ page 
   const results = page.getByRole('dialog', { name: '操作结果', exact: true });
   await expect(results).toContainText('已加入队列');
   await results.getByRole('button', { name: '关闭', exact: true }).last().click();
+  await detail.getByRole('button', { name: '关闭', exact: true }).click();
+  await expect(detail).toHaveCount(0);
   const history = await (await page.request.get(`/api/v1/admin/task/history?id=${task.id}`)).json();
   expect(history.data.items.some((event: { event: string }) => event.event === 'retried')).toBe(true);
   const remaining = await readTasks(page, 'status=failed');
@@ -249,7 +270,29 @@ test('task workspace stays contained and five tabs keep equal height across size
         expect(controls).toHaveLength(3);
         await expect(tools.getByRole('combobox')).toHaveCount(0);
       }
-      const chart = await page.locator('.task-trend svg').evaluate((node) => {
+      const trendToggle = page.getByRole('button', { name: '查看趋势数据', exact: true });
+      await expect(trendToggle.locator('svg')).toHaveCount(1);
+      await expect(trendToggle.locator('svg')).toHaveCSS('width', '18px');
+      await expect(trendToggle.locator('svg')).toHaveCSS('height', '18px');
+      await expect(trendToggle.locator('svg')).toHaveCSS('margin', '0px');
+      const disclosureGeometry = await trendToggle.evaluate((element) => {
+        const icon = element.querySelector('svg');
+        if (!icon) throw new Error('Trend disclosure must expose its icon');
+        const box = icon.getBoundingClientRect();
+        return {
+          height: element.getBoundingClientRect().height,
+          iconWidth: box.width,
+          iconHeight: box.height,
+        };
+      });
+      expect(disclosureGeometry.height, `trend disclosure must stay compact at ${width}`).toBeLessThanOrEqual(
+        44,
+      );
+      expect(disclosureGeometry.iconWidth).toBeCloseTo(18, 1);
+      expect(disclosureGeometry.iconHeight).toBeCloseTo(18, 1);
+      const trendImage = page.locator('.task-trend > svg[role="img"]');
+      await expect(trendImage).toHaveCount(1);
+      const chart = await trendImage.evaluate((node) => {
         const svg = node as SVGSVGElement;
         const bounds = svg.getBoundingClientRect();
         return { height: bounds.height, fontSize: (12 * bounds.width) / svg.viewBox.baseVal.width };
@@ -306,21 +349,35 @@ test('trend and filter disclosure respect reduced motion and keyboard access', a
   await page.setViewportSize({ width: 390, height: 950 });
   await loginTasks(page);
   await expect(page.locator('.task-trend-recording')).toContainText('开始记录于');
-  await expect(page.locator('.task-trend polyline').first()).toHaveCSS('animation-name', 'none');
+  await expect(page.locator('.task-trend > svg[role="img"] polyline').first()).toHaveCSS(
+    'animation-name',
+    'none',
+  );
   const data = page.getByRole('button', { name: '查看趋势数据', exact: true });
   await data.focus();
   await page.keyboard.press('Enter');
-  const table = page.getByRole('region', { name: '查看趋势数据', exact: true });
+  const tableId = await data.getAttribute('aria-controls');
+  if (!tableId) throw new Error('Trend disclosure must identify its controlled region');
+  const table = page.locator(`[id="${tableId}"]`);
+  await expect(table).toHaveAttribute('role', 'region');
   await expect(table).toBeVisible();
   await expect(table.locator('table')).toHaveCSS('font-size', '13px');
   await page.keyboard.press('Enter');
   await expect(table).toHaveAttribute('inert', '');
+  await expect(table).toHaveAttribute('aria-hidden', 'true');
+  await page.keyboard.press('Tab');
+  expect(await table.evaluate((element) => element.contains(document.activeElement))).toBe(false);
   const more = page.getByRole('button', { name: '更多筛选', exact: true });
   await more.focus();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('combobox', { name: '类型', exact: true })).toBeVisible();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('combobox', { name: '类型', exact: true })).toHaveCount(0);
+  const filtersId = await more.getAttribute('aria-controls');
+  if (!filtersId) throw new Error('Filter disclosure must identify its controlled panel');
+  const filters = page.locator(`[id="${filtersId}"]`);
+  await expect(filters).toHaveAttribute('inert', '');
+  await expect(filters).toHaveAttribute('aria-hidden', 'true');
   await page.keyboard.press('Tab');
-  await expect(page.getByRole('combobox', { name: '类型', exact: true })).not.toBeFocused();
+  expect(await filters.evaluate((element) => element.contains(document.activeElement))).toBe(false);
 });

@@ -7,6 +7,8 @@ import { AppProvider } from '../app/context';
 import type { Order, Page, Profile, TaskItem, TaskOverview } from '../lib/types';
 import { Admin } from './Admin';
 
+const taskStyles = readFileSync('src/features/TaskQueue.css', 'utf8');
+
 const task = {
   id: 'task-one',
   kind: 'payment',
@@ -265,6 +267,26 @@ it('keeps accessible trend data expanded and its initial curve across polling up
   fireEvent.click(toggle);
   expect(panel).toHaveAttribute('aria-hidden', 'true');
   expect(panel).toHaveAttribute('inert');
+});
+it('applies chart sizing only to the trend image and leaves the disclosure icon unscaled', async () => {
+  const styles = document.createElement('style');
+  styles.textContent = taskStyles;
+  document.head.append(styles);
+  try {
+    await openTasks();
+    const charts = document.querySelectorAll('.task-trend > svg[role="img"]');
+    expect(charts).toHaveLength(1);
+    expect(charts[0]).toBe(screen.getByRole('img', { name: 'Execution trend' }));
+    const toggle = screen.getByRole('button', { name: 'View trend data' });
+    const icon = toggle.querySelector('svg');
+    expect(icon).not.toBeNull();
+    expect(toggle.querySelectorAll('svg')).toHaveLength(1);
+    expect(window.getComputedStyle(charts[0]).minHeight).toBe('160px');
+    expect(window.getComputedStyle(icon as SVGSVGElement).minHeight).not.toBe('160px');
+    expect(window.getComputedStyle(icon as SVGSVGElement).marginTop).not.toBe('18px');
+  } finally {
+    styles.remove();
+  }
 });
 it.each(['created', 'started', 'completed', 'failed', 'retried'] as const)(
   'plots a real %s event even if all other series are zero',
@@ -753,3 +775,5 @@ it.each([200, 403])(
     expect(screen.queryByRole('dialog', { name: 'Results' })).not.toBeInTheDocument();
   },
 );
+
+import { readFileSync } from 'node:fs';

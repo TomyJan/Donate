@@ -110,7 +110,7 @@
   color: var(--d-muted);
   font-size: 10px;
 }
-.task-trend svg {
+.task-trend > svg[role="img"] {
   display: block;
   width: 100%;
   height: auto;
@@ -118,7 +118,7 @@
   margin-top: 18px;
   overflow: visible;
 }
-.task-trend svg text {
+.task-trend > svg[role="img"] text {
   fill: var(--d-muted);
   font:
     12px MiSans,
@@ -144,10 +144,10 @@
 .task-line-retried {
   color: light-dark(#a17d45, #c3a67a);
 }
-.task-trend :is(polyline, circle) {
+.task-trend > svg[role="img"] :is(polyline, circle) {
   stroke: currentColor;
 }
-.task-trend circle {
+.task-trend > svg[role="img"] circle {
   fill: currentColor;
 }
 .task-legend {
