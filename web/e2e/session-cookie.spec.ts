@@ -1,5 +1,6 @@
 import { createHmac } from 'node:crypto';
 import { expect, test } from '@playwright/test';
+import { LEGAL_VERSION } from '../src/lib/legal';
 
 test('cancels a stale site response before it can replace the anonymous sign-in cookie', async ({
   page,
@@ -39,10 +40,10 @@ test('cancels a stale site response before it can replace the anonymous sign-in 
   const oldFinished = new Promise<void>((resolve) => {
     finishOld = resolve;
   });
-  await page.addInitScript(() => {
-    localStorage.setItem('donate:legal-consent', '2026-10-30');
-    localStorage.setItem('donate:cookie-notice', '2026-10-30');
-  });
+  await page.addInitScript((version) => {
+    localStorage.setItem('donate:legal-consent', version);
+    localStorage.setItem('donate:cookie-notice', version);
+  }, LEGAL_VERSION);
   await page.route('**/*', async (route) => {
     const url = new URL(route.request().url());
     if (url.origin !== origin) {

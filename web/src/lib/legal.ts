@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 
 // Bump this when either document materially changes: previous agreement must not silently carry over.
-export const LEGAL_VERSION = '2026-10-30';
+export const LEGAL_VERSION = '2026-10-31';
 export const LEGAL_CONSENT_KEY = 'donate:legal-consent';
 export const COOKIE_NOTICE_KEY = 'donate:cookie-notice';
 

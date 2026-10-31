@@ -1,7 +1,8 @@
 import { expect, test } from '@playwright/test';
+import { LEGAL_VERSION } from '../src/lib/legal';
 
 test('agreement has a generous hit area and centered tick in both themes', async ({ page }, info) => {
-  await page.addInitScript(() => localStorage.setItem('donate:cookie-notice', '2026-10-30'));
+  await page.addInitScript((version) => localStorage.setItem('donate:cookie-notice', version), LEGAL_VERSION);
   await page.route('**/api/v1/**', (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/user/profile'))

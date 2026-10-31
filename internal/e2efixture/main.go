@@ -83,6 +83,12 @@ func write(w http.ResponseWriter, v any) {
 }
 func (f *fixture) handler(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
+	case "/analytics/script.js":
+		w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+		_, _ = io.WriteString(w, `const script = document.currentScript;
+fetch(new URL('/analytics/collect', script.src), {method: 'POST', mode: 'no-cors', body: script.dataset.websiteId}).then(() => { document.documentElement.dataset.umamiCollected = 'true'; });`)
+	case "/analytics/collect":
+		w.WriteHeader(http.StatusNoContent)
 	case "/.well-known/openid-configuration":
 		write(w, map[string]any{"issuer": f.issuer, "authorization_endpoint": f.issuer + "/authorize", "token_endpoint": f.issuer + "/token", "jwks_uri": f.issuer + "/jwks", "userinfo_endpoint": f.issuer + "/userinfo", "id_token_signing_alg_values_supported": []string{"RS256"}, "response_types_supported": []string{"code"}, "subject_types_supported": []string{"public"}})
 	case "/jwks":
@@ -271,6 +277,8 @@ func run() error {
 	env := map[string]string{"APP_ENV": "development", "PUBLIC_URL": app, "DATA_DIR": dir, "GEO_MODE": "disabled", "OIDC_ISSUER": issuer, "OIDC_CLIENT_ID": "donate-test", "ADMIN_USER_IDS": creds.Session.UserID, "EPAY_URL": issuer, "EPAY_PID": "1001", "EPAY_PROTOCOL": "v2", "EPAY_PRIVATE_KEY_FILE": privatePath, "EPAY_PUBLIC_KEY_FILE": publicPath}
 	env["OIDC_ID"] = "fixture-login"
 	env["OIDC_NAME"] = "OIDC"
+	env["UMAMI_SCRIPT_URL"] = issuer + "/analytics/script.js"
+	env["UMAMI_WEBSITE_ID"] = "a4dca193-c108-47d7-a429-b89c13c7f747"
 	b, _ := json.Marshal(env)
 	if e = os.WriteFile(filepath.Join(dir, "environment.json"), b, 0600); e != nil {
 		return e

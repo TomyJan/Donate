@@ -99,7 +99,14 @@ func run() error {
 	orders := order.New(db, log, c.EpayURL, c.EpayPID, c.EpayProtocol)
 	authentication := auth.New(db, c, log)
 	queue := jobs.NewQueue(db, log)
-	api := &httpapi.Server{Config: c, Auth: authentication, Orders: orders, Payments: &payment.Service{Orders: orders, Gateway: gateway}, Admin: admin.New(db, orders, c, log), Queue: queue, Log: log, Assets: webassets.FS(), Version: httpapi.Version{Version: version, Commit: commit, Tag: tag, BuiltAt: builtAt}, Degraded: degraded}
+	assets, e := webassets.WithUmami(webassets.FS(), c.UmamiScriptURL, c.UmamiWebsiteID)
+	if e != nil {
+		return e
+	}
+	if c.UmamiScriptURL != "" {
+		log.Info(fmt.Sprintf("已为站点 %s 启用 Umami 访问统计，统计服务 %s，网站 ID %s", c.PublicURL, c.UmamiOrigin, c.UmamiWebsiteID), "site", c.PublicURL, "analytics_origin", c.UmamiOrigin, "website_id", c.UmamiWebsiteID)
+	}
+	api := &httpapi.Server{Config: c, Auth: authentication, Orders: orders, Payments: &payment.Service{Orders: orders, Gateway: gateway}, Admin: admin.New(db, orders, c, log), Queue: queue, Log: log, Assets: assets, Version: httpapi.Version{Version: version, Commit: commit, Tag: tag, BuiltAt: builtAt}, Degraded: degraded}
 	server := &http.Server{Addr: c.Listen, Handler: api.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 90 * time.Second, MaxHeaderBytes: 16 * 1024}
 	runner := &jobs.Runner{Queue: queue, Orders: orders, Gateway: gateway, Geo: locator}
 	done := make(chan struct{})

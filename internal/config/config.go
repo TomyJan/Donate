@@ -23,6 +23,7 @@ type Config struct {
 	Secret                                                                 []byte
 	AdminIDs                                                               map[string]bool
 	RealIPHeader                                                           string
+	UmamiScriptURL, UmamiWebsiteID, UmamiOrigin                            string
 	OIDCissuer, OIDCclientID, OIDCsecret                                   string
 	OIDCid, OIDCname, OIDCiconURL                                          string
 	QQappID, QQsecret                                                      string
@@ -57,6 +58,23 @@ func Load() (Config, error) {
 		}
 	}
 	c := Config{Development: os.Getenv("APP_ENV") == "development", Listen: env("LISTEN_ADDR", "127.0.0.1:8080"), PublicURL: strings.TrimRight(env("PUBLIC_URL", "https://donate.tomys.top"), "/"), DataDir: env("DATA_DIR", "."), LogLevel: env("LOG_LEVEL", "INFO"), AdminIDs: map[string]bool{}, OIDCissuer: os.Getenv("OIDC_ISSUER"), OIDCclientID: os.Getenv("OIDC_CLIENT_ID"), OIDCsecret: os.Getenv("OIDC_CLIENT_SECRET"), QQappID: os.Getenv("QQ_APP_ID"), QQsecret: os.Getenv("QQ_APP_SECRET"), EpayURL: strings.TrimRight(os.Getenv("EPAY_URL"), "/"), EpayPID: os.Getenv("EPAY_PID"), EpayProtocol: env("EPAY_PROTOCOL", "v2"), EpayKey: os.Getenv("EPAY_KEY"), GeoMode: env("GEO_MODE", "online"), GeoPath: os.Getenv("GEO_DATABASE"), GeoOnlineFallback: os.Getenv("GEO_ONLINE_FALLBACK") == "true"}
+	c.UmamiScriptURL = strings.TrimSpace(os.Getenv("UMAMI_SCRIPT_URL"))
+	c.UmamiWebsiteID = strings.TrimSpace(os.Getenv("UMAMI_WEBSITE_ID"))
+	if c.UmamiScriptURL != "" || c.UmamiWebsiteID != "" {
+		if c.UmamiScriptURL == "" || c.UmamiWebsiteID == "" {
+			return c, errors.New("UMAMI_SCRIPT_URL 和 UMAMI_WEBSITE_ID 必须同时填写或同时留空")
+		}
+		tracker, e := url.Parse(c.UmamiScriptURL)
+		if e != nil || tracker.Hostname() == "" || tracker.User != nil || tracker.Fragment != "" || !regexp.MustCompile(`^[A-Za-z0-9.:[\]_-]+$`).MatchString(tracker.Host) || (tracker.Scheme != "https" && !(c.Development && tracker.Scheme == "http")) {
+			return c, errors.New("UMAMI_SCRIPT_URL 必须为不含凭据、片段及通配符的 HTTPS 脚本地址")
+		}
+		id, e := uuid.Parse(c.UmamiWebsiteID)
+		if e != nil || id == uuid.Nil {
+			return c, errors.New("UMAMI_WEBSITE_ID 必须为有效的网站 ID")
+		}
+		c.UmamiScriptURL, c.UmamiWebsiteID = tracker.String(), id.String()
+		c.UmamiOrigin = tracker.Scheme + "://" + tracker.Host
+	}
 	u, err := url.Parse(c.PublicURL)
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" || (u.Scheme != "https" && !(c.Development && u.Scheme == "http")) {
 		return c, errors.New("PUBLIC_URL 必须为无路径、查询或凭据的 HTTPS 站点地址")

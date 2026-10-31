@@ -29,6 +29,17 @@
 
 控制台输出文本，`donate.log` 保存 JSON；`LOG_LEVEL` 支持 `DEBUG`、`INFO`、`WARN`、`ERROR`。日志按 50 MiB 轮转，最多保留 10 份、14 天。
 
+## 访问统计
+
+可选接入 Umami，在 `.env` 同时填写脚本地址与网站 ID：
+
+```dotenv
+UMAMI_SCRIPT_URL=https://stats.example.com/script.js
+UMAMI_WEBSITE_ID=Umami 后台提供的网站 ID
+```
+
+重启后直接注入内嵌页面，无需重新构建；两项留空关闭。生产环境脚本地址使用 HTTPS。脚本与上报默认使用同一服务域名，CSP 自动放行该来源；排除页面 URL 查询参数、片段，并遵循浏览器 Do Not Track 设置。
+
 ## IP 属地
 
 默认 `GEO_MODE=online`，无需下载库或配置 API Key。使用本地库时，先下载并解压支持 MaxMind City 字段结构的 `.mmdb` 文件，再修改 `.env`，例如：

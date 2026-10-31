@@ -1,5 +1,6 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
+import { LEGAL_VERSION } from '../src/lib/legal';
 
 const orderID = '68f15e68-143e-4b30-a2a9-87c0df4c5479';
 const userID = '11644e41-c098-4c32-b44e-96926c19df18';
@@ -28,13 +29,13 @@ const paidOrder = {
 async function prepare(page: Page, options: { status?: string; error?: string; signedIn?: boolean } = {}) {
   let paid = options.status !== 'pending';
   let failed = !!options.error;
-  await page.addInitScript(() => {
-    localStorage.setItem('donate:cookie-notice', '2026-10-30');
+  await page.addInitScript((version) => {
+    localStorage.setItem('donate:cookie-notice', version);
     sessionStorage.setItem(
       'donate-draft',
       JSON.stringify({ amount: '8.88', channel: 'alipay', message: '保留的草稿' }),
     );
-  });
+  }, LEGAL_VERSION);
   await page.route('**/api/v1/**', async (route) => {
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith('/user/profile') && options.signedIn === false)

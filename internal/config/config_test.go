@@ -9,6 +9,58 @@ import (
 	"testing"
 )
 
+func TestLoadRejectsInvalidUmamiConfiguration(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("APP_ENV", "production")
+	t.Setenv("PUBLIC_URL", "https://donate.example.com")
+	t.Setenv("APP_SECRET", base64.StdEncoding.EncodeToString(make([]byte, 32)))
+	const websiteID = "a4dca193-c108-47d7-a429-b89c13c7f747"
+	for _, tc := range []struct{ name, script, id string }{
+		{"missing website", "https://stats.example.com/script.js", ""},
+		{"missing script", "", websiteID},
+		{"invalid website", "https://stats.example.com/script.js", "not-a-website-id"},
+		{"HTTP in production", "http://stats.example.com/script.js", websiteID},
+		{"executable URL", "javascript:alert(1)", websiteID},
+		{"protocol relative", "//stats.example.com/script.js", websiteID},
+		{"credentials", "https://user:secret@stats.example.com/script.js", websiteID},
+		{"fragment", "https://stats.example.com/script.js#tracker", websiteID},
+		{"CSP wildcard", "https://*.example.com/script.js", websiteID},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("UMAMI_SCRIPT_URL", tc.script)
+			t.Setenv("UMAMI_WEBSITE_ID", tc.id)
+			if _, err := Load(); err == nil || !strings.Contains(err.Error(), "UMAMI_") {
+				t.Fatalf("expected explicit Umami configuration error, got %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadUmamiSettings(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("APP_SECRET", base64.StdEncoding.EncodeToString(make([]byte, 32)))
+	const websiteID = "a4dca193-c108-47d7-a429-b89c13c7f747"
+	for _, tc := range []struct {
+		name, environment, script, id, origin string
+	}{
+		{"disabled", "production", "", "", ""},
+		{"HTTPS endpoint", "production", "https://stats.example.com/tracker/script.js?v=1&site=donate", websiteID, "https://stats.example.com"},
+		{"custom port", "production", "https://stats.example.com:8443/script.js", websiteID, "https://stats.example.com:8443"},
+		{"development", "development", "http://127.0.0.1:3000/script.js", websiteID, "http://127.0.0.1:3000"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("APP_ENV", tc.environment)
+			t.Setenv("PUBLIC_URL", "https://donate.example.com")
+			t.Setenv("UMAMI_SCRIPT_URL", tc.script)
+			t.Setenv("UMAMI_WEBSITE_ID", tc.id)
+			c, err := Load()
+			if err != nil || c.UmamiScriptURL != tc.script || c.UmamiWebsiteID != tc.id || c.UmamiOrigin != tc.origin {
+				t.Fatalf("Umami settings = (%q, %q, %q), error = %v", c.UmamiScriptURL, c.UmamiWebsiteID, c.UmamiOrigin, err)
+			}
+		})
+	}
+}
+
 func TestLoadAcceptsEmptyAdminIDsWithInlineComment(t *testing.T) {
 	for _, value := range []string{"", "   ", "   # 登录后再填写", "\"\" # 登录后再填写"} {
 		t.Run(value, func(t *testing.T) {
