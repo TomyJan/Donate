@@ -73,6 +73,7 @@ type Service struct {
 	cache      map[string]cached
 	flight     singleflight.Group
 	revision   uint64
+	generation uint64
 }
 
 func New(c config.Config, l *slog.Logger) (*Service, error) {
@@ -155,6 +156,7 @@ func (s *Service) lookup(ctx context.Context, ip string, force bool) (Location, 
 	}
 	s.mu.Lock()
 	v, ok := s.cache[ip]
+	generation := s.generation
 	revision := v.revision
 	if !ok {
 		revision = s.revision
@@ -163,9 +165,9 @@ func (s *Service) lookup(ctx context.Context, ip string, force bool) (Location, 
 	if !force && ok && v.until.After(time.Now()) {
 		return cloneLocation(v.value), v.err
 	}
-	flightKey := ip
+	flightKey := strconv.FormatUint(generation, 10) + ":" + ip
 	if force {
-		flightKey = "refresh:" + ip
+		flightKey = "refresh:" + flightKey
 	}
 	ch := s.flight.DoChan(flightKey, func() (any, error) {
 		lookupRevision := revision

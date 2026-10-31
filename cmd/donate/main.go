@@ -88,11 +88,21 @@ func run() error {
 		}
 		return errors.New("仅支持 --version / backup / restore <备份路径>")
 	}
+	if e = geo.Bootstrap(ctx, c, log); e != nil {
+		return e
+	}
 	locator, e := geo.New(c, log)
 	if e != nil {
 		return e
 	}
 	defer locator.Close()
+	updateCtx, cancelUpdates := context.WithCancel(ctx)
+	updatesDone := make(chan struct{})
+	go func() {
+		defer close(updatesDone)
+		geo.NewUpdater(locator, c, log).Run(updateCtx)
+	}()
+	defer func() { cancelUpdates(); <-updatesDone }()
 	gateway, e := payment.NewGateway(c)
 	if e != nil {
 		return e
