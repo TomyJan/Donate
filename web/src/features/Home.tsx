@@ -451,6 +451,7 @@ export function Home() {
           selected={selected}
           reduced={!!reduced}
           busy={list.isFetching}
+          arrivingId={received?.id}
           onSelect={(index) => {
             if (payment.phase !== 'filing') selectRecord(index);
           }}

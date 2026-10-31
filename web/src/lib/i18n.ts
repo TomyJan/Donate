@@ -1,9 +1,9 @@
 export const words = {
-  paymentChecking: ['正在查询支付结果，请勿重复付款', 'Checking payment. Please do not pay again.'],
-  paymentConfirmed: ['查询成功，感谢你的支持', 'Payment confirmed. Thank you for your support.'],
-  paymentFiling: ['正在收好这张收据', 'Filing your receipt'],
-  paymentSignIn: ['登录后继续确认这笔订单', 'Sign in to continue checking this payment'],
-  paymentUnconfirmed: ['尚未确认到账，可稍后重试', 'Payment not yet confirmed. Check again later.'],
+  paymentChecking: ['正在查询支付', 'Checking payment'],
+  paymentConfirmed: ['查询成功', 'Payment confirmed'],
+  paymentFiling: ['收据归档中', 'Filing receipt'],
+  paymentSignIn: ['请登录确认', 'Sign in to verify'],
+  paymentUnconfirmed: ['到账待确认', 'Payment unconfirmed'],
   paymentCheckFailed: ['查询失败', 'Payment check failed'],
   paymentReturnMissing: [
     '未找到返回的订单信息，请在「只看我的」中查看订单。',

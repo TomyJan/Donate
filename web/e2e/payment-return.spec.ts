@@ -181,13 +181,14 @@ test('a verified payment pauses for a second, slowly files the receipt and resto
   const ticket = page.locator('.r-write .r-ticket');
   const pay = ticket.locator('.r-pay > .r-primary');
   await expect(pay).toBeDisabled();
-  await expect(pay).toContainText('查询');
+  await expect(pay).toHaveText('正在查询支付');
   gateway.paid();
   await expect(ticket).toHaveAttribute('data-payment-phase', 'confirmed', { timeout: 7000 });
   const confirmedAt = Date.now();
-  await expect(pay).toContainText('查询成功');
+  await expect(pay).toHaveText('查询成功');
   await page.screenshot({ path: info.outputPath('confirmed.png') });
   await expect(ticket).toHaveAttribute('data-payment-phase', 'filing');
+  await expect(pay).toHaveText('收据归档中');
   expect(Date.now() - confirmedAt).toBeGreaterThanOrEqual(750);
   const travelAt = Date.now();
   await page.screenshot({ path: info.outputPath('folding.png') });
@@ -411,6 +412,98 @@ test('the same opaque paper lands on the receipt before the paid row is revealed
   expect(state.opacity).toBe('1');
   await expect(ticket).toHaveCSS('opacity', '1');
 });
+
+for (const width of [1280, 390]) {
+  test(`the landed payment smoothly expands its new index row without remounting existing rows at ${width}px`, async ({
+    page,
+  }) => {
+    await prepare(page);
+    await page.setViewportSize({ width, height: 1000 });
+    await page.route('**/api/v1/order/list?**', (route) =>
+      route.fulfill({
+        json: {
+          code: 'OK',
+          data: {
+            items: [
+              {
+                id: orderID,
+                is_mine: true,
+                nickname: paidOrder.nickname,
+                avatar_url: '',
+                amount_fen: paidOrder.amount_fen,
+                message: paidOrder.message,
+                province: paidOrder.province,
+                status: 'paid',
+                date: paidOrder.paid_at,
+              },
+              {
+                id: 'previous-order',
+                is_mine: false,
+                nickname: '先前捐赠者',
+                avatar_url: '',
+                amount_fen: 100,
+                message: '原来的收据',
+                province: '广东',
+                status: 'paid',
+                date: paidOrder.created_at,
+              },
+            ],
+            next_cursor: '',
+          },
+        },
+      }),
+    );
+    await page.goto(`/?payment=returned&order=${orderID}`);
+    const ticket = page.locator('.r-write .r-ticket');
+    await expect(ticket).toHaveAttribute('data-payment-phase', 'filing');
+    await expect(page.locator('.r-index-row')).toHaveCount(1);
+    const frames = await page.evaluate(async () => {
+      const index = document.querySelector('.r-index');
+      const original = index?.querySelector('.r-index-row');
+      if (!index || !original) throw new Error('Previous donation row is missing');
+      const frames: {
+        phase: string;
+        height: number;
+        opacity: number | null;
+        connected: boolean;
+        oldOpacity: string;
+      }[] = [];
+      let completedAt: number | undefined;
+      const started = performance.now();
+      while (performance.now() - started < 12000) {
+        const phase = document.querySelector('.r-write .r-ticket')?.getAttribute('data-payment-phase') ?? '';
+        const inserted = Array.from(index.querySelectorAll('.r-index-row')).find((row) =>
+          row.textContent?.includes('付款测试'),
+        );
+        if (phase === 'complete') completedAt ??= performance.now();
+        frames.push({
+          phase,
+          height: index.getBoundingClientRect().height,
+          opacity: inserted ? Number(getComputedStyle(inserted).opacity) : null,
+          connected: original.isConnected,
+          oldOpacity: getComputedStyle(original).opacity,
+        });
+        if (completedAt !== undefined && performance.now() - completedAt > 1100) return frames;
+        await new Promise(requestAnimationFrame);
+      }
+      throw new Error('Receipt did not land while sampling the index');
+    });
+    const filing = frames.filter((frame) => frame.phase === 'filing');
+    const landed = frames.filter((frame) => frame.phase === 'complete');
+    expect(filing.length).toBeGreaterThan(0);
+    expect(filing.every((frame) => frame.opacity === null)).toBe(true);
+    expect(
+      landed.some((frame) => frame.opacity !== null && frame.opacity > 0.02 && frame.opacity < 0.98),
+    ).toBe(true);
+    expect(frames.every((frame) => frame.connected && frame.oldOpacity === '1')).toBe(true);
+    const before = filing.at(-1)?.height ?? 0;
+    const after = landed.at(-1)?.height ?? 0;
+    expect(after - before).toBeGreaterThan(30);
+    expect(landed.some((frame) => frame.height > before + 1 && frame.height < after - 1)).toBe(true);
+    await expect(page.locator('.r-index-row')).toHaveCount(2);
+    await expect(page.locator('.r-index-row').first()).toHaveCSS('opacity', '1');
+  });
+}
 
 test('pending payment is not declared successful from return parameters and permits a later check', async ({
   page,
