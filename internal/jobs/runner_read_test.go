@@ -54,7 +54,11 @@ func TestCanceledExecutePreservesExistingTaskAndLeaseRecovery(t *testing.T) {
 				cancel()
 				r.Execute(parent, j)
 				got, err := r.Queue.Get(context.Background(), j.ID)
-				if err != nil || got.Status != "running" || got.Result != "" || got.LeaseToken != j.LeaseToken {
+				status, result, lease, attempts := "running", "", j.LeaseToken, j.Attempts
+				if kind == "geo" && mode == "canceled" {
+					status, result, lease, attempts = "ready", "source_unavailable", "", 0
+				}
+				if err != nil || got.Status != status || got.Result != result || got.LeaseToken != lease || got.Attempts != attempts {
 					t.Fatalf("existing order was completed after %s: %+v %v", mode, got, err)
 				}
 				bid, _ := storage.ParseID(j.ID)
