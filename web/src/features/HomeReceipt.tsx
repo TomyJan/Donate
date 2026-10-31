@@ -1,6 +1,7 @@
 import { motion, useIsPresent, usePresenceData } from 'motion/react';
 import { useLayoutEffect, useRef } from 'react';
 import { useApp } from '../app/context';
+import { useRequestScope } from '../app/useRequestScope';
 import { checkout } from '../components/OrderDialog';
 import { Avatar, Button } from '../components/ui';
 import { dateTime, money } from '../lib/api';
@@ -76,6 +77,7 @@ export function HomeReceipt({ record, reduced, onHeight, onDetail }: Props) {
 export function ReceiptBody({ record, onDetail }: Pick<Props, 'record' | 'onDetail'>) {
   const { t, report } = useApp();
   const owned = record.is_mine;
+  const { isCurrent } = useRequestScope(owned && record.status === 'pending' ? record.id : null);
   const digits = money(record.amount_fen).length + 1;
   return (
     <>
@@ -101,7 +103,14 @@ export function ReceiptBody({ record, onDetail }: Pick<Props, 'record' | 'onDeta
               {t('details')}
             </Button>
             {record.status === 'pending' && (
-              <Button className="d-primary" onClick={() => void checkout(record.id).catch(report)}>
+              <Button
+                className="d-primary"
+                onClick={() =>
+                  void checkout(record.id, isCurrent).catch((error) => {
+                    if (isCurrent()) report(error);
+                  })
+                }
+              >
                 {t('continue')}
               </Button>
             )}

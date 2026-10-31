@@ -32,14 +32,15 @@ export function orderCopyText(order: Order, t: (key: string) => string) {
     `${t('messageColumn')}:\n${order.message || t('noMessage')}`,
   ].join('\n');
 }
-export async function checkout(id: string, isCurrent?: () => boolean) {
+export async function checkout(id: string, isCurrent: () => boolean) {
+  if (!isCurrent()) return;
   const v = await api<{ mode: string; url: string; fields?: Record<string, string> }>(
     'order/payment/start',
     { id },
     undefined,
     isCurrent,
   );
-  if (isCurrent && !isCurrent()) return;
+  if (!isCurrent()) return;
   rememberPayment(id);
   if (v.mode === 'redirect') {
     location.assign(v.url);

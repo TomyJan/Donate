@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, ChevronDown } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../app/context';
+import { useRequestScope } from '../app/useRequestScope';
 import { AnimatedHeight } from '../components/AnimatedHeight';
 import { ConstrainedInput } from '../components/ConstrainedInput';
 import { MessageInput } from '../components/MessageInput';
@@ -50,6 +51,11 @@ export function Home() {
     [busy, setBusy] = useState(false),
     [height, setHeight] = useState(180);
   const requestKey = useRef(crypto.randomUUID());
+  const { scope, isCurrent } = useRequestScope('home-payment');
+  // biome-ignore lint/correctness/useExhaustiveDependencies: A replacement session revokes the previous payment's busy state.
+  useEffect(() => {
+    setBusy(false);
+  }, [scope]);
   const identity = profile ? `${profile.id}:${profile.csrf_token}` : 'guest';
   useEffect(() => {
     setDetail((value) => (value?.identity === identity ? value : null));
@@ -214,21 +220,29 @@ export function Home() {
       return;
     }
     const fen = amountFen(draft.amount);
-    if (fen === null || busy || payment.locked) return;
+    if (fen === null || busy || payment.locked || !isCurrent()) return;
     setBusy(true);
     try {
-      const order = await api<Order>('order/create', {
-        amount_fen: fen,
-        channel: draft.channel,
-        message: draft.message,
-        idempotency_key: requestKey.current,
-      });
-      await checkout(order.id);
+      const order = await api<Order>(
+        'order/create',
+        {
+          amount_fen: fen,
+          channel: draft.channel,
+          message: draft.message,
+          idempotency_key: requestKey.current,
+        },
+        undefined,
+        isCurrent,
+      );
+      if (!isCurrent()) return;
+      await checkout(order.id, isCurrent);
     } catch (e) {
-      report(e);
-      await list.refetch();
+      if (isCurrent()) {
+        report(e);
+        await list.refetch();
+      }
     } finally {
-      setBusy(false);
+      if (isCurrent()) setBusy(false);
     }
   };
   const chooseMine = () => {
