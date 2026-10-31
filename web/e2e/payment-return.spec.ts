@@ -207,6 +207,80 @@ test('a verified payment pauses for a second, slowly files the receipt and resto
   await expect(page.locator('.r-write .r-ticket')).toHaveAttribute('data-payment-phase', 'idle');
 });
 
+test('a slow label transition cannot skip confirmed payment before its full visible second', async ({
+  page,
+}) => {
+  await prepare(page);
+  await page.addInitScript(() => {
+    // Exercise real browser animations with a slow exit, independently of the status timer.
+    const animate = Element.prototype.animate;
+    let slowPaymentLabel = true;
+    document.addEventListener('resume-payment-labels', () => {
+      slowPaymentLabel = false;
+    });
+    Element.prototype.animate = function (...args) {
+      const animation = animate.apply(this, args);
+      if (this.classList.contains('payment-button-label')) {
+        if (slowPaymentLabel) animation.playbackRate = 0.05;
+        animation.addEventListener(
+          'finish',
+          () => {
+            if (this.textContent?.includes('查询成功') && getComputedStyle(this).opacity === '1')
+              document.dispatchEvent(new Event('payment-confirmation-entered'));
+          },
+          { once: true },
+        );
+      }
+      return animation;
+    };
+  });
+  await page.goto(`/?payment=returned&order=${orderID}`);
+  const ticket = page.locator('.r-write .r-ticket');
+  const label = ticket.locator('.payment-button-label');
+  await expect(ticket).toHaveAttribute('data-payment-phase', 'confirmed');
+  await expect
+    .poll(() =>
+      label.evaluate((node) => node.getAnimations().some((animation) => animation.playbackRate === 0.05)),
+    )
+    .toBe(true);
+  await page.waitForTimeout(1300);
+  await expect(ticket).toHaveAttribute('data-payment-phase', 'confirmed');
+  const visibleDuration = await page.evaluate(() => {
+    const ticket = document.querySelector<HTMLElement>('.r-write .r-ticket');
+    if (!ticket) throw new Error('Payment ticket is missing');
+    const elapsed = new Promise<number>((resolve, reject) => {
+      let visibleAt: number | undefined;
+      const entered = () => {
+        visibleAt ??= performance.now();
+      };
+      document.addEventListener('payment-confirmation-entered', entered);
+      const observer = new MutationObserver(() => {
+        if (ticket.dataset.paymentPhase === 'filing' || ticket.dataset.paymentPhase === 'complete') {
+          observer.disconnect();
+          document.removeEventListener('payment-confirmation-entered', entered);
+          if (visibleAt === undefined) reject(new Error('Confirmed label was skipped'));
+          else resolve(performance.now() - visibleAt);
+        }
+      });
+      observer.observe(ticket, { attributes: true, attributeFilter: ['data-payment-phase'] });
+    });
+    document.dispatchEvent(new Event('resume-payment-labels'));
+    for (const animation of document.getAnimations()) {
+      if (
+        animation.effect instanceof KeyframeEffect &&
+        animation.effect.target instanceof Element &&
+        animation.effect.target.classList.contains('payment-button-label')
+      )
+        animation.finish();
+    }
+    return elapsed;
+  });
+  // Native animation and DOM events share the page clock; allow only timer rounding.
+  expect(visibleDuration).toBeGreaterThanOrEqual(999);
+  await expect(ticket).toHaveAttribute('data-payment-phase', 'filing');
+  await expect(ticket).toHaveAttribute('data-payment-phase', 'complete', { timeout: 8000 });
+});
+
 test('the same opaque paper lands on the receipt before the paid row is revealed or refetched', async ({
   page,
 }, info) => {

@@ -307,6 +307,10 @@ export function Home() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: reduced ? 0 : -5 }}
                   transition={{ duration: reduced ? 0 : 0.22, ease: [0.2, 0.75, 0.25, 1] }}
+                  onAnimationComplete={(definition) => {
+                    if (typeof definition === 'object' && 'opacity' in definition && definition.opacity === 1)
+                      payment.confirmationShown();
+                  }}
                 >
                   {payment.locked ? (
                     <PaymentReturnLabel payment={payment} />

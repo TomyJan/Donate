@@ -6,7 +6,7 @@ import { clearPaymentReturn, paymentReturnTarget } from '../lib/payment-return';
 import type { Order, Profile } from '../lib/types';
 
 type Phase = 'idle' | 'login' | 'checking' | 'pending' | 'error' | 'confirmed' | 'filing' | 'complete';
-type State = { phase: Phase; order?: Order; error?: unknown };
+type State = { phase: Phase; order?: Order; error?: unknown; confirmationVisible?: boolean };
 const minimumStatusMs = 1000;
 
 export function usePaymentReturn() {
@@ -88,16 +88,23 @@ export function usePaymentReturn() {
   }, [target, dismissed, loading, owner, csrfToken, client]);
 
   useEffect(() => {
-    if (state.phase !== 'confirmed') return;
+    if (state.phase !== 'confirmed' || !state.confirmationVisible) return;
     const timer = setTimeout(
-      () =>
-        setState((previous) =>
-          previous.phase === 'confirmed' ? { ...previous, phase: 'filing' } : previous,
-        ),
+      () => setState((previous) => (previous === state ? { ...previous, phase: 'filing' } : previous)),
       minimumStatusMs,
     );
     return () => clearTimeout(timer);
-  }, [state.phase]);
+  }, [state]);
+
+  // AnimatePresence can keep the previous label mounted while its exit finishes.
+  // Start the visible second only after this confirmation actually enters.
+  const confirmationShown = useCallback(() => {
+    setState((previous) =>
+      previous === state && previous.phase === 'confirmed' && !previous.confirmationVisible
+        ? { ...previous, confirmationVisible: true }
+        : previous,
+    );
+  }, [state]);
 
   const finish = useCallback(() => {
     clearPaymentReturn(target.id);
@@ -114,6 +121,7 @@ export function usePaymentReturn() {
     id: target.id,
     locked: state.phase !== 'idle' && state.phase !== 'complete',
     retry: () => setTarget((previous) => ({ ...previous })),
+    confirmationShown,
     finish,
     leave,
   };

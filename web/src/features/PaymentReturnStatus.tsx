@@ -1,5 +1,6 @@
 import { Check, LoaderCircle } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
+import { useEffect } from 'react';
 import { useApp } from '../app/context';
 import { Button } from '../components/ui';
 import { errorMessage } from '../lib/errors';
@@ -7,6 +8,13 @@ import type { usePaymentReturn } from './usePaymentReturn';
 
 export function PaymentReturnLabel({ payment }: { payment: ReturnType<typeof usePaymentReturn> }) {
   const { t } = useApp();
+  const reduced = useReducedMotion();
+  const { phase, confirmationShown } = payment;
+  useEffect(() => {
+    // With reduced motion there is no entrance animation to acknowledge. This
+    // effect runs in the mounted label, after AnimatePresence releases it.
+    if (reduced && phase === 'confirmed') confirmationShown();
+  }, [reduced, phase, confirmationShown]);
   const confirmed = payment.phase === 'confirmed' || payment.phase === 'filing';
   const text =
     payment.phase === 'login'

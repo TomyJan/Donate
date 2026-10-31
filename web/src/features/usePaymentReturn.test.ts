@@ -79,11 +79,86 @@ it.each([
   expect(result.current.phase).toBe(phase);
   if (phase === 'confirmed') {
     expect(result.current.order?.id).toBe(order.id);
+    act(() => result.current.confirmationShown());
     await advance(999);
     expect(result.current.phase).toBe('confirmed');
     await advance(1);
     expect(result.current.phase).toBe('filing');
   }
+});
+
+it('does not start filing while the confirmed label is still waiting to enter', async () => {
+  vi.stubGlobal('fetch', async () => response());
+  const { result } = renderReturn();
+  await advance(1000);
+  expect(result.current.phase).toBe('confirmed');
+  await advance(5000);
+  expect(result.current.phase).toBe('confirmed');
+  act(() => result.current.confirmationShown());
+  await advance(999);
+  expect(result.current.phase).toBe('confirmed');
+  await advance(1);
+  expect(result.current.phase).toBe('filing');
+});
+
+it('does not restart the visible second after a duplicate entrance notification', async () => {
+  vi.stubGlobal('fetch', async () => response());
+  const { result } = renderReturn();
+  await advance(1000);
+  act(() => result.current.confirmationShown());
+  await advance(600);
+  act(() => result.current.confirmationShown());
+  await advance(399);
+  expect(result.current.phase).toBe('confirmed');
+  await advance(1);
+  expect(result.current.phase).toBe('filing');
+});
+
+it('ignores a prior label entrance callback after retrying the payment check', async () => {
+  vi.stubGlobal('fetch', async () => response());
+  const { result } = renderReturn();
+  await advance(1000);
+  const previousEntrance = result.current.confirmationShown;
+  act(() => result.current.retry());
+  await advance(1000);
+  expect(result.current.phase).toBe('confirmed');
+  act(() => previousEntrance());
+  await advance(2000);
+  expect(result.current.phase).toBe('confirmed');
+  act(() => result.current.confirmationShown());
+  await advance(1000);
+  expect(result.current.phase).toBe('filing');
+});
+
+it('cancels filing when leaving after the confirmation becomes visible', async () => {
+  vi.stubGlobal('fetch', async () => response());
+  const { result } = renderReturn();
+  await advance(1000);
+  act(() => result.current.confirmationShown());
+  await advance(500);
+  const previousEntrance = result.current.confirmationShown;
+  act(() => result.current.leave());
+  act(() => previousEntrance());
+  await advance(2000);
+  expect(result.current.phase).toBe('idle');
+  expect(result.current.locked).toBe(false);
+});
+
+it('cancels the visible confirmation when the signed-in account changes', async () => {
+  vi.stubGlobal('fetch', async () => response());
+  const { result, rerender } = renderReturn();
+  await advance(1000);
+  act(() => result.current.confirmationShown());
+  await advance(500);
+  const previousEntrance = result.current.confirmationShown;
+  app.profile = { id: 'different-user' };
+  client.setQueryData(['profile'], app.profile);
+  rerender();
+  act(() => previousEntrance());
+  await advance(2000);
+  expect(result.current.phase).toBe('error');
+  expect(result.current.error).toMatchObject({ code: 'FORBIDDEN' });
+  expect(result.current.order).toBeUndefined();
 });
 
 it('counts request time toward the minimum instead of delaying a slow success another second', async () => {
