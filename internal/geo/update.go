@@ -42,6 +42,9 @@ func NewUpdater(s *Service, c config.Config, l *slog.Logger) *Updater {
 		if req.URL.Scheme != "https" && !(c.Development && req.URL.Scheme == "http") {
 			return errors.New("下载重定向必须使用 HTTPS")
 		}
+		// Redirects can expose license keys or signed URLs through Go's automatic
+		// Referer, including credentials introduced by an intermediate download hop.
+		req.Header.Del("Referer")
 		// Go also trusts subdomains and other ports by default. Download
 		// credentials belong only to the explicitly configured origin.
 		if !sameDownloadOrigin(req.URL, via[0].URL) {

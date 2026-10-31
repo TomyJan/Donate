@@ -117,3 +117,55 @@ func TestDownloadRedirectCredentialsStayWithinOriginalOrigin(t *testing.T) {
 		})
 	}
 }
+
+func TestDownloadRedirectDoesNotSendReferer(t *testing.T) {
+	data := mustReadDatabase(t, syntheticXDB(t, "1.1.1.1", "中国|广东|深圳|网络|CN"))
+	for _, tc := range []struct {
+		name      string
+		locations []string
+	}{
+		{"same origin", []string{"https://downloads.vendor.test/database.xdb"}},
+		{"different host", []string{"https://cdn.vendor.test/database.xdb"}},
+		{"subdomain", []string{"https://mirror.downloads.vendor.test/database.xdb"}},
+		{"different port", []string{"https://downloads.vendor.test:8443/database.xdb"}},
+		{"multiple redirects", []string{
+			"https://downloads.vendor.test/signed?token=synthetic-intermediate",
+			"https://cdn.vendor.test/signed?signature=synthetic-cdn",
+			"https://mirror.vendor.test/database.xdb",
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			u := NewUpdater(nil, config.Config{}, nil)
+			var referers []string
+			u.HTTP.Transport = transport(func(r *http.Request) (*http.Response, error) {
+				hop := len(referers)
+				referers = append(referers, r.Header.Get("Referer"))
+				if hop == 0 && r.URL.Query().Get("license_key") != "synthetic-initial" {
+					t.Error("initial request lost its required download query")
+				}
+				if hop < len(tc.locations) {
+					return &http.Response{StatusCode: http.StatusFound, Header: http.Header{"Location": {tc.locations[hop]}}, Body: io.NopCloser(strings.NewReader("")), Request: r}, nil
+				}
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(string(data))), Request: r}, nil
+			})
+			stage, err := u.download(context.Background(), databaseSource{"xdb4", filepath.Join(t.TempDir(), "live.xdb"), "https://account:license@downloads.vendor.test/latest?license_key=synthetic-initial"})
+			if stage != "" {
+				defer os.Remove(stage)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(referers) != len(tc.locations)+1 {
+				t.Fatalf("download did not follow the complete redirect chain: %v", referers)
+			}
+			for hop, referer := range referers {
+				if referer != "" {
+					t.Errorf("download hop %d leaked its previous URL in Referer: %q", hop, referer)
+				}
+			}
+			if got := mustReadDatabase(t, stage); string(got) != string(data) {
+				t.Fatal("downloaded database differs")
+			}
+		})
+	}
+}
