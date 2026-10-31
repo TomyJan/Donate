@@ -247,6 +247,8 @@ export function TaskQueue() {
           value={filters}
           onChange={change}
           retry={retryButton([...selection], t('taskRetrySelected'))}
+          hasSelection={selection.size > 0}
+          onClearSelection={() => setSelection(new Set())}
         />
         {list.error && (
           <RequestError error={list.error} busy={list.isFetching} onRetry={() => void list.refetch()} />

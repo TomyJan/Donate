@@ -338,8 +338,36 @@ test('task workspace stays contained and five tabs keep equal height across size
         await detail.getByRole('button', { name: '关闭', exact: true }).click();
         await expect(detail).toHaveCount(0);
       }
-      await page.locator('.task-table tbody .custom-check').first().uncheck();
+      const moreFilters = page.getByRole('button', { name: '更多筛选', exact: true });
+      await moreFilters.click();
+      const clearSelection = page.getByRole('button', { name: '取消选择', exact: true });
+      await expect(clearSelection).toBeVisible();
+      await expect(clearSelection).toBeEnabled();
+      await clearSelection.scrollIntoViewIfNeeded();
+      const clearGeometry = await clearSelection.evaluate((button) => {
+        const panel = button.closest('.task-filter-panel');
+        if (!panel) throw new Error('Clear selection must stay inside the expanded filter panel');
+        const box = button.getBoundingClientRect();
+        const bounds = panel.getBoundingClientRect();
+        return {
+          x: box.x,
+          right: box.right,
+          height: box.height,
+          panelLeft: bounds.left,
+          panelRight: bounds.right,
+        };
+      });
+      expect(clearGeometry.x).toBeGreaterThanOrEqual(clearGeometry.panelLeft);
+      expect(clearGeometry.x).toBeGreaterThanOrEqual(0);
+      expect(clearGeometry.right).toBeLessThanOrEqual(clearGeometry.panelRight);
+      expect(clearGeometry.right).toBeLessThanOrEqual(width);
+      expect(clearGeometry.height).toBeGreaterThanOrEqual(36);
+      await expect(tools.getByRole('button', { name: '取消选择', exact: true })).toHaveCount(0);
+      await clearSelection.click();
+      await expect(clearSelection).toHaveCount(0);
+      await expect(page.locator('.task-table tbody .custom-check').first()).not.toBeChecked();
       await expect(page.getByRole('button', { name: '重试所选', exact: true })).toBeDisabled();
+      await moreFilters.click();
     }
   }
 });

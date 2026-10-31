@@ -317,6 +317,83 @@ it('keeps bulk retry after search and checked selection out of the heading', asy
   ).not.toBeNull();
   expect(document.querySelector('.task-workspace .a-heading')).not.toContainElement(retry);
 });
+it.each(['other rows', 'no rows'] as const)(
+  'clears off-page selection without changing the view after polling leaves %s',
+  async (remaining) => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    filterWidth = 280;
+    let items: TaskItem[] = [task];
+    const fixtureFetch = globalThis.fetch;
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(String(input), 'http://localhost');
+      if (!url.pathname.endsWith('/task/list')) return fixtureFetch(input, init);
+      requests.push(url);
+      return ok({
+        items,
+        total: items.length ? (remaining === 'other rows' ? 41 : 10) : 0,
+        page: Number(url.searchParams.get('page')),
+        page_size: Number(url.searchParams.get('page_size')),
+      });
+    });
+    await openTasks();
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search tasks' }), { target: { value: 'Alice' } });
+    fireEvent.click(document.querySelector('.task-stat.task-failed') as HTMLElement);
+    fireEvent.click(screen.getByRole('button', { name: 'Recorded executions' }));
+    await waitFor(() => expect(client.isFetching({ queryKey: ['admin-tasks'] })).toBe(0));
+    if (remaining === 'other rows') {
+      fireEvent.click(screen.getByRole('button', { name: 'Next' }));
+      await waitFor(() => expect(client.isFetching({ queryKey: ['admin-tasks'] })).toBe(0));
+    }
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Select task DONATE-101' }));
+    items = remaining === 'other rows' ? [{ ...task, id: 'task-two', merchant_order_no: 'DONATE-202' }] : [];
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5001);
+    });
+    await waitFor(() =>
+      expect(screen.queryByRole('checkbox', { name: 'Select task DONATE-101' })).not.toBeInTheDocument(),
+    );
+    const retry = screen.getByRole('button', { name: 'Retry selected' });
+    expect(retry).toBeEnabled();
+    if (remaining === 'other rows') {
+      const all = screen.getByRole('checkbox', { name: 'Select tasks on this page' });
+      fireEvent.click(all);
+      fireEvent.click(all);
+      expect(screen.getByRole('checkbox', { name: 'Select task DONATE-202' })).not.toBeChecked();
+      expect(retry).toBeEnabled();
+    } else {
+      expect(document.querySelector('.task-table')).not.toBeInTheDocument();
+    }
+    const expectedPage = remaining === 'other rows' ? '2' : '1';
+    const last = requests.filter((url) => url.pathname.endsWith('/task/list')).at(-1);
+    expect(last?.searchParams.get('search')).toBe('Alice');
+    expect(last?.searchParams.get('status')).toBe('failed');
+    expect(last?.searchParams.get('sort')).toBe('total_attempts');
+    expect(last?.searchParams.get('direction')).toBe('desc');
+    expect(last?.searchParams.get('page')).toBe(expectedPage);
+    const listRequests = requests.filter((url) => url.pathname.endsWith('/task/list')).length;
+    fireEvent.click(screen.getByRole('button', { name: 'More filters' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Clear selection' }));
+    expect(retry).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Clear selection' })).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Search tasks' })).toHaveValue('Alice');
+    expect(document.querySelector('.task-stat.task-failed')).toHaveAttribute('aria-pressed', 'true');
+    await act(async () => {});
+    expect(requests.filter((url) => url.pathname.endsWith('/task/list'))).toHaveLength(listRequests);
+    const listKeys = client
+      .getQueryCache()
+      .getAll()
+      .filter(
+        (entry) =>
+          entry.getObserversCount() && entry.queryKey[0] === 'admin-tasks' && entry.queryKey[2] === 'list',
+      );
+    expect(listKeys).toHaveLength(1);
+    expect(listKeys[0].queryKey.slice(-3)).toEqual([
+      { key: 'total_attempts', direction: 'desc' },
+      Number(expectedPage),
+      remaining === 'other rows' ? 20 : 10,
+    ]);
+  },
+);
 it('tucks filters progressively into an inert animated panel at narrow widths', async () => {
   await openTasks();
   expect(screen.getByRole('combobox', { name: 'Task type' })).toBeInTheDocument();

@@ -12,10 +12,14 @@ export function TaskQueueFilters({
   value,
   onChange,
   retry,
+  hasSelection,
+  onClearSelection,
 }: {
   value: Filters;
   onChange: (value: Partial<Filters>) => void;
   retry: ReactNode;
+  hasSelection: boolean;
+  onClearSelection: () => void;
 }) {
   const { t, notify } = useApp();
   const reduced = useReducedMotion();
@@ -153,6 +157,11 @@ export function TaskQueueFilters({
             >
               {t('reset')}
             </Button>
+            {hasSelection && (
+              <Button className="d-ghost" onClick={onClearSelection}>
+                {t('clear')}
+              </Button>
+            )}
             <Button className="d-primary" onClick={applyDates}>
               {t('apply')}
             </Button>

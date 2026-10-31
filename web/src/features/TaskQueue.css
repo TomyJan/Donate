@@ -303,6 +303,7 @@
 }
 .task-filter-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   flex-basis: 100%;
   gap: 12px;
