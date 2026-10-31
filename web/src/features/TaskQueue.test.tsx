@@ -276,6 +276,58 @@ it('pauses polling while hidden and refreshes only task queries when visible', a
       .every((u) => u.pathname.includes('/admin/task/')),
   ).toBe(true);
 });
+it('allows eight-second background task responses to finish across polling ticks', async () => {
+  await openTasks();
+  await screen.findByText('20', { selector: '.task-stat strong' });
+  fireEvent.click(screen.getByRole('button', { name: 'Task details DONATE-101' }));
+  const detail = await screen.findByRole('dialog', { name: 'Task details' });
+  await within(detail).findByText('request-101');
+  await within(detail).findByText('Gateway unavailable');
+
+  const hidden = vi.spyOn(document, 'hidden', 'get').mockReturnValue(true);
+  fireEvent(document, new Event('visibilitychange'));
+  vi.useFakeTimers();
+  const fixtureFetch = globalThis.fetch;
+  vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+    const path = String(input);
+    if (!path.includes('/admin/task/')) return fixtureFetch(input, init);
+    await new Promise<void>((resolve, reject) => {
+      const timer = window.setTimeout(resolve, 8000);
+      init?.signal?.addEventListener(
+        'abort',
+        () => {
+          window.clearTimeout(timer);
+          reject(init.signal?.reason);
+        },
+        { once: true },
+      );
+    });
+    const response = await fixtureFetch(input, init);
+    const body = await response.json();
+    if (path.includes('/task/list?')) body.data.items[0].nickname = 'Slow donor';
+    if (path.includes('/task/overview?')) body.data.counts.ready = 27;
+    if (path.includes('/task/detail?')) body.data.request_id = 'slow-request';
+    if (path.includes('/task/history?')) body.data.items[0].message = 'Slow history update';
+    return Response.json(body);
+  });
+  hidden.mockReturnValue(false);
+  fireEvent(document, new Event('visibilitychange'));
+  // First poll starts at 5s. The 10s poll must share those requests, which
+  // resolve at 13s: slower than one poll, still below the API's 15s timeout.
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(5000);
+  });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(5000);
+  });
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(3001);
+  });
+  expect(document.querySelector('.task-table tbody')).toHaveTextContent('Slow donor');
+  expect(document.querySelector('.task-stat strong')).toHaveTextContent('27');
+  expect(within(detail).getByText('slow-request')).toBeInTheDocument();
+  expect(within(detail).getByText('Slow history update')).toBeInTheDocument();
+});
 it('revokes an open retry confirmation after a list refresh error', async () => {
   await openTasks();
   fireEvent.click(screen.getByRole('button', { name: 'Retry DONATE-101' }));

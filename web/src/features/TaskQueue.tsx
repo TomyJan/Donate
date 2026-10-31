@@ -103,7 +103,8 @@ export function TaskQueue() {
   useEffect(() => {
     if (!scope || !auto || !visible) return;
     const timer = window.setInterval(() => {
-      void client.invalidateQueries({ queryKey: ['admin-tasks', scope] });
+      // Slow requests must finish before another automatic poll starts one.
+      void client.invalidateQueries({ queryKey: ['admin-tasks', scope] }, { cancelRefetch: false });
     }, 5000);
     return () => window.clearInterval(timer);
   }, [scope, auto, visible, client]);
