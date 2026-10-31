@@ -10,6 +10,7 @@ import { ActionConfirm } from './ActionConfirm';
 import { AdminLoading } from './AdminLoading';
 import { CopyButton } from './CopyButton';
 import { DialogActions } from './DialogActions';
+import { LocationCheck } from './LocationCheck';
 import { RequestError } from './RequestError';
 import { Avatar, Button, Modal } from './ui';
 import './OrderDialog.css';
@@ -265,6 +266,7 @@ export function OrderDialog({
                 </div>
               ))}
             </dl>
+            {admin && o.location_check && <LocationCheck check={o.location_check} />}
             <div className="detail-message">
               <span>{t('message').replace('（选填）', '').replace(' (optional)', '')}</span>
               <p>{o.message || t('noMessage')}</p>

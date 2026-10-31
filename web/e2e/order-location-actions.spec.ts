@@ -157,6 +157,94 @@ async function openOrder(page: Page) {
   return dialog;
 }
 
+test('location verification preserves the selected snapshot and expands without overflow', async ({
+  page,
+}) => {
+  await setup(page);
+  await page.route('**/api/v1/admin/order/detail?**', async (route) => {
+    await route.fulfill({
+      json: {
+        code: 'OK',
+        data: {
+          ...orders[0],
+          location: {
+            country: '中国',
+            province: '广东',
+            city: '广州',
+            district: '',
+            street: '',
+            isp: '',
+            asn: '',
+            source: 'xdb',
+            version: 'synthetic-v3',
+            queried_at: '2026-11-01T00:00:00Z',
+          },
+          location_check: {
+            country: '中国',
+            province: '',
+            city: '',
+            district: '',
+            street: '',
+            isp: '',
+            asn: '',
+            source: 'unknown',
+            version: '',
+            queried_at: '2026-11-01T00:01:00Z',
+            verification: 'conflict',
+            conflict: true,
+            evidence: [
+              {
+                source: 'xdb',
+                version: '2026-10-31T00:00:00Z',
+                country: '中国',
+                province: '广东',
+                city: '广州',
+                outcome: 'complete',
+                queried_at: '2026-11-01T00:01:00Z',
+              },
+              {
+                source: 'ip9',
+                country: '中国',
+                province: '浙江',
+                city: '杭州',
+                outcome: 'complete',
+                queried_at: '2026-11-01T00:01:00Z',
+              },
+            ],
+          },
+        },
+      },
+    });
+  });
+  const dialog = await openOrder(page);
+  await expect(dialog.locator('.detail-grid')).toContainText('中国 · 广东 · 广州');
+  const toggle = dialog.getByRole('button', { name: /属地核验/ });
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await toggle.click();
+  await expect(dialog.locator('.geo-check-panel')).toHaveCSS('opacity', '1');
+  await expect(dialog.locator('.geo-check-content')).toContainText('中国 · 浙江 · 杭州');
+  for (const width of [1280, 520, 390, 320]) {
+    await page.setViewportSize({ width, height: 1000 });
+    await expect
+      .poll(() =>
+        dialog.locator('.geo-check').evaluate((element) => element.scrollWidth - element.clientWidth),
+      )
+      .toBeLessThanOrEqual(1);
+    await expect
+      .poll(() =>
+        dialog.locator('.geo-check-content').evaluate((element) => element.scrollWidth - element.clientWidth),
+      )
+      .toBeLessThanOrEqual(1);
+  }
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect(dialog.locator('.geo-check li').first()).not.toHaveCSS(
+    'border-bottom-color',
+    'rgba(0, 0, 0, 0)',
+  );
+  await toggle.click();
+  await expect(dialog.locator('.geo-check-panel')).toHaveCSS('height', '0px');
+});
+
 test('dialog action rows fill the available width at desktop and narrow viewports', async ({ page }) => {
   await setup(page);
   const dialog = await openOrder(page);

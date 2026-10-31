@@ -4,6 +4,7 @@ import { taskLabel } from './TaskQueue';
 
 it.each([
   ['located_mmdb', '属地已更新', 'Location updated'],
+  ['located_xdb', '属地已更新（XDB）', 'Location updated (XDB)'],
   ['located_ip9', '属地已更新（ip9）', 'Location updated (ip9)'],
   ['located_ipyou', '属地已更新（ipyou）', 'Location updated (ipyou)'],
   ['located_i5p', '属地已更新（i5p）', 'Location updated (i5p)'],

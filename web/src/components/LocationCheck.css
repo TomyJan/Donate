@@ -1,0 +1,76 @@
+.d-app .geo-check {
+  min-width: 0;
+  margin-top: 16px;
+}
+.d-app .geo-check-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px;
+  font-size: 12px;
+  text-align: left;
+}
+.d-app .geo-check-toggle > .a-badge {
+  margin-left: auto;
+}
+.d-app .geo-check-toggle > svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  transition: transform 0.3s ease;
+}
+.d-app .geo-check-toggle[aria-expanded="true"] > svg {
+  transform: rotate(180deg);
+}
+.d-app .geo-check-panel {
+  overflow: hidden;
+}
+.d-app .geo-check-content {
+  padding: 8px;
+  font-size: 12px;
+}
+.d-app .geo-check-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  color: var(--d-muted);
+}
+.d-app .geo-check ul {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+}
+.d-app .geo-check li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 5px 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--d-line);
+  overflow-wrap: anywhere;
+}
+.d-app .geo-check li:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.d-app .geo-check li > strong {
+  min-width: 45px;
+  font-weight: 600;
+}
+.d-app .geo-check-region {
+  flex: 1 1 150px;
+}
+.d-app .geo-check-outcome {
+  color: var(--d-muted);
+}
+.d-app .geo-check small {
+  flex-basis: 100%;
+  color: var(--d-muted);
+  font-size: 11px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .d-app .geo-check-toggle > svg {
+    transition: none;
+  }
+}
