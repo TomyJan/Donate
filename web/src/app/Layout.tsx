@@ -13,6 +13,7 @@ import type { MenuItem } from '../components/ui';
 import { Avatar, Button, Menu, Modal } from '../components/ui';
 import { COOKIE_NOTICE_KEY, useLocalAcknowledgment } from '../lib/legal';
 import { useApp } from './context';
+import { useRequestScope } from './useRequestScope';
 import '../styles/legal.css';
 export function Layout() {
   const app = useApp();
@@ -20,7 +21,8 @@ export function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
   const admin = location.pathname.startsWith('/admin');
-  const [binding, setBinding] = useState('');
+  const [binding, setBinding] = useState<{ provider: string; isCurrent: () => boolean } | null>(null);
+  const { isCurrent } = useRequestScope('account-binding');
   const [cookieAcknowledged, setCookieAcknowledged] = useLocalAcknowledgment(COOKIE_NOTICE_KEY);
   const themes = [
     ['system', Monitor],
@@ -156,15 +158,31 @@ export function Layout() {
                   <span className="d-account-id">{profile.id}</span>
                 </div>
               </div>
-              <IdentityBindings bindings={profile.bindings} available={site?.providers} onBind={setBinding} />
+              <IdentityBindings
+                bindings={profile.bindings}
+                available={site?.providers}
+                onBind={(provider) => {
+                  if (isCurrent()) setBinding({ provider, isCurrent });
+                }}
+              />
             </>
           )}
         </Modal>
-        <Modal open={!!binding} onOpenChange={(v) => !v && setBinding('')} title={t('confirmBind')}>
+        <Modal
+          open={!!binding && binding.isCurrent()}
+          onOpenChange={(v) => !v && setBinding(null)}
+          title={t('confirmBind')}
+        >
           <p>{t('bindHint')}</p>
           <DialogActions>
-            <Button onClick={() => setBinding('')}>{t('cancel')}</Button>
-            <Button className="d-primary" onClick={() => void app.login(binding, true)}>
+            <Button onClick={() => setBinding(null)}>{t('cancel')}</Button>
+            <Button
+              className="d-primary"
+              onClick={() => {
+                setBinding(null);
+                if (binding?.isCurrent()) void app.login(binding.provider, true, binding.isCurrent);
+              }}
+            >
               {t('confirm')}
             </Button>
           </DialogActions>

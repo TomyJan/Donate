@@ -31,7 +31,7 @@ type AppState = {
   report: (e: unknown) => void;
   refresh: () => Promise<void>;
   retrySite: () => Promise<void>;
-  login: (provider: string, bind?: boolean) => Promise<void>;
+  login: (provider: string, bind?: boolean, isBindingCurrent?: () => boolean) => Promise<void>;
   logout: () => Promise<void>;
   toasts: Toast[];
   dismiss: (id: string) => void;
@@ -159,13 +159,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     savePreference('donate-theme', v);
     setAppearance(v);
   };
-  const login = async (provider: string, bind = false) => {
+  const login = async (provider: string, bind = false, isBindingCurrent?: () => boolean) => {
     if (!bind && !legalAccepted) {
       notify(t('acceptPoliciesFirst'), true);
       setLoginOpen(true);
       return;
     }
+    let valid = true;
+    const sameSession = () => {
+      const live = client.getQueryData<Profile | null>(['profile']);
+      return !!current && live?.id === current.id && live.csrf_token === current.csrf_token;
+    };
+    const isCurrent = () => !bind || (valid && sameSession() && (isBindingCurrent?.() ?? true));
+    const unsubscribe = bind
+      ? client.getQueryCache().subscribe((event) => {
+          if (event.query.queryKey[0] === 'profile' && !sameSession()) valid = false;
+        })
+      : () => {};
     try {
+      if (!isCurrent()) return;
       const payment = paymentReturnTarget();
       let returnTo = location.pathname.startsWith('/admin') ? '/admin' : '/';
       if (payment.requested && payment.id) {
@@ -191,13 +203,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
         if (client.getQueryData<Profile | null>(['profile'])) return;
         setCSRF(anonymous.csrf_token);
       }
-      const v = await api<{ authorization_url: string }>(bind ? 'user/identity/bind' : 'user/login', {
-        provider,
-        return_to: returnTo,
-      });
-      location.assign(v.authorization_url);
+      if (!isCurrent()) return;
+      const v = await api<{ authorization_url: string }>(
+        bind ? 'user/identity/bind' : 'user/login',
+        { provider, return_to: returnTo },
+        undefined,
+        isCurrent,
+      );
+      if (isCurrent()) location.assign(v.authorization_url);
     } catch (e) {
-      report(e);
+      if (isCurrent()) report(e);
+    } finally {
+      unsubscribe();
     }
   };
   const logout = async () => {
