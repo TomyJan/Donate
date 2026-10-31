@@ -82,7 +82,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   );
   const site = useQuery({
     queryKey: ['site'],
-    queryFn: () => api<Site>('site/info'),
+    queryFn: ({ signal }) => api<Site>('site/info', undefined, signal),
     retry: 1,
     staleTime: 60000,
   });
@@ -175,7 +175,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       if (!bind && !current) {
         const anonymous = await client.fetchQuery({
           queryKey: ['site'],
-          queryFn: () => api<Site>('site/info'),
+          queryFn: ({ signal }) => api<Site>('site/info', undefined, signal),
           staleTime: 60000,
         });
         if (client.getQueryData<Profile | null>(['profile'])) return;
