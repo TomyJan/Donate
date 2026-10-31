@@ -98,15 +98,16 @@ export async function api<T>(
     signal,
   );
 }
-export async function downloadExport(id: string) {
+export async function downloadExport(id: string, isCurrent?: () => boolean) {
   const path = 'admin/order/export';
   const blob = await request(path, { operation_id: id }, async (response) => {
     if (!response.ok || !response.headers.get('Content-Type')?.includes('text/csv')) {
-      await envelope(path, response);
-      throw responseError(path, response);
+      await envelope(path, response, isCurrent);
+      throw responseError(path, response, isCurrent);
     }
     return response.blob();
   });
+  if (isCurrent && !isCurrent()) return;
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

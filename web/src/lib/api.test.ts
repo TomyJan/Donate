@@ -5,6 +5,35 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
+it.each(['denied', 'csv'] as const)('ignores a stale export %s response', async (kind) => {
+  let current = true;
+  let finish: ((value: Response) => void) | undefined;
+  vi.stubGlobal(
+    'fetch',
+    () =>
+      new Promise<Response>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const forbidden = vi.fn();
+  window.addEventListener('admin-forbidden', forbidden);
+  const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+  try {
+    const pending = downloadExport('old-export', () => current);
+    current = false;
+    finish?.(
+      kind === 'denied'
+        ? Response.json({ code: 'FORBIDDEN', data: null }, { status: 403 })
+        : new Response('id,amount\nold,100', { headers: { 'Content-Type': 'text/csv' } }),
+    );
+    if (kind === 'denied') await expect(pending).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    else await pending;
+    expect(forbidden).not.toHaveBeenCalled();
+    expect(click).not.toHaveBeenCalled();
+  } finally {
+    window.removeEventListener('admin-forbidden', forbidden);
+  }
+});
 it.each(['json', 'text'])('ignores a canceled request denial received as %s', async (format) => {
   const controller = new AbortController();
   let finish: ((response: Response) => void) | undefined;

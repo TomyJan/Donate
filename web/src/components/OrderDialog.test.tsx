@@ -47,6 +47,123 @@ function renderOrder(admin = false) {
 }
 const response = (data: unknown) => new Response(JSON.stringify({ code: 'OK', data }), { status: 200 });
 
+function rerenderOrder(view: ReturnType<typeof renderOrder>, id: string | null = 'order-uuid') {
+  view.rerender(
+    <QueryClientProvider client={view.client}>
+      <div className="d-app">
+        <OrderDialog id={id} onClose={() => {}} admin />
+      </div>
+    </QueryClientProvider>,
+  );
+}
+const confirmation = {
+  id: 'hide-preview',
+  action: 'hide_order',
+  expires_at: '2099-01-01T00:00:00Z',
+  items: [{ id: 'order-uuid', result: 'ready' }],
+};
+
+it.each([
+  ['preview', 401, 'credentials'],
+  ['preview', 403, 'credentials'],
+  ['execute', 401, 'credentials'],
+  ['execute', 403, 'credentials'],
+  ['reconcile', 401, 'credentials'],
+  ['reconcile', 403, 'credentials'],
+  ['execute', 403, 'unmount'],
+  ['reconcile', 401, 'unmount'],
+] as const)('ignores an old %s HTTP %s denial after %s', async (endpoint, status, boundary) => {
+  session.profile = { id: 'alice', csrf_token: 'old-session' };
+  let finish: ((value: Response) => void) | undefined;
+  vi.stubGlobal('fetch', async (input: string) => {
+    const path = String(input);
+    if (path.endsWith(`/${endpoint}`))
+      return new Promise<Response>((resolve) => {
+        finish = resolve;
+      });
+    if (path.endsWith('/preview')) return response(confirmation);
+    return response({ ...order, protocol: 'v2' });
+  });
+  const invalid = vi.fn(),
+    forbidden = vi.fn();
+  window.addEventListener('session-invalid', invalid);
+  window.addEventListener('admin-forbidden', forbidden);
+  try {
+    const view = renderOrder(true);
+    if (endpoint === 'reconcile')
+      fireEvent.click(await screen.findByRole('button', { name: 'Reconcile payment' }));
+    else {
+      fireEvent.click(await screen.findByRole('button', { name: 'Hide order' }));
+      if (endpoint === 'execute') {
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled());
+        fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+      }
+    }
+    await waitFor(() => expect(finish).toBeTypeOf('function'));
+    if (boundary === 'unmount') view.unmount();
+    else {
+      session.profile = { id: 'alice', csrf_token: 'replacement-session' };
+      rerenderOrder(view);
+      await screen.findByRole('button', { name: 'Hide order' });
+    }
+    expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument();
+    await act(async () => {
+      finish?.(
+        Response.json({ code: status === 401 ? 'UNAUTHORIZED' : 'FORBIDDEN', data: null }, { status }),
+      );
+    });
+    expect(invalid).not.toHaveBeenCalled();
+    expect(forbidden).not.toHaveBeenCalled();
+    expect(report).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+    if (boundary !== 'unmount') expect(screen.getByRole('button', { name: 'Hide order' })).toBeEnabled();
+  } finally {
+    window.removeEventListener('session-invalid', invalid);
+    window.removeEventListener('admin-forbidden', forbidden);
+  }
+});
+
+it.each([
+  ['execute', 'credentials'],
+  ['reconcile', 'credentials'],
+  ['execute', 'reopen'],
+  ['reconcile', 'reopen'],
+] as const)('ignores old successful %s effects after %s', async (endpoint, boundary) => {
+  session.profile = { id: 'alice', csrf_token: 'old-session' };
+  let finish: ((value: Response) => void) | undefined;
+  vi.stubGlobal('fetch', async (input: string) => {
+    const path = String(input);
+    if (path.endsWith(`/${endpoint}`))
+      return new Promise<Response>((resolve) => {
+        finish = resolve;
+      });
+    if (path.endsWith('/preview')) return response(confirmation);
+    return response({ ...order, protocol: 'v2' });
+  });
+  const view = renderOrder(true);
+  if (endpoint === 'reconcile')
+    fireEvent.click(await screen.findByRole('button', { name: 'Reconcile payment' }));
+  else {
+    fireEvent.click(await screen.findByRole('button', { name: 'Hide order' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Confirm' })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+  }
+  await waitFor(() => expect(finish).toBeTypeOf('function'));
+  if (boundary === 'credentials') session.profile = { id: 'bob', csrf_token: 'replacement-session' };
+  else rerenderOrder(view, null);
+  rerenderOrder(view);
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Hide order' })).toBeEnabled());
+  const invalidate = vi.spyOn(view.client, 'invalidateQueries');
+  const refetch = vi.spyOn(view.client, 'refetchQueries');
+  await act(async () => {
+    finish?.(response(confirmation));
+  });
+  expect(notify).not.toHaveBeenCalled();
+  expect(report).not.toHaveBeenCalled();
+  expect(invalidate).not.toHaveBeenCalled();
+  expect(refetch).not.toHaveBeenCalled();
+});
+
 it.each(['bob', 'alice'])('isolates owner details after switching credentials to %s', async (id) => {
   session.profile = { id: 'alice', csrf_token: 'old-session' };
   let requests = 0;

@@ -31,10 +31,14 @@ export function orderCopyText(order: Order, t: (key: string) => string) {
     `${t('messageColumn')}:\n${order.message || t('noMessage')}`,
   ].join('\n');
 }
-export async function checkout(id: string) {
-  const v = await api<{ mode: string; url: string; fields?: Record<string, string> }>('order/payment/start', {
-    id,
-  });
+export async function checkout(id: string, isCurrent?: () => boolean) {
+  const v = await api<{ mode: string; url: string; fields?: Record<string, string> }>(
+    'order/payment/start',
+    { id },
+    undefined,
+    isCurrent,
+  );
+  if (isCurrent && !isCurrent()) return;
   rememberPayment(id);
   if (v.mode === 'redirect') {
     location.assign(v.url);
@@ -68,12 +72,32 @@ export function OrderDialog({
   const client = useQueryClient();
   const [busy, setBusy] = useState(false),
     [pollUntil, setPollUntil] = useState(0);
-  const activeID = useRef(id);
-  activeID.current = id;
+  const scopeKey = JSON.stringify([id, admin, identity]);
+  const current = useRef({ key: scopeKey });
+  if (current.current.key !== scopeKey) current.current = { key: scopeKey };
+  const scope = current.current;
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: A new scope revokes pending mutation state, including reopening the same order.
+  useEffect(() => {
+    setBusy(false);
+    setPollUntil(0);
+  }, [scope]);
+  const isCurrent = () => alive.current && current.current === scope && !!id;
   const detail = useQuery({
     queryKey: ['order-detail', admin, id, identity],
     queryFn: ({ signal }) =>
-      api<Order>(`${admin ? 'admin/' : ''}order/detail?${query({ id: id ?? '' })}`, undefined, signal),
+      api<Order>(
+        `${admin ? 'admin/' : ''}order/detail?${query({ id: id ?? '' })}`,
+        undefined,
+        signal,
+        isCurrent,
+      ),
     enabled: !!id,
     refetchInterval: () => (Date.now() < pollUntil ? 2000 : false),
     retry: false,
@@ -115,27 +139,40 @@ export function OrderDialog({
       })),
   ];
   const run = async (fn: () => Promise<unknown>) => {
+    if (!isCurrent()) return;
     setBusy(true);
     try {
       await fn();
     } catch (e) {
-      report(e);
+      if (isCurrent()) report(e);
     } finally {
-      setBusy(false);
+      if (isCurrent()) setBusy(false);
     }
   };
   const preview = async (action: string, orderID: string) => {
-    const operation = await api<Operation>('admin/order/action/preview', { action, ids: [orderID] });
+    const operation = await api<Operation>(
+      'admin/order/action/preview',
+      { action, ids: [orderID] },
+      undefined,
+      isCurrent,
+    );
     if (operation.action !== action || operation.items.length !== 1 || operation.items[0]?.id !== orderID)
       throw new Error(t('error'));
     return operation;
   };
   const execute = async (confirmation: Operation, orderID: string) => {
-    if (activeID.current !== orderID || confirmation.items[0]?.id !== orderID) throw new Error(t('error'));
+    if (!isCurrent() || id !== orderID || confirmation.items[0]?.id !== orderID) throw new Error(t('error'));
     setBusy(true);
     try {
-      const result = await api<Operation>('admin/order/action/execute', { operation_id: confirmation.id });
-      if (result.action === 'export') await downloadExport(result.id);
+      const result = await api<Operation>(
+        'admin/order/action/execute',
+        { operation_id: confirmation.id },
+        undefined,
+        isCurrent,
+      );
+      if (!isCurrent()) return;
+      if (result.action === 'export') await downloadExport(result.id, isCurrent);
+      if (!isCurrent()) return;
       notify(
         t(
           result.action === 'refresh_location'
@@ -148,19 +185,19 @@ export function OrderDialog({
         ),
       );
       await client.invalidateQueries();
-      if (activeID.current === orderID) {
+      if (isCurrent()) {
         if (confirmation.action === 'delete') onClose();
         else if (confirmation.action !== 'export') setPollUntil(Date.now() + 60000);
       }
     } finally {
-      setBusy(false);
+      if (isCurrent()) setBusy(false);
     }
   };
   const confirmAction = (action: string, label: string, icon?: ReactNode) =>
     o && (
       <ActionConfirm
         key={`${o.id}:${action}`}
-        scopeKey={`${id}:${action}`}
+        scopeKey={`${scopeKey}:${action}`}
         title={label}
         description={t(action === 'delete' ? 'deleteHint' : action === 'close' ? 'closeHint' : 'confirm')}
         trigger={
@@ -295,10 +332,16 @@ export function OrderDialog({
                       disabled={actionsDisabled || o.protocol === 'legacy'}
                       onClick={() =>
                         void run(async () => {
-                          await api('admin/order/reconcile', {
-                            id: o.id,
-                            idempotency_key: crypto.randomUUID(),
-                          });
+                          await api(
+                            'admin/order/reconcile',
+                            {
+                              id: o.id,
+                              idempotency_key: crypto.randomUUID(),
+                            },
+                            undefined,
+                            isCurrent,
+                          );
+                          if (!isCurrent()) return;
                           setPollUntil(Date.now() + 60000);
                           notify(t('queued'));
                           await detail.refetch();
@@ -325,7 +368,7 @@ export function OrderDialog({
                     <Button
                       className="d-primary"
                       disabled={actionsDisabled}
-                      onClick={() => void run(() => checkout(o.id))}
+                      onClick={() => void run(() => checkout(o.id, isCurrent))}
                     >
                       <ExternalLink />
                       {t('continue')}
