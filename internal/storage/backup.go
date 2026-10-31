@@ -188,12 +188,25 @@ func Restore(ctx context.Context, source, target string) error {
 	}
 	s := &Store{DB: candidate}
 	e = s.Write(ctx, func(tx *sql.Tx) error {
-		for _, query := range []string{"DELETE FROM auth_flows", "DELETE FROM sessions", "UPDATE jobs SET status='ready',lease_token=NULL,lease_until=NULL WHERE status='running'", "UPDATE orders SET submission_status=CASE WHEN submission_status='submitting' THEN 'unknown' ELSE submission_status END,submission_lease=NULL,submission_lease_until=NULL"} {
+		for _, query := range []string{"DELETE FROM auth_flows", "DELETE FROM sessions", "UPDATE orders SET submission_status=CASE WHEN submission_status='submitting' THEN 'unknown' ELSE submission_status END,submission_lease=NULL,submission_lease_until=NULL"} {
 			if _, err := tx.ExecContext(ctx, query); err != nil {
 				return err
 			}
 		}
-		return nil
+		// Older snapshots are migrated only after Restore. Reset the common
+		// lease fields on every supported schema; add telemetry only when the
+		// snapshot already has task-history columns. Downtime is not execution
+		// time, so the restored worker's start is explicitly unknown.
+		var historyColumns int
+		if err := tx.QueryRowContext(ctx, "SELECT count(*) FROM pragma_table_info('jobs') WHERE name IN ('started_at','event_source','event_request_id')").Scan(&historyColumns); err != nil {
+			return err
+		}
+		query := "UPDATE jobs SET status='ready',lease_token=NULL,lease_until=NULL,updated_at=?"
+		if historyColumns == 3 {
+			query += ",started_at=NULL,event_source='restore',event_request_id=''"
+		}
+		_, err := tx.ExecContext(ctx, query+" WHERE status='running'", time.Now().Unix())
+		return err
 	})
 	if e == nil {
 		e = check(candidate)

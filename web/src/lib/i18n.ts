@@ -75,6 +75,7 @@ export const words = {
   task_source_query: ['主动核验', 'Payment query'],
   task_source_return: ['支付返回', 'Payment return'],
   task_source_reconcile: ['手动补单', 'Reconciliation'],
+  task_source_restore: ['备份恢复', 'Backup restore'],
   task_event_snapshot: ['升级快照', 'Upgrade snapshot'],
   task_event_created: ['已入队', 'Created'],
   task_event_started: ['开始执行', 'Started'],

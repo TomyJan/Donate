@@ -55,9 +55,11 @@ BEGIN
  WHEN NEW.status='ready' AND (OLD.status='failed' OR NEW.retry_generation IS NOT OLD.retry_generation) THEN 'retried' ELSE 'rescheduled' END,
  NEW.status,NEW.total_attempts+CASE WHEN NEW.status='running' AND NEW.lease_token IS NOT OLD.lease_token THEN 1 ELSE 0 END,CASE WHEN NEW.event_source='' THEN NEW.source ELSE NEW.event_source END,
  CASE WHEN instr(lower(NEW.last_result),'token') OR instr(lower(NEW.last_result),'secret') OR instr(lower(NEW.last_result),'password') OR instr(lower(NEW.last_result),'credential') OR instr(lower(NEW.last_result),'sign=') OR instr(NEW.last_result,'://') THEN '[redacted]' ELSE substr(NEW.last_result,1,512) END,
- '任务 '||lower(hex(NEW.id))||'，订单 '||lower(hex(NEW.order_id))||'：'||NEW.status||CASE WHEN NEW.last_error='' OR NEW.status NOT IN ('ready','failed') THEN '' ELSE '，原因 '||substr(NEW.last_error,1,512) END,NEW.updated_at,NEW.run_at,
- CASE WHEN OLD.status='running' AND NEW.status!='running' AND OLD.started_at IS NOT NULL THEN max(0,(NEW.updated_at-OLD.started_at)*1000) END,NEW.actor_id,CASE WHEN NEW.event_source='' THEN NEW.request_id ELSE NEW.event_request_id END);
+ '任务 '||lower(hex(NEW.id))||'，订单 '||lower(hex(NEW.order_id))||CASE WHEN NEW.event_source='restore' THEN '：数据库恢复后重新调度，原执行耗时未知' ELSE '：'||NEW.status END||CASE WHEN NEW.last_error='' OR NEW.status NOT IN ('ready','failed') THEN '' ELSE '，原因 '||substr(NEW.last_error,1,512) END,NEW.updated_at,NEW.run_at,
+ CASE WHEN OLD.status='running' AND NEW.status!='running' AND NEW.started_at IS NOT NULL THEN max(0,(NEW.updated_at-NEW.started_at)*1000) END,NEW.actor_id,CASE WHEN NEW.event_source='' THEN NEW.request_id ELSE NEW.event_request_id END);
  UPDATE jobs SET total_attempts=NEW.total_attempts+1,started_at=NEW.updated_at WHERE id=NEW.id AND NEW.status='running' AND NEW.lease_token IS NOT OLD.lease_token;
+ -- Attribution overrides describe this event only, including restore while ready.
+ UPDATE jobs SET event_source='',event_request_id='' WHERE id=NEW.id AND NEW.event_source!='';
 END;
 -- +goose StatementEnd
 -- +goose Down
