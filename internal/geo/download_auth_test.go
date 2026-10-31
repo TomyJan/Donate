@@ -73,3 +73,47 @@ func TestAuthenticatedDownloadRedirects(t *testing.T) {
 		})
 	}
 }
+
+func TestDownloadRedirectCredentialsStayWithinOriginalOrigin(t *testing.T) {
+	data := mustReadDatabase(t, syntheticXDB(t, "1.1.1.1", "中国|广东|深圳|网络|CN"))
+	for _, tc := range []struct {
+		name, target string
+		wantAuth     bool
+	}{
+		{"same origin", "https://downloads.vendor.test/database.xdb", true},
+		{"explicit default port", "https://downloads.vendor.test:443/database.xdb", true},
+		{"same host different case", "https://DOWNLOADS.VENDOR.TEST/database.xdb", true},
+		{"subdomain", "https://mirror.downloads.vendor.test/database.xdb", false},
+		{"subdomain with URL credentials", "https://account:license@mirror.downloads.vendor.test/database.xdb", false},
+		{"different port", "https://downloads.vendor.test:8443/database.xdb", false},
+		{"unrelated host", "https://other.vendor.test/database.xdb", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			u := NewUpdater(nil, config.Config{}, nil)
+			var initialAuth, redirectedAuth bool
+			u.HTTP.Transport = transport(func(r *http.Request) (*http.Response, error) {
+				user, password, ok := r.BasicAuth()
+				authenticated := ok && user == "account" && password == "license"
+				if r.URL.Path == "/latest" {
+					initialAuth = authenticated
+					return &http.Response{StatusCode: http.StatusFound, Header: http.Header{"Location": {tc.target}}, Body: io.NopCloser(strings.NewReader("")), Request: r}, nil
+				}
+				redirectedAuth = authenticated
+				if !tc.wantAuth && (r.Header.Get("Authorization") != "" || r.URL.User != nil) {
+					t.Error("cross-origin request retained header or URL credentials")
+				}
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(string(data))), Request: r}, nil
+			})
+			stage, err := u.download(context.Background(), databaseSource{"xdb4", filepath.Join(t.TempDir(), "live.xdb"), "https://account:license@downloads.vendor.test/latest"})
+			if stage != "" {
+				defer os.Remove(stage)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !initialAuth || redirectedAuth != tc.wantAuth {
+				t.Fatalf("initial authentication=%t, redirected authentication=%t, want=%t", initialAuth, redirectedAuth, tc.wantAuth)
+			}
+		})
+	}
+}

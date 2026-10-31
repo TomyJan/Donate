@@ -9,6 +9,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -41,8 +42,28 @@ func NewUpdater(s *Service, c config.Config, l *slog.Logger) *Updater {
 		if req.URL.Scheme != "https" && !(c.Development && req.URL.Scheme == "http") {
 			return errors.New("下载重定向必须使用 HTTPS")
 		}
+		// Go also trusts subdomains and other ports by default. Download
+		// credentials belong only to the explicitly configured origin.
+		if !sameDownloadOrigin(req.URL, via[0].URL) {
+			req.Header.Del("Authorization")
+			req.URL.User = nil
+		}
 		return nil
 	}}}
+}
+
+func sameDownloadOrigin(a, b *url.URL) bool {
+	port := func(u *url.URL) string {
+		if p := u.Port(); p != "" {
+			return p
+		}
+		if strings.EqualFold(u.Scheme, "https") {
+			return "443"
+		}
+		return "80"
+	}
+	return strings.EqualFold(a.Scheme, b.Scheme) &&
+		strings.EqualFold(a.Hostname(), b.Hostname()) && port(a) == port(b)
 }
 
 func databaseSources(c config.Config) []databaseSource {
