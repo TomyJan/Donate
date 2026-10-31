@@ -7,6 +7,49 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+it.each(
+  ['user/login/status', 'user/login/qq/complete'].flatMap((path) =>
+    ['json', 'text'].map((format) => ({ path, format })),
+  ),
+)('does not revoke a session for a flow-only 401: $path/$format', async ({ path, format }) => {
+  const expired = vi.fn();
+  window.addEventListener('session-invalid', expired);
+  try {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValue(
+          format === 'json'
+            ? Response.json({ code: 'UNAUTHORIZED', data: null }, { status: 401 })
+            : new Response('expired flow', { status: 401 }),
+        ),
+    );
+    await expect(
+      api(path, path.endsWith('complete') ? { qq_number: '12345' } : undefined),
+    ).rejects.toMatchObject({ status: 401 });
+    expect(expired).not.toHaveBeenCalled();
+  } finally {
+    window.removeEventListener('session-invalid', expired);
+  }
+});
+
+it.each([
+  [401, 'UNAUTHORIZED'],
+  [403, 'ACCOUNT_BANNED'],
+  [200, 'ACCOUNT_BANNED'],
+] as const)('still revokes the active session for a protected API %s/%s', async (status, code) => {
+  const expired = vi.fn();
+  window.addEventListener('session-invalid', expired);
+  try {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ code, data: null }, { status })));
+    await expect(api('order/detail?id=current')).rejects.toMatchObject({ code });
+    expect(expired).toHaveBeenCalledOnce();
+  } finally {
+    window.removeEventListener('session-invalid', expired);
+  }
+});
+
 it.each([
   ['json 401', 401, 'UNAUTHORIZED'],
   ['json 403', 403, 'FORBIDDEN'],

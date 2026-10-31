@@ -17,7 +17,14 @@ export function setCSRF(v: string) {
 }
 function signalAccessFailure(path: string, status: number, code: string, isCurrent?: () => boolean) {
   if (isCurrent && !isCurrent()) return;
-  if ((status === 401 || code === 'ACCOUNT_BANNED') && path !== 'site/info' && path !== 'user/profile')
+  // These public endpoints authenticate the OAuth flow cookie. Its expiration
+  // does not establish that the independently authenticated user session expired.
+  const flowOnly = path === 'user/login/status' || path === 'user/login/qq/complete';
+  if (
+    ((status === 401 && !flowOnly) || code === 'ACCOUNT_BANNED') &&
+    path !== 'site/info' &&
+    path !== 'user/profile'
+  )
     window.dispatchEvent(new CustomEvent('session-invalid', { detail: code }));
   else if (status === 403 && code === 'FORBIDDEN' && path.startsWith('admin/'))
     window.dispatchEvent(new Event('admin-forbidden'));
