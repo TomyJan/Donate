@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Search,
   Users,
+  Workflow,
   X,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
@@ -35,8 +36,9 @@ import { amountFen } from '../lib/amount';
 import { api, downloadExport, money, query } from '../lib/api';
 import { operationItemResultKey } from '../lib/operation-results';
 import type { Audit, Metric, Operation, Order, Overview, Page, User } from '../lib/types';
+import { TaskQueue } from './TaskQueue';
 
-type Tab = 'overview' | 'orders' | 'users' | 'audit';
+type Tab = 'overview' | 'orders' | 'users' | 'audit' | 'tasks';
 type Sort = { key: string; direction: 'asc' | 'desc' };
 const bulkActions = [
   'close',
@@ -93,7 +95,7 @@ export function Admin() {
   const list = useQuery({
     queryKey: ['admin-list', tab, filters],
     queryFn: () => api<Page<Order | User | Audit>>(`${endpoint}?${query(filters)}`),
-    enabled: !!profile?.admin && tab !== 'overview',
+    enabled: !!profile?.admin && tab !== 'overview' && tab !== 'tasks',
     placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[1] === tab ? previous : undefined),
     retry: false,
   });
@@ -193,6 +195,7 @@ export function Admin() {
             ['orders', ReceiptText],
             ['users', Users],
             ['audit', ListChecks],
+            ['tasks', Workflow],
           ] as const
         ).map(([key, Icon]) => (
           <SelectionButton
@@ -212,7 +215,7 @@ export function Admin() {
         </Link>
       </SelectionGroup>
       <main key={tab} className="a-main">
-        {tab !== 'overview' && (
+        {tab !== 'overview' && tab !== 'tasks' && (
           <AdminHeading title={t(tab)}>
             {tab === 'orders' && selection.size > 0 && (
               <>
@@ -258,7 +261,9 @@ export function Admin() {
             )}
           </AdminHeading>
         )}
-        {tab === 'overview' ? (
+        {tab === 'tasks' ? (
+          <TaskQueue key={profile.id} />
+        ) : tab === 'overview' ? (
           <OverviewSection period={period} onChange={setPeriod} />
         ) : (
           <>
@@ -302,6 +307,7 @@ export function Admin() {
                       ['', t('allActions')],
                       ['order.', t('ordersAction')],
                       ['user.', t('usersAction')],
+                      ['task.', t('tasksAction')],
                     ]}
                   />
                 )}
