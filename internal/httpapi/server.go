@@ -206,10 +206,6 @@ func (s *Server) route(fn http.HandlerFunc, level int) http.HandlerFunc {
 		if level > 0 && !s.need(w, r, level == 2) {
 			return
 		}
-		if state(r).AuthError != nil && errors.Is(state(r).AuthError, auth.ErrBanned) {
-			s.failure(w, r, auth.ErrBanned)
-			return
-		}
 		if r.Method == "POST" && !s.csrfOK(w, r) {
 			return
 		}
@@ -308,6 +304,8 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 				st.Session = &session
 			} else {
 				st.AuthError = e
+				// A response for old credentials may arrive after a newer login.
+				// Do not overwrite that login's cookie when rejecting this token.
 			}
 		}
 		if !s.limits.allow(s.clientIP(r)+":http", 600, time.Minute) {
