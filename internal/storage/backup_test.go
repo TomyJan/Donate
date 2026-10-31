@@ -80,12 +80,12 @@ func TestRestorePreservesOldestSourceDuringRetention(t *testing.T) {
 			if err = os.MkdirAll(backups, 0700); err != nil {
 				t.Fatal(err)
 			}
-			source := filepath.Join(backups, "donate-00000101T000000Z-source.db")
+			source := filepath.Join(backups, "donate-00000101T000000Z-"+NewID().String()+".db")
 			originals := map[string]bool{source: true}
 			for i := range 7 {
 				snapshot := source
 				if i > 0 {
-					snapshot = filepath.Join(backups, fmt.Sprintf("donate-%s-%d.db", siblingDate, i))
+					snapshot = filepath.Join(backups, fmt.Sprintf("donate-%s-%s.db", siblingDate, NewID().String()))
 				}
 				originals[snapshot] = true
 				if _, err = s.DB.Exec("VACUUM INTO ?", snapshot); err != nil {
@@ -133,8 +133,12 @@ func TestRestorePreservesOldestSourceDuringRetention(t *testing.T) {
 				t.Fatalf("restored created_at=%d, want 11", got)
 			}
 			paths, err := filepath.Glob(filepath.Join(backups, "donate-*.db"))
-			if err != nil || len(paths) != 7 {
-				t.Fatal("restore retention must keep seven snapshots", len(paths), err)
+			want := 2
+			if siblingDate == "99990101T000000Z" {
+				want = 8
+			}
+			if err != nil || len(paths) != want {
+				t.Fatal("restore must retain its source, rollback and unexpired snapshots", len(paths), err)
 			}
 			rollback := ""
 			for _, snapshot := range paths {
@@ -155,8 +159,8 @@ func TestRestorePreservesOldestSourceDuringRetention(t *testing.T) {
 				t.Fatal(err)
 			}
 			paths, err = filepath.Glob(filepath.Join(backups, "donate-*.db"))
-			if err != nil || len(paths) != 7 {
-				t.Fatal("ordinary retention must still keep seven snapshots", len(paths), err)
+			if err != nil || len(paths) != want {
+				t.Fatal("ordinary retention must clean expired source without deleting recent snapshots", len(paths), err)
 			}
 			if _, err = os.Stat(source); !os.IsNotExist(err) {
 				t.Fatal("restore source remained exempt from later ordinary retention", err)
@@ -165,7 +169,7 @@ func TestRestorePreservesOldestSourceDuringRetention(t *testing.T) {
 	}
 }
 
-func TestConsistentBackupsRetainSevenSnapshots(t *testing.T) {
+func TestConsistentBackupsKeepAllUnexpiredSnapshots(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	s, e := Open(ctx, filepath.Join(dir, "test.db"))
@@ -179,7 +183,7 @@ func TestConsistentBackupsRetainSevenSnapshots(t *testing.T) {
 		}
 	}
 	paths, e := filepath.Glob(filepath.Join(dir, "snapshots", "donate-*.db"))
-	if e != nil || len(paths) != 7 {
+	if e != nil || len(paths) != 9 {
 		t.Fatal(len(paths), e)
 	}
 }

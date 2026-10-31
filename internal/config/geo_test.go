@@ -6,7 +6,7 @@ import (
 )
 
 func TestLoadLocalGeoSources(t *testing.T) {
-	t.Chdir(t.TempDir())
+	completeConfig(t)
 	t.Setenv("APP_ENV", "development")
 	t.Setenv("PUBLIC_URL", "http://localhost:8080")
 	t.Setenv("GEO_MODE", "local")

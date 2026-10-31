@@ -8,10 +8,11 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Backup uses SQLite's consistent snapshot operation, including committed WAL data.
@@ -22,10 +23,15 @@ func (s *Store) Backup(ctx context.Context, dir string) (string, error) {
 // A restore protects its selected source only for this retention pass. The newly
 // created snapshot is always retained, including when older files have future dates.
 func (s *Store) backup(ctx context.Context, dir string, protected os.FileInfo) (string, error) {
+	options := s.options
+	if options.AppName == "" {
+		options = Options{AppName: "donate", BackupRetentionDays: 7}
+	}
 	if e := os.MkdirAll(dir, 0700); e != nil {
 		return "", e
 	}
-	path, e := filepath.Abs(filepath.Join(dir, fmt.Sprintf("donate-%s-%s.db", time.Now().UTC().Format("20060102T150405Z"), NewID().String())))
+	now := time.Now().UTC()
+	path, e := filepath.Abs(filepath.Join(dir, fmt.Sprintf("%s-%s-%s.db", options.AppName, now.Format("20060102T150405Z"), NewID().String())))
 	if e != nil {
 		return "", e
 	}
@@ -42,16 +48,31 @@ func (s *Store) backup(ctx context.Context, dir string, protected os.FileInfo) (
 	if e != nil {
 		return path, e
 	}
-	paths, e := filepath.Glob(filepath.Join(dir, "donate-*.db"))
+	entries, e := os.ReadDir(dir)
 	if e != nil {
 		return path, e
 	}
-	sort.Strings(paths)
-	remaining := len(paths) - 7
-	for _, old := range paths {
-		if remaining <= 0 {
-			break
+	if options.BackupRetentionDays == 0 {
+		return path, nil
+	}
+	cutoff := now.AddDate(0, 0, -options.BackupRetentionDays)
+	for _, entry := range entries {
+		if !entry.Type().IsRegular() {
+			continue
 		}
+		rest, ok := strings.CutPrefix(entry.Name(), options.AppName+"-")
+		if !ok || len(rest) != 56 || rest[16] != '-' || !strings.HasSuffix(rest, ".db") {
+			continue
+		}
+		id, err := uuid.Parse(rest[17:53])
+		if err != nil || id == uuid.Nil || id.String() != rest[17:53] {
+			continue
+		}
+		at, err := time.Parse("20060102T150405Z", rest[:16])
+		if err != nil || !at.Before(cutoff) {
+			continue
+		}
+		old := filepath.Join(dir, entry.Name())
 		info, err := os.Stat(old)
 		if err != nil {
 			return path, err
@@ -62,7 +83,6 @@ func (s *Store) backup(ctx context.Context, dir string, protected os.FileInfo) (
 		if e = os.Remove(old); e != nil {
 			return path, e
 		}
-		remaining--
 	}
 	return path, nil
 }
@@ -71,6 +91,15 @@ func (s *Store) backup(ctx context.Context, dir string, protected os.FileInfo) (
 // It never migrates or writes the source snapshot. A rollback snapshot is kept before replacement.
 // Its source is exempt from this restore's retention pass; later backups rotate normally.
 func Restore(ctx context.Context, source, target string) error {
+	return RestoreWithOptions(ctx, source, target, Options{AppName: "donate", BackupRetentionDays: 7})
+}
+
+func RestoreWithOptions(ctx context.Context, source, target string, options Options) error {
+	var optionErr error
+	options, optionErr = normalizeOptions(target, options)
+	if optionErr != nil {
+		return optionErr
+	}
 	knownVersions := map[int64]bool{}
 	entries, e := migrations.ReadDir("migrations")
 	if e != nil {
@@ -226,7 +255,7 @@ func Restore(ctx context.Context, source, target string) error {
 		if err != nil {
 			return err
 		}
-		_, err = (&Store{DB: current}).backup(ctx, filepath.Join(filepath.Dir(dst), "backups"), info)
+		_, err = (&Store{DB: current, options: options}).backup(ctx, options.BackupDir, info)
 		if err == nil {
 			_, err = current.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)")
 		}

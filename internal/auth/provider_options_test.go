@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 
@@ -15,6 +16,19 @@ import (
 
 func configuredAuth(t *testing.T, values map[string]string) *Service {
 	t.Helper()
+	t.Chdir(t.TempDir())
+	for _, line := range strings.Split(string(config.Example()), "\n") {
+		key, _, ok := strings.Cut(line, "=")
+		if ok && !strings.HasPrefix(strings.TrimSpace(key), "#") {
+			t.Setenv(key, "")
+			if err := os.Unsetenv(key); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := os.WriteFile(".env", config.Example(), 0600); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("APP_ENV", "development")
 	t.Setenv("PUBLIC_URL", "http://127.0.0.1:8080")
 	for key, value := range values {

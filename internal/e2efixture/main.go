@@ -17,6 +17,7 @@ import (
 	"github.com/TomyJan/Donate/internal/config"
 	"github.com/TomyJan/Donate/internal/order"
 	"github.com/TomyJan/Donate/internal/storage"
+	"github.com/joho/godotenv"
 	"io"
 	"log/slog"
 	"math/big"
@@ -277,7 +278,13 @@ func run() error {
 	if e = os.WriteFile(publicPath, publicPEM, 0600); e != nil {
 		return e
 	}
-	env := map[string]string{"APP_ENV": "development", "PUBLIC_URL": app, "DATA_DIR": dir, "GEO_MODE": "disabled", "OIDC_ISSUER": issuer, "OIDC_CLIENT_ID": "donate-test", "ADMIN_USER_IDS": creds.Session.UserID, "EPAY_URL": issuer, "EPAY_PID": "1001", "EPAY_PROTOCOL": "v2", "EPAY_PRIVATE_KEY_FILE": privatePath, "EPAY_PUBLIC_KEY_FILE": publicPath}
+	env, e := godotenv.Unmarshal(string(config.Example()))
+	if e != nil {
+		return e
+	}
+	for k, v := range map[string]string{"APP_ENV": "development", "PUBLIC_URL": app, "DATA_DIR": dir, "LOG_DIR": filepath.Join(dir, "logs"), "BACKUP_DIR": filepath.Join(dir, "backups"), "GEO_MODE": "disabled", "GEO_XDB_IPV4": "", "GEO_XDB_IPV6": "", "GEO_ONLINE_FALLBACK": "false", "GEO_UPDATE_DAYS": "0", "OIDC_ISSUER": issuer, "OIDC_CLIENT_ID": "donate-test", "ADMIN_USER_IDS": creds.Session.UserID, "EPAY_URL": issuer, "EPAY_PID": "1001", "EPAY_PROTOCOL": "v2", "EPAY_PRIVATE_KEY_FILE": privatePath, "EPAY_PUBLIC_KEY_FILE": publicPath} {
+		env[k] = v
+	}
 	// Offline synthetic MMDB enables real geo task retries without external lookup.
 	geoPath, e := filepath.Abs("internal/geo/testdata/synthetic-city.mmdb")
 	if e != nil {
@@ -289,6 +296,13 @@ func run() error {
 	env["OIDC_NAME"] = "OIDC"
 	env["UMAMI_SCRIPT_URL"] = issuer + "/analytics/script.js"
 	env["UMAMI_WEBSITE_ID"] = "a4dca193-c108-47d7-a429-b89c13c7f747"
+	configuration, e := godotenv.Marshal(env)
+	if e != nil {
+		return e
+	}
+	if e = os.WriteFile(filepath.Join(dir, ".env"), []byte(configuration+"\n"), 0600); e != nil {
+		return e
+	}
 	b, _ := json.Marshal(env)
 	if e = os.WriteFile(filepath.Join(dir, "environment.json"), b, 0600); e != nil {
 		return e

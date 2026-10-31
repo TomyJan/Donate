@@ -6,12 +6,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestConsoleAndFileKeepIdentifyingMessage(t *testing.T) {
 	var out bytes.Buffer
 	dir := t.TempDir()
-	l, close, _, err := New(dir, "INFO", &out)
+	l, close, _, err := New(Options{Dir: dir, AppName: "donate", Level: "INFO", RetentionDays: 30}, &out)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -19,7 +20,7 @@ func TestConsoleAndFileKeepIdentifyingMessage(t *testing.T) {
 	if err = close(); err != nil {
 		t.Fatal(err)
 	}
-	b, err := os.ReadFile(filepath.Join(dir, "donate.log"))
+	b, err := os.ReadFile(filepath.Join(dir, "donate_"+time.Now().Format("2006-01-02")+".jsonl"))
 	if err != nil {
 		t.Fatal(err)
 	}

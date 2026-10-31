@@ -77,6 +77,9 @@ func describe(t reflect.Type) schema {
 	panic("unsupported type " + t.String())
 }
 func main() {
+	if err := os.WriteFile(".env.example", config.Example(), 0644); err != nil {
+		panic(err)
+	}
 	types := map[string]reflect.Type{"Profile": reflect.TypeFor[auth.Profile](), "SiteVersion": reflect.TypeFor[httpapi.Version](), "Identity": reflect.TypeFor[auth.Identity](), "RecordItem": reflect.TypeFor[order.Record](), "Records": reflect.TypeFor[order.Page](), "Order": reflect.TypeFor[admin.Detail](), "OrderPage": reflect.TypeFor[admin.Page[admin.OrderRow]](), "User": reflect.TypeFor[admin.User](), "UserPage": reflect.TypeFor[admin.Page[admin.User]](), "Audit": reflect.TypeFor[admin.Audit](), "AuditPage": reflect.TypeFor[admin.Page[admin.Audit]](), "Overview": reflect.TypeFor[admin.Overview](), "Metric": reflect.TypeFor[admin.Metric](), "Operation": reflect.TypeFor[admin.Operation](), "Location": reflect.TypeFor[geo.Location](), "Checkout": reflect.TypeFor[payment.Checkout](), "FlowStatus": reflect.TypeFor[auth.FlowStatus]()}
 	schemas := map[string]any{}
 	for name, t := range map[string]reflect.Type{"TaskItem": reflect.TypeFor[admin.TaskItem](), "TaskDetail": reflect.TypeFor[admin.TaskDetail](), "TaskEvent": reflect.TypeFor[admin.TaskEvent](), "TaskCounts": reflect.TypeFor[admin.TaskCounts](), "TaskTrend": reflect.TypeFor[admin.TaskTrend](), "TaskOverview": reflect.TypeFor[admin.TaskOverview](), "TaskRetryItem": reflect.TypeFor[admin.TaskRetryItem](), "TaskRetryResult": reflect.TypeFor[admin.TaskRetryResult](), "TaskPage": reflect.TypeFor[admin.Page[admin.TaskItem]](), "TaskEventPage": reflect.TypeFor[admin.Page[admin.TaskEvent]]()} {

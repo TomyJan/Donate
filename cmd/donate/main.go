@@ -46,7 +46,7 @@ func run() error {
 	if e = os.MkdirAll(c.DataDir, 0700); e != nil {
 		return e
 	}
-	lock := flock.New(filepath.Join(c.DataDir, "donate.lock"))
+	lock := flock.New(c.LockPath())
 	ok, e := lock.TryLock()
 	if e != nil {
 		return e
@@ -55,31 +55,32 @@ func run() error {
 		return errors.New("数据目录已有 Donate 实例运行")
 	}
 	defer lock.Unlock()
-	log, closeLog, degraded, e := observability.New(c.DataDir, c.LogLevel, os.Stdout)
+	log, closeLog, degraded, e := observability.New(observability.Options{Dir: c.LogDir, AppName: c.AppName, Level: c.LogLevel, RetentionDays: c.LogRetentionDays}, os.Stdout)
 	if e != nil {
 		return e
 	}
 	defer closeLog()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	storageOptions := storage.Options{AppName: c.AppName, BackupDir: c.BackupDir, BackupRetentionDays: c.BackupRetentionDays}
 	if len(os.Args) > 1 && os.Args[1] == "restore" {
 		if len(os.Args) != 3 {
 			return errors.New("用法: donate restore <备份路径>；须先停止服务")
 		}
-		if e = storage.Restore(ctx, os.Args[2], filepath.Join(c.DataDir, "donate.db")); e != nil {
+		if e = storage.RestoreWithOptions(ctx, os.Args[2], c.DatabasePath(), storageOptions); e != nil {
 			return e
 		}
 		log.Warn("数据库离线恢复完成，旧会话已撤销；请核实恢复点后的删除、封禁和支付变化")
 		return nil
 	}
-	db, e := storage.Open(ctx, filepath.Join(c.DataDir, "donate.db"))
+	db, e := storage.OpenWithOptions(ctx, c.DatabasePath(), storageOptions)
 	if e != nil {
 		return e
 	}
 	defer db.Close()
 	if len(os.Args) > 1 {
 		if os.Args[1] == "backup" {
-			p, e := db.Backup(ctx, filepath.Join(c.DataDir, "backups"))
+			p, e := db.Backup(ctx, c.BackupDir)
 			if e == nil {
 				fmt.Println(p)
 			}
@@ -119,7 +120,7 @@ func run() error {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				if p, e := db.Backup(ctx, filepath.Join(c.DataDir, "backups")); e != nil {
+				if p, e := db.Backup(ctx, c.BackupDir); e != nil {
 					log.Error("每日数据库备份失败", "error", e)
 				} else {
 					log.Info(fmt.Sprintf("每日数据库备份已保存至 %s", filepath.Base(p)), "backup", filepath.Base(p))

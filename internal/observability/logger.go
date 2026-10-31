@@ -2,30 +2,50 @@ package observability
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"os"
-	"path/filepath"
+	"regexp"
+	"sync"
 	"sync/atomic"
-
-	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 type guardedWriter struct {
-	writer   io.Writer
+	writer  io.Writer
+	health  *fileHealth
+	channel string
+}
+
+type fileHealth struct {
+	mu       sync.Mutex
+	failed   map[string]bool
 	degraded *atomic.Bool
+	app      string
+}
+
+func (h *fileHealth) report(channel string, err error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	was := h.failed[channel]
+	h.failed[channel] = err != nil
+	anyFailed := false
+	for _, failed := range h.failed {
+		anyFailed = anyFailed || failed
+	}
+	h.degraded.Store(anyFailed)
+	if err != nil && !was {
+		fmt.Fprintf(os.Stderr, "ERROR 应用 %s 的 %s 日志写入失败，保留控制台输出，请检查磁盘与权限\n", h.app, channel)
+	}
+	if err == nil && was {
+		fmt.Fprintf(os.Stderr, "INFO 应用 %s 的 %s 日志写入已恢复\n", h.app, channel)
+	}
 }
 
 func (w guardedWriter) Write(p []byte) (int, error) {
 	n, e := w.writer.Write(p)
-	if e != nil {
-		if !w.degraded.Swap(true) {
-			fmt.Fprintln(os.Stderr, "ERROR 日志文件写入失败，运行日志降级到控制台，请检查磁盘与权限")
-		}
-	} else if w.degraded.Swap(false) {
-		fmt.Fprintln(os.Stderr, "INFO 日志文件写入已恢复")
-	}
+	w.health.report(w.channel, e)
 	return n, e
 }
 
@@ -65,25 +85,31 @@ func (h fanout) WithGroup(g string) slog.Handler {
 	return v
 }
 
-func New(dir, level string, stdout io.Writer) (*slog.Logger, func() error, *atomic.Bool, error) {
+type Options struct {
+	Dir, AppName, Level string
+	RetentionDays       int
+}
+
+func New(c Options, stdout io.Writer) (*slog.Logger, func() error, *atomic.Bool, error) {
 	var l slog.Level
-	if e := l.UnmarshalText([]byte(level)); e != nil {
+	if e := l.UnmarshalText([]byte(c.Level)); e != nil {
 		return nil, nil, nil, e
 	}
-	if e := os.MkdirAll(dir, 0700); e != nil {
-		return nil, nil, nil, e
+	if c.RetentionDays < 0 || len(c.AppName) > 63 || !regexp.MustCompile(`^[a-z]+(-[a-z]+)*$`).MatchString(c.AppName) {
+		return nil, nil, nil, errors.New("日志名称或保留天数无效")
 	}
-	p := filepath.Join(dir, "donate.log")
-	f, e := os.OpenFile(p, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0600)
-	if e != nil {
-		return nil, nil, nil, e
+	text := &dailyWriter{dir: c.Dir, name: c.AppName, extension: "log", retention: c.RetentionDays, maxBytes: maxLogBytes}
+	structured := &dailyWriter{dir: c.Dir, name: c.AppName, extension: "jsonl", retention: c.RetentionDays, maxBytes: maxLogBytes}
+	close := func() error { return errors.Join(text.Close(), structured.Close()) }
+	for _, w := range []*dailyWriter{text, structured} {
+		if _, err := w.Write(nil); err != nil {
+			close()
+			return nil, nil, nil, err
+		}
 	}
-	if e = f.Close(); e != nil {
-		return nil, nil, nil, e
-	}
-	rotation := &lumberjack.Logger{Filename: p, MaxSize: 50, MaxBackups: 10, MaxAge: 14, Compress: true}
 	degraded := &atomic.Bool{}
+	health := &fileHealth{failed: map[string]bool{}, degraded: degraded, app: c.AppName}
 	opts := &slog.HandlerOptions{Level: l}
-	logger := slog.New(fanout{[]slog.Handler{slog.NewTextHandler(stdout, opts), slog.NewJSONHandler(guardedWriter{rotation, degraded}, opts)}})
-	return logger, rotation.Close, degraded, nil
+	logger := slog.New(fanout{[]slog.Handler{slog.NewTextHandler(stdout, opts), slog.NewTextHandler(guardedWriter{text, health, "text"}, opts), slog.NewJSONHandler(guardedWriter{structured, health, "jsonl"}, opts)}}).With("app", c.AppName)
+	return logger, close, degraded, nil
 }

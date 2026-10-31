@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -23,13 +24,45 @@ var migrations embed.FS
 type Store struct {
 	DB      *sql.DB
 	writeMu sync.Mutex
+	options Options
+}
+
+type Options struct {
+	AppName, BackupDir  string
+	BackupRetentionDays int
 }
 
 func Open(ctx context.Context, path string) (*Store, error) {
-	path, err := filepath.Abs(path)
+	return OpenWithOptions(ctx, path, Options{AppName: "donate", BackupRetentionDays: 7})
+}
+
+func OpenWithOptions(ctx context.Context, path string, options Options) (*Store, error) {
+	var err error
+	options, err = normalizeOptions(path, options)
 	if err != nil {
 		return nil, err
 	}
+	path, err = filepath.Abs(path)
+	if err != nil {
+		return nil, err
+	}
+	return openWithOptions(ctx, path, options)
+}
+
+func normalizeOptions(path string, options Options) (Options, error) {
+	if options.AppName == "" {
+		options.AppName = "donate"
+	}
+	if options.BackupRetentionDays < 0 || len(options.AppName) > 63 || !regexp.MustCompile(`^[a-z]+(-[a-z]+)*$`).MatchString(options.AppName) {
+		return options, fmt.Errorf("备份名称或保留天数无效")
+	}
+	if options.BackupDir == "" {
+		options.BackupDir = filepath.Join(filepath.Dir(path), "backups")
+	}
+	return options, nil
+}
+
+func openWithOptions(ctx context.Context, path string, options Options) (*Store, error) {
 	_, statErr := os.Stat(path)
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return nil, err
@@ -66,7 +99,7 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		return fail(err)
 	}
 	if statErr == nil {
-		if _, err = (&Store{DB: db}).Backup(ctx, filepath.Join(filepath.Dir(path), "backups")); err != nil {
+		if _, err = (&Store{DB: db, options: options}).Backup(ctx, options.BackupDir); err != nil {
 			return fail(fmt.Errorf("迁移前备份失败: %w", err))
 		}
 	}
@@ -105,7 +138,7 @@ func Open(ctx context.Context, path string) (*Store, error) {
 		return fail(fmt.Errorf("数据库迁移后外键校验失败"))
 	}
 
-	return &Store{DB: db}, nil
+	return &Store{DB: db, options: options}, nil
 }
 func (s *Store) Close() error { return s.DB.Close() }
 func (s *Store) Write(ctx context.Context, fn func(*sql.Tx) error) error {

@@ -10,7 +10,7 @@ import (
 )
 
 func TestLoadRejectsInvalidUmamiConfiguration(t *testing.T) {
-	t.Chdir(t.TempDir())
+	completeConfig(t)
 	t.Setenv("APP_ENV", "production")
 	t.Setenv("PUBLIC_URL", "https://donate.example.com")
 	t.Setenv("APP_SECRET", base64.StdEncoding.EncodeToString(make([]byte, 32)))
@@ -37,7 +37,7 @@ func TestLoadRejectsInvalidUmamiConfiguration(t *testing.T) {
 }
 
 func TestLoadUmamiSettings(t *testing.T) {
-	t.Chdir(t.TempDir())
+	completeConfig(t)
 	t.Setenv("APP_SECRET", base64.StdEncoding.EncodeToString(make([]byte, 32)))
 	const websiteID = "a4dca193-c108-47d7-a429-b89c13c7f747"
 	for _, tc := range []struct {
@@ -64,14 +64,14 @@ func TestLoadUmamiSettings(t *testing.T) {
 func TestLoadAcceptsEmptyAdminIDsWithInlineComment(t *testing.T) {
 	for _, value := range []string{"", "   ", "   # 登录后再填写", "\"\" # 登录后再填写"} {
 		t.Run(value, func(t *testing.T) {
-			t.Chdir(t.TempDir())
+			completeConfig(t)
 			t.Setenv("APP_ENV", "development")
 			t.Setenv("PUBLIC_URL", "http://127.0.0.1:8080")
 			t.Setenv("ADMIN_USER_IDS", "")
 			if err := os.Unsetenv("ADMIN_USER_IDS"); err != nil {
 				t.Fatal(err)
 			}
-			if err := os.WriteFile(".env", []byte("ADMIN_USER_IDS="+value+"\n"), 0600); err != nil {
+			if err := os.WriteFile(".env", append(Example(), []byte("ADMIN_USER_IDS="+value+"\n")...), 0600); err != nil {
 				t.Fatal(err)
 			}
 			c, err := Load()
@@ -87,14 +87,15 @@ func TestExampleEnvironmentBootsWithEmptyOptionalSettings(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Chdir(t.TempDir())
-	for _, line := range strings.Split(string(contents), "\n") {
-		key, _, ok := strings.Cut(line, "=")
-		if ok {
-			t.Setenv(strings.TrimSpace(key), "")
-			if err := os.Unsetenv(strings.TrimSpace(key)); err != nil {
-				t.Fatal(err)
-			}
+	completeConfig(t)
+	values, err := parseEnv(contents)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key := range values {
+		t.Setenv(key, "")
+		if err := os.Unsetenv(key); err != nil {
+			t.Fatal(err)
 		}
 	}
 	t.Setenv("APP_SECRET", base64.StdEncoding.EncodeToString(make([]byte, 32)))
@@ -111,7 +112,7 @@ func TestExampleEnvironmentBootsWithEmptyOptionalSettings(t *testing.T) {
 }
 
 func TestLoadPreservesQuotedHashesAndMultilineValues(t *testing.T) {
-	t.Chdir(t.TempDir())
+	completeConfig(t)
 	t.Setenv("APP_ENV", "development")
 	t.Setenv("PUBLIC_URL", "http://127.0.0.1:8080")
 	for _, key := range []string{"ADMIN_USER_IDS", "OIDC_NAME", "EPAY_PRIVATE_KEY"} {
@@ -121,7 +122,7 @@ func TestLoadPreservesQuotedHashesAndMultilineValues(t *testing.T) {
 		}
 	}
 	contents := "ADMIN_USER_IDS= # optional\nOIDC_NAME=\"Campus # login\" # comment\nEPAY_PRIVATE_KEY=\"first\nINSIDE= # literal content\nlast\"\n"
-	if err := os.WriteFile(".env", []byte(contents), 0600); err != nil {
+	if err := os.WriteFile(".env", append(Example(), []byte(contents)...), 0600); err != nil {
 		t.Fatal(err)
 	}
 	c, err := Load()
@@ -149,7 +150,7 @@ func TestParseEnvPreservesLiteralHashAndYAMLMultilineValues(t *testing.T) {
 }
 
 func TestLoadDefaultsToWorkingDirectory(t *testing.T) {
-	t.Chdir(t.TempDir())
+	completeConfig(t)
 	t.Setenv("APP_ENV", "development")
 	t.Setenv("PUBLIC_URL", "http://127.0.0.1:8080")
 	t.Setenv("DATA_DIR", "")
@@ -157,7 +158,7 @@ func TestLoadDefaultsToWorkingDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want, err := os.Getwd()
+	want, err := filepath.Abs("data")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +168,7 @@ func TestLoadDefaultsToWorkingDirectory(t *testing.T) {
 }
 
 func TestRealIPHeaderConfiguration(t *testing.T) {
-	t.Chdir(t.TempDir())
+	completeConfig(t)
 	t.Setenv("APP_ENV", "development")
 	t.Setenv("PUBLIC_URL", "http://127.0.0.1:8080")
 	for _, tc := range []struct {
@@ -200,7 +201,7 @@ func TestRealIPHeaderConfiguration(t *testing.T) {
 }
 
 func TestLoadReadsWorkingDirectoryEnvWithoutOverridingProcess(t *testing.T) {
-	t.Chdir(t.TempDir())
+	completeConfig(t)
 	for _, key := range []string{"APP_ENV", "PUBLIC_URL", "DATA_DIR", "OIDC_NAME"} {
 		t.Setenv(key, "")
 		if err := os.Unsetenv(key); err != nil {
@@ -210,7 +211,7 @@ func TestLoadReadsWorkingDirectoryEnvWithoutOverridingProcess(t *testing.T) {
 	t.Setenv("LOG_LEVEL", "WARN")
 	t.Setenv("ADMIN_USER_IDS", "")
 	contents := "APP_ENV=development\nPUBLIC_URL=http://127.0.0.1:8080\nDATA_DIR='./state'\nOIDC_NAME=\"Campus # login\" # comment\nLOG_LEVEL=DEBUG\nADMIN_USER_IDS=invalid\n"
-	if err := os.WriteFile(".env", []byte(contents), 0600); err != nil {
+	if err := os.WriteFile(".env", append(Example(), []byte(contents)...), 0600); err != nil {
 		t.Fatal(err)
 	}
 	c, err := Load()
@@ -232,11 +233,12 @@ func TestLoadReadsWorkingDirectoryEnvWithoutOverridingProcess(t *testing.T) {
 func TestLoadRejectsUnreadableOrInvalidEnvWithoutExposingContents(t *testing.T) {
 	for _, directory := range []bool{false, true} {
 		t.Run(map[bool]string{false: "invalid", true: "directory"}[directory], func(t *testing.T) {
-			t.Chdir(t.TempDir())
+			completeConfig(t)
 			t.Setenv("APP_ENV", "development")
 			t.Setenv("PUBLIC_URL", "http://127.0.0.1:8080")
 			var err error
 			if directory {
+				_ = os.Remove(".env")
 				err = os.Mkdir(".env", 0700)
 			} else {
 				err = os.WriteFile(".env", []byte("APP_SECRET=\"private-secret-value"), 0600)
@@ -255,14 +257,14 @@ func TestLoadPreservesWindowsProcessEnvironmentCase(t *testing.T) {
 	if runtime.GOOS != "windows" {
 		t.Skip("Windows environment variables are case-insensitive")
 	}
-	t.Chdir(t.TempDir())
+	completeConfig(t)
 	t.Setenv("APP_ENV", "development")
 	t.Setenv("PUBLIC_URL", "")
 	if err := os.Unsetenv("PUBLIC_URL"); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("public_url", "https://process.example")
-	if err := os.WriteFile(".env", []byte("PUBLIC_URL=https://file.example\n"), 0600); err != nil {
+	if err := os.WriteFile(".env", append(Example(), []byte("PUBLIC_URL=https://file.example\n")...), 0600); err != nil {
 		t.Fatal(err)
 	}
 	c, err := Load()
@@ -275,6 +277,7 @@ func TestLoadPreservesWindowsProcessEnvironmentCase(t *testing.T) {
 }
 
 func TestLoginProviderOptionsValidatePublicIdentifiers(t *testing.T) {
+	completeConfig(t)
 	for _, tc := range []struct{ key, value string }{
 		{"OIDC_ID", "qq"}, {"OIDC_ID", "../oidc"}, {"OIDC_ID", "a/b"}, {"OIDC_ID", "Upper"},
 		{"OIDC_ICON_URL", "javascript:alert(1)"}, {"OIDC_ICON_URL", "http://icons.test/logo.svg"},
@@ -292,6 +295,7 @@ func TestLoginProviderOptionsValidatePublicIdentifiers(t *testing.T) {
 }
 
 func TestLoadRejectsInvalidProductionURL(t *testing.T) {
+	completeConfig(t)
 	t.Setenv("PUBLIC_URL", "http://donate.example")
 	if _, err := Load(); err == nil {
 		t.Fatal("insecure production URL accepted")
@@ -299,6 +303,7 @@ func TestLoadRejectsInvalidProductionURL(t *testing.T) {
 }
 
 func TestLoadDevelopmentAndAdminIDs(t *testing.T) {
+	completeConfig(t)
 	t.Setenv("APP_ENV", "development")
 	t.Setenv("PUBLIC_URL", "http://127.0.0.1:8080")
 	t.Setenv("ADMIN_USER_IDS", "invalid")
