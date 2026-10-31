@@ -29,6 +29,19 @@
   flex: 1;
   min-width: 0;
 }
+#receipt-refinement .r-pay {
+  position: relative;
+}
+#receipt-refinement .r-pay .r-primary {
+  border-radius: var(--r-control-radius);
+  padding-inline: 52px;
+}
+#receipt-refinement .r-pay .r-channel {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-end: 0;
+  width: 46px;
+}
 .payment-button-content > .animated-height {
   display: block;
 }

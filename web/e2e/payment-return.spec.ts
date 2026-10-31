@@ -94,6 +94,40 @@ async function prepare(page: Page, options: { status?: string; error?: string; s
   };
 }
 
+test('payment labels center on the entire split button at every width and return state', async ({ page }) => {
+  await prepare(page, { error: 'UNAVAILABLE' });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  for (const callback of [false, true]) {
+    await page.goto(callback ? `/?payment=returned&order=${orderID}` : '/');
+    const ticket = page.locator('.r-write .r-ticket');
+    if (callback) await expect(ticket).toHaveAttribute('data-payment-phase', 'error');
+    for (const width of [320, 390, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect
+        .poll(async () =>
+          page.locator('.r-pay').evaluate((element) => {
+            const label = element.querySelector('.payment-button-label');
+            if (!label) return Number.POSITIVE_INFINITY;
+            const range = document.createRange();
+            range.selectNodeContents(label);
+            const text = range.getBoundingClientRect();
+            const button = element.getBoundingClientRect();
+            return Math.abs((text.left + text.right) / 2 - (button.left + button.right) / 2);
+          }),
+        )
+        .toBeLessThanOrEqual(1);
+      const bounds = await page.locator('.r-pay').evaluate((element) => {
+        const label = element.querySelector('.payment-button-label')?.getBoundingClientRect();
+        const menu = element.querySelector('.r-channel')?.getBoundingClientRect();
+        if (!label || !menu) throw new Error('Payment controls are missing');
+        return { labelRight: label.right, menuLeft: menu.left };
+      });
+      expect(bounds.labelRight).toBeLessThanOrEqual(bounds.menuLeft);
+      if (callback) await expect(ticket.locator('.r-channel')).toBeDisabled();
+    }
+  }
+});
+
 test('the composer stays expanded on narrow screens without a collapse control', async ({ page }) => {
   await prepare(page, { signedIn: false });
   await page.setViewportSize({ width: 320, height: 720 });
