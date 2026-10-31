@@ -367,7 +367,13 @@ func (s *Service) exchangeOIDC(ctx context.Context, code string, f flow) (Identi
 	if claims.Name == "" {
 		claims.Name = claims.Preferred
 	}
-	return Identity{Provider: "oidc", Issuer: s.Config.OIDCissuer, Subject: verified.Subject, Nickname: claims.Name, AvatarURL: avatar}, nil
+	unavailable := userInfoStatus != "accepted" && userInfoStatus != "not_needed"
+	return Identity{
+		Provider: "oidc", Issuer: s.Config.OIDCissuer, Subject: verified.Subject,
+		Nickname: claims.Name, AvatarURL: avatar,
+		preserveNickname: unavailable && claims.Name == "",
+		preserveAvatar:   unavailable && avatar == "",
+	}, nil
 }
 func (s *Service) finishFlow(ctx context.Context, f flow, p Identity) (FlowResult, error) {
 	// A one-way stage claim prevents replay even if the process stops before sending the cookie.

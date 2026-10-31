@@ -43,6 +43,10 @@ type Identity struct {
 	QQOpenID  string    `json:"-"`
 	QQUnionID string    `json:"-"`
 	BoundAt   time.Time `json:"bound_at"`
+
+	// Failed enrichment must not erase fields from an existing identity.
+	preserveNickname bool
+	preserveAvatar   bool
 }
 type Session struct {
 	ID, UserID, IdentityID, Nickname, AvatarURL, Provider, CSRF string
@@ -126,7 +130,7 @@ func (s *Service) loginIdentity(ctx context.Context, p Identity, flowID []byte) 
 		} else if e != nil {
 			return e
 		} else {
-			if _, e = tx.ExecContext(ctx, "UPDATE identities SET subject=?,nickname=?,avatar_url=?,qq_openid=CASE WHEN ?='' THEN qq_openid ELSE ? END,qq_unionid=CASE WHEN ?='' THEN qq_unionid ELSE ? END,updated_at=? WHERE id=?", p.Subject, name(p.Nickname), SafeAvatar(p.AvatarURL), p.QQOpenID, p.QQOpenID, p.QQUnionID, p.QQUnionID, now.Unix(), iid); e != nil {
+			if _, e = tx.ExecContext(ctx, "UPDATE identities SET subject=?,nickname=CASE WHEN ? THEN nickname ELSE ? END,avatar_url=CASE WHEN ? THEN avatar_url ELSE ? END,qq_openid=CASE WHEN ?='' THEN qq_openid ELSE ? END,qq_unionid=CASE WHEN ?='' THEN qq_unionid ELSE ? END,updated_at=? WHERE id=?", p.Subject, p.preserveNickname, name(p.Nickname), p.preserveAvatar, SafeAvatar(p.AvatarURL), p.QQOpenID, p.QQOpenID, p.QQUnionID, p.QQUnionID, now.Unix(), iid); e != nil {
 				if storage.Conflict(e) {
 					return ErrConflict
 				}
