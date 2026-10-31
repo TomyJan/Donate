@@ -32,6 +32,7 @@ type Job struct {
 	RequestID  string    `json:"request_id"`
 	Result     string    `json:"result"`
 	LeaseToken string    `json:"-"`
+	Diagnostic string    `json:"-"`
 	RunAt      time.Time `json:"run_at"`
 }
 
@@ -186,7 +187,7 @@ func (q *Queue) Finish(ctx context.Context, j Job, status, result string, next t
 		if next.IsZero() {
 			run = now.Unix()
 		}
-		r, e := tx.ExecContext(ctx, "UPDATE jobs SET status=?,last_result=?,run_at=?,lease_token=NULL,lease_until=NULL,rerun=0,updated_at=? WHERE id=? AND lease_token=?", status, result, run, now.Unix(), id, j.LeaseToken)
+		r, e := tx.ExecContext(ctx, "UPDATE jobs SET status=?,last_result=?,last_error=?,run_at=?,lease_token=NULL,lease_until=NULL,rerun=0,updated_at=? WHERE id=? AND lease_token=?", status, result, j.Diagnostic, run, now.Unix(), id, j.LeaseToken)
 		if e != nil {
 			return e
 		}

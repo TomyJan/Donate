@@ -199,7 +199,17 @@ func (r *Runner) Execute(parent context.Context, j Job) {
 	}
 	r.finish(ctx, j, "ready", obs.State, next)
 }
-func (r *Runner) finish(ctx context.Context, j Job, status, result string, next time.Time) {
+func (r *Runner) finish(ctx context.Context, j Job, status, result string, next time.Time, causes ...error) {
+	if len(causes) > 0 {
+		j.Diagnostic = payment.Diagnostic(causes[0])
+	}
+	// A worker timeout must still release its valid lease and persist the result.
+	// Finish rechecks the token and expiry before writing anything.
+	if ctx.Err() != nil {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
+		defer cancel()
+	}
 	ok, e := r.Queue.Finish(ctx, j, status, result, next)
 	if e != nil {
 		r.Queue.Log.Error(fmt.Sprintf("订单 %s 的任务 %s 保存执行结果失败", j.OrderID, j.ID), "order_id", j.OrderID, "job_id", j.ID, "error", e)
@@ -212,6 +222,7 @@ func (r *Runner) retry(ctx context.Context, j Job, o order.Order, result string,
 	if len(causes) > 0 {
 		reason = payment.Diagnostic(causes[0])
 	}
+	j.Diagnostic = reason
 	now := r.Queue.Now()
 	delays := []time.Duration{time.Minute, 2 * time.Minute, 5 * time.Minute, 10 * time.Minute}
 	next := now.Add(delays[min(j.Attempts-1, 3)] + time.Duration(rand.IntN(15))*time.Second)
@@ -269,7 +280,7 @@ func (r *Runner) close(ctx context.Context, j Job, o order.Order, obs order.Obse
 		remote = "confirmed"
 	}
 	if e := r.persistClose(ctx, j, o, remote); e != nil {
-		r.retry(ctx, j, o, "close_save_failed")
+		r.retry(ctx, j, o, "close_save_failed", e)
 		return
 	}
 	// A close ACK alone cannot rule out a racing payment. Verify once more
@@ -395,13 +406,13 @@ func (r *Runner) geolocate(ctx context.Context, j Job, o order.Order) {
 			r.Queue.Log.Warn("订单 "+o.ID+" 的 IP "+o.IP+" 刷新属地未取得省级信息，保留原属地", "order_id", o.ID, "ip", o.IP, "job_id", j.ID, "source", p.Source)
 		}
 		if j.Attempts >= 3 {
-			r.finish(ctx, j, "failed", "unknown", time.Time{})
+			r.finish(ctx, j, "failed", "unknown", time.Time{}, e)
 		} else {
 			delay := time.Minute
 			if j.Attempts > 1 {
 				delay = 10 * time.Minute
 			}
-			r.finish(ctx, j, "ready", "source_unavailable", r.Queue.Now().Add(delay))
+			r.finish(ctx, j, "ready", "source_unavailable", r.Queue.Now().Add(delay), e)
 		}
 		return
 	}
@@ -424,7 +435,7 @@ func (r *Runner) geolocate(ctx context.Context, j Job, o order.Order) {
 		return e
 	})
 	if e != nil {
-		r.finish(ctx, j, "failed", "save_failed", time.Time{})
+		r.finish(ctx, j, "failed", "save_failed", time.Time{}, e)
 		return
 	}
 	r.finish(ctx, j, "done", "located_"+p.Source, time.Time{})
