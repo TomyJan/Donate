@@ -165,11 +165,15 @@ func validateDatabaseContext(ctx context.Context, path, kind string) error {
 		if err := r.Verify(); err != nil {
 			return errors.New("MMDB 完整性校验失败")
 		}
-		typeName := strings.ToLower(r.Metadata.DatabaseType)
-		if strings.Contains(typeName, "country") || strings.Contains(typeName, "asn") {
-			return errors.New("需要 City MMDB，不能使用 Country / ASN 库")
+		// Structural integrity alone does not imply a City-compatible schema.
+		// ISP and anonymous-IP products are valid MMDBs but cannot locate users.
+		switch strings.ToLower(r.Metadata.DatabaseType) {
+		case "geoip2-city", "geolite2-city", "geoip2-enterprise",
+			"dbip-city-lite", "dbip-city", "dbip-location", "dbip-location-isp", "dbip-full":
+			return nil
+		default:
+			return errors.New("需要兼容的 City MMDB，不能使用 Country / ASN / 独立 ISP 等库")
 		}
-		return nil
 	}
 	version := xdb.IPv4
 	if kind == "xdb6" {
