@@ -203,10 +203,30 @@ func verifyXDBRecords(ctx context.Context, path string, version *xdb.Version) er
 	length := int64(header.EndIndexPtr) - int64(header.StartIndexPtr) + size
 	r := bufio.NewReaderSize(contextReader{ctx, io.NewSectionReader(f, int64(header.StartIndexPtr), length)}, 64*1024)
 	segment := make([]byte, size)
+	previousEnd := make([]byte, version.Bytes)
+	currentStart := make([]byte, version.Bytes)
+	copyAddress := func(dst, src []byte) {
+		copy(dst, src)
+		// The SDK compares network-order input with little-endian IPv4 indexes.
+		if version.Id == xdb.IPv4VersionNo {
+			for i, j := 0, len(dst)-1; i < j; i, j = i+1, j-1 {
+				dst[i], dst[j] = dst[j], dst[i]
+			}
+		}
+	}
 	for offset := int64(0); offset < length; offset += size {
 		if _, err := io.ReadFull(r, segment); err != nil {
 			return errors.New("XDB 分段索引截断或读取失败")
 		}
+		start, end := segment[:version.Bytes], segment[version.Bytes:version.Bytes*2]
+		copyAddress(currentStart, start)
+		if version.IPCompare(currentStart, end) > 0 {
+			return errors.New("XDB 地址区间起止倒置")
+		}
+		if offset > 0 && version.IPCompare(previousEnd, start) >= 0 {
+			return errors.New("XDB 地址区间乱序或重叠")
+		}
+		copyAddress(previousEnd, end)
 		at := version.Bytes * 2
 		dataLength := int64(binary.LittleEndian.Uint16(segment[at:]))
 		dataOffset := int64(binary.LittleEndian.Uint32(segment[at+2:]))
