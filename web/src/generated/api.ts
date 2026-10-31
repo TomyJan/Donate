@@ -717,8 +717,19 @@ export interface components {
             accuracy_radius?: number | null;
             asn: string;
             city: string;
+            conflict?: boolean;
             country: string;
             district: string;
+            evidence?: {
+                city?: string;
+                country?: string;
+                outcome: string;
+                province?: string;
+                /** Format: date-time */
+                queried_at: string;
+                source: string;
+                version?: string;
+            }[];
             isp: string;
             latitude?: number | null;
             longitude?: number | null;
@@ -727,6 +738,7 @@ export interface components {
             queried_at: string;
             source: string;
             street: string;
+            verification?: string;
             version: string;
         };
         LoginInput: {
@@ -809,8 +821,19 @@ export interface components {
                 accuracy_radius?: number | null;
                 asn: string;
                 city: string;
+                conflict?: boolean;
                 country: string;
                 district: string;
+                evidence?: {
+                    city?: string;
+                    country?: string;
+                    outcome: string;
+                    province?: string;
+                    /** Format: date-time */
+                    queried_at: string;
+                    source: string;
+                    version?: string;
+                }[];
                 isp: string;
                 latitude?: number | null;
                 longitude?: number | null;
@@ -819,6 +842,35 @@ export interface components {
                 queried_at: string;
                 source: string;
                 street: string;
+                verification?: string;
+                version: string;
+            } | null;
+            location_check?: {
+                accuracy_radius?: number | null;
+                asn: string;
+                city: string;
+                conflict?: boolean;
+                country: string;
+                district: string;
+                evidence?: {
+                    city?: string;
+                    country?: string;
+                    outcome: string;
+                    province?: string;
+                    /** Format: date-time */
+                    queried_at: string;
+                    source: string;
+                    version?: string;
+                }[];
+                isp: string;
+                latitude?: number | null;
+                longitude?: number | null;
+                province: string;
+                /** Format: date-time */
+                queried_at: string;
+                source: string;
+                street: string;
+                verification?: string;
                 version: string;
             } | null;
             merchant_order_no: string;

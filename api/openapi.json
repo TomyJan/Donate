@@ -262,11 +262,49 @@
           "city": {
             "type": "string"
           },
+          "conflict": {
+            "type": "boolean"
+          },
           "country": {
             "type": "string"
           },
           "district": {
             "type": "string"
+          },
+          "evidence": {
+            "items": {
+              "properties": {
+                "city": {
+                  "type": "string"
+                },
+                "country": {
+                  "type": "string"
+                },
+                "outcome": {
+                  "type": "string"
+                },
+                "province": {
+                  "type": "string"
+                },
+                "queried_at": {
+                  "format": "date-time",
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                },
+                "version": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "outcome",
+                "queried_at",
+                "source"
+              ],
+              "type": "object"
+            },
+            "type": "array"
           },
           "isp": {
             "type": "string"
@@ -290,6 +328,9 @@
             "type": "string"
           },
           "street": {
+            "type": "string"
+          },
+          "verification": {
             "type": "string"
           },
           "version": {
@@ -556,11 +597,49 @@
               "city": {
                 "type": "string"
               },
+              "conflict": {
+                "type": "boolean"
+              },
               "country": {
                 "type": "string"
               },
               "district": {
                 "type": "string"
+              },
+              "evidence": {
+                "items": {
+                  "properties": {
+                    "city": {
+                      "type": "string"
+                    },
+                    "country": {
+                      "type": "string"
+                    },
+                    "outcome": {
+                      "type": "string"
+                    },
+                    "province": {
+                      "type": "string"
+                    },
+                    "queried_at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "outcome",
+                    "queried_at",
+                    "source"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
               },
               "isp": {
                 "type": "string"
@@ -584,6 +663,111 @@
                 "type": "string"
               },
               "street": {
+                "type": "string"
+              },
+              "verification": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "asn",
+              "city",
+              "country",
+              "district",
+              "isp",
+              "province",
+              "queried_at",
+              "source",
+              "street",
+              "version"
+            ],
+            "type": "object"
+          },
+          "location_check": {
+            "nullable": true,
+            "properties": {
+              "accuracy_radius": {
+                "nullable": true,
+                "type": "number"
+              },
+              "asn": {
+                "type": "string"
+              },
+              "city": {
+                "type": "string"
+              },
+              "conflict": {
+                "type": "boolean"
+              },
+              "country": {
+                "type": "string"
+              },
+              "district": {
+                "type": "string"
+              },
+              "evidence": {
+                "items": {
+                  "properties": {
+                    "city": {
+                      "type": "string"
+                    },
+                    "country": {
+                      "type": "string"
+                    },
+                    "outcome": {
+                      "type": "string"
+                    },
+                    "province": {
+                      "type": "string"
+                    },
+                    "queried_at": {
+                      "format": "date-time",
+                      "type": "string"
+                    },
+                    "source": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "outcome",
+                    "queried_at",
+                    "source"
+                  ],
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "isp": {
+                "type": "string"
+              },
+              "latitude": {
+                "nullable": true,
+                "type": "number"
+              },
+              "longitude": {
+                "nullable": true,
+                "type": "number"
+              },
+              "province": {
+                "type": "string"
+              },
+              "queried_at": {
+                "format": "date-time",
+                "type": "string"
+              },
+              "source": {
+                "type": "string"
+              },
+              "street": {
+                "type": "string"
+              },
+              "verification": {
                 "type": "string"
               },
               "version": {

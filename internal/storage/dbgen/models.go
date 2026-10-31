@@ -157,6 +157,11 @@ type OrderLocation struct {
 	QueriedAt      int64
 }
 
+type OrderLocationCheck struct {
+	OrderID    []byte
+	ResultJson string
+}
+
 type PaymentObservation struct {
 	ID         []byte
 	OrderID    []byte

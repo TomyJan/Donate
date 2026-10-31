@@ -107,7 +107,7 @@ func TestIncompleteRefreshFailsWithoutEnablingNetwork(t *testing.T) {
 }
 
 func TestLocalProvinceAvoidsOnlineRequests(t *testing.T) {
-	s, err := New(config.Config{GeoMode: "local", GeoPath: "testdata/synthetic-province.mmdb", GeoOnlineFallback: true}, slog.Default())
+	s, err := New(config.Config{GeoMode: "local", GeoPath: "testdata/synthetic-province.mmdb", GeoOnlineFallback: false}, slog.Default())
 	if err != nil {
 		t.Fatal(err)
 	}

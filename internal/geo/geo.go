@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"math"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -24,21 +25,25 @@ import (
 var ErrUnavailable = errors.New("属地查询暂不可用")
 var ErrDisabled = errors.New("属地查询已禁用")
 var ErrIncomplete = errors.New("属地查询未取得省级信息")
+var ErrConflict = errors.New("属地来源存在未解决的分歧")
 
 type Location struct {
-	Country        string    `json:"country"`
-	Province       string    `json:"province"`
-	City           string    `json:"city"`
-	District       string    `json:"district"`
-	Street         string    `json:"street"`
-	ISP            string    `json:"isp"`
-	ASN            string    `json:"asn"`
-	Latitude       *float64  `json:"latitude,omitempty"`
-	Longitude      *float64  `json:"longitude,omitempty"`
-	AccuracyRadius *float64  `json:"accuracy_radius,omitempty"`
-	Source         string    `json:"source"`
-	Version        string    `json:"version"`
-	QueriedAt      time.Time `json:"queried_at"`
+	Country        string     `json:"country"`
+	Province       string     `json:"province"`
+	City           string     `json:"city"`
+	District       string     `json:"district"`
+	Street         string     `json:"street"`
+	ISP            string     `json:"isp"`
+	ASN            string     `json:"asn"`
+	Latitude       *float64   `json:"latitude,omitempty"`
+	Longitude      *float64   `json:"longitude,omitempty"`
+	AccuracyRadius *float64   `json:"accuracy_radius,omitempty"`
+	Source         string     `json:"source"`
+	Version        string     `json:"version"`
+	QueriedAt      time.Time  `json:"queried_at"`
+	Verification   string     `json:"verification,omitempty"`
+	Conflict       bool       `json:"conflict,omitempty"`
+	Evidence       []Evidence `json:"evidence,omitempty"`
 }
 type cached struct {
 	value    Location
@@ -51,34 +56,52 @@ type source struct {
 	interval       time.Duration
 	v4only         bool
 	mu             sync.Mutex
+	gate           chan struct{}
 	next, blocked  time.Time
 	failures       int
 }
 type Service struct {
-	HTTP     *http.Client
-	config   config.Config
-	log      *slog.Logger
-	local    *maxminddb.Reader
-	sources  []*source
-	mu       sync.Mutex
-	cache    map[string]cached
-	flight   singleflight.Group
-	revision uint64
+	HTTP       *http.Client
+	config     config.Config
+	log        *slog.Logger
+	local      *maxminddb.Reader
+	xdb4, xdb6 *xdbReader
+	localMu    sync.RWMutex
+	closed     bool
+	sources    []*source
+	mu         sync.Mutex
+	cache      map[string]cached
+	flight     singleflight.Group
+	revision   uint64
 }
 
 func New(c config.Config, l *slog.Logger) (*Service, error) {
+	if l == nil {
+		l = slog.Default()
+	}
 	s := &Service{config: c, log: l, cache: map[string]cached{}, HTTP: &http.Client{Timeout: 2 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}}
 	s.sources = []*source{{name: "ip9", endpoint: "https://ip9.com.cn/get?ip=", interval: 1200 * time.Millisecond}, {name: "ipyou", endpoint: "https://ipyou.net/", interval: 2 * time.Second}, {name: "i5p", endpoint: "https://www.i5p.com/api/ip?ip=", interval: 3 * time.Second}, {name: "pconline", endpoint: "https://whois.pconline.com.cn/ipJson.jsp?json=true&ip=", interval: 2 * time.Second, v4only: true}}
 	if c.GeoMode == "local" {
-		r, e := maxminddb.Open(c.GeoPath)
-		if e != nil {
-			return nil, e
+		if err := s.openLocal(); err != nil {
+			s.Close()
+			return nil, err
 		}
-		s.local = r
 	}
 	return s, nil
 }
 func (s *Service) Close() {
+	s.localMu.Lock()
+	defer s.localMu.Unlock()
+	if s.closed {
+		return
+	}
+	s.closed = true
+	if s.xdb4 != nil {
+		s.xdb4.close()
+	}
+	if s.xdb6 != nil {
+		s.xdb6.close()
+	}
 	if s.local != nil {
 		s.local.Close()
 	}
@@ -109,6 +132,12 @@ func (s *Service) Refresh(ctx context.Context, ip string) (Location, error) {
 }
 
 func (s *Service) lookup(ctx context.Context, ip string, force bool) (Location, error) {
+	s.localMu.RLock()
+	closed := s.closed
+	s.localMu.RUnlock()
+	if closed {
+		return Location{}, ErrUnavailable
+	}
 	a, e := netip.ParseAddr(ip)
 	if e != nil {
 		return Location{}, e
@@ -132,7 +161,7 @@ func (s *Service) lookup(ctx context.Context, ip string, force bool) (Location, 
 	}
 	s.mu.Unlock()
 	if !force && ok && v.until.After(time.Now()) {
-		return v.value, v.err
+		return cloneLocation(v.value), v.err
 	}
 	flightKey := ip
 	if force {
@@ -152,44 +181,8 @@ func (s *Service) lookup(ctx context.Context, ip string, force bool) (Location, 
 		remember := func(p Location, err error) Location { return s.remember(ip, p, err, lookupRevision, force) }
 		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		defer cancel()
-		var out Location
-		var partial Location
-		var err error
-		if s.local != nil {
-			out, err = s.lookupLocal(a)
-			if err == nil && out.Country != "" {
-				if strings.TrimSpace(out.Province) != "" {
-					return remember(out, nil), nil
-				}
-				partial = out
-			}
-			if !s.config.GeoOnlineFallback {
-				return remember(out, err), err
-			}
-			s.log.Debug("IP "+ip+" 的本地属地缺少省级信息，继续在线查询", "ip", ip, "country", out.Country, "source", out.Source, "error", err)
-		}
-		for _, src := range s.sources {
-			if src.v4only && !a.Is4() {
-				continue
-			}
-			out, err = s.lookupOnline(ctx, src, ip)
-			if err == nil {
-				if strings.TrimSpace(out.Province) != "" {
-					return remember(out, nil), nil
-				}
-				if partial.Country == "" {
-					partial = out
-				}
-				s.log.Debug("IP "+ip+" 的在线属地缺少省级信息，继续下一个来源", "ip", ip, "source", src.name, "country", out.Country)
-			}
-		}
-		if partial.Country != "" {
-			s.log.Warn("IP "+ip+" 的属地来源均未取得省级信息，暂保留 "+partial.Source+" 的部分结果", "ip", ip, "source", partial.Source, "country", partial.Country)
-			return remember(partial, nil), nil
-		}
-		out = Location{Source: "unknown", QueriedAt: time.Now().UTC()}
-		remember(out, ErrUnavailable)
-		return out, ErrUnavailable
+		out, err := s.resolve(ctx, a)
+		return remember(out, err), err
 	})
 	select {
 	case <-ctx.Done():
@@ -198,7 +191,10 @@ func (s *Service) lookup(ctx context.Context, ip string, force bool) (Location, 
 		if r.Val == nil {
 			return Location{}, r.Err
 		}
-		out := r.Val.(Location)
+		out := cloneLocation(r.Val.(Location))
+		if force && r.Err == nil && out.Verification == "conflict" {
+			return out, ErrConflict
+		}
 		if force && r.Err == nil && out.Country == "" {
 			return out, ErrUnavailable
 		}
@@ -235,15 +231,28 @@ func (s *Service) remember(ip string, p Location, e error, revision uint64, forc
 		}
 	}
 	ttl := 24 * time.Hour
-	if e != nil || p.Country == "" || strings.TrimSpace(p.Province) == "" {
+	if e != nil || p.Country == "" || strings.TrimSpace(p.Province) == "" || (s.config.GeoMode == "local" && s.config.GeoOnlineFallback && p.Verification == "single") {
 		ttl = 5 * time.Minute
 	}
-	s.cache[ip] = cached{value: p, until: time.Now().Add(ttl), err: e, revision: revision}
+	s.cache[ip] = cached{value: cloneLocation(p), until: time.Now().Add(ttl), err: e, revision: revision}
 	return p
 }
 func (s *Service) lookupOnline(ctx context.Context, src *source, ip string) (out Location, err error) {
 	src.mu.Lock()
-	defer src.mu.Unlock()
+	if src.gate == nil {
+		src.gate = make(chan struct{}, 1)
+	}
+	gate := src.gate
+	src.mu.Unlock()
+	select {
+	case gate <- struct{}{}:
+	case <-ctx.Done():
+		return out, ctx.Err()
+	}
+	defer func() { <-gate }()
+	if err := ctx.Err(); err != nil {
+		return out, err
+	}
 	now := time.Now()
 	if src.blocked.After(now) {
 		return out, ErrUnavailable
@@ -371,12 +380,18 @@ func parse(name string, b []byte, ip string) (Location, error) {
 	}
 	p.Latitude = number("latitude", "lat")
 	p.Longitude = number("longitude", "lng")
+	if p.Latitude != nil && (math.IsNaN(*p.Latitude) || math.IsInf(*p.Latitude, 0) || *p.Latitude < -90 || *p.Latitude > 90) {
+		p.Latitude = nil
+	}
+	if p.Longitude != nil && (math.IsNaN(*p.Longitude) || math.IsInf(*p.Longitude, 0) || *p.Longitude < -180 || *p.Longitude > 180) {
+		p.Longitude = nil
+	}
 	if p.Country == "" {
 		return p, ErrUnavailable
 	}
-	return p, nil
+	return normalize(p), nil
 }
-func (s *Service) lookupLocal(ip netip.Addr) (Location, error) {
+func (s *Service) lookupMMDB(ip netip.Addr) (Location, error) {
 	var d struct {
 		Country struct {
 			Names map[string]string `maxminddb:"names"`
@@ -426,5 +441,5 @@ func (s *Service) lookupLocal(ip netip.Addr) (Location, error) {
 	if p.ISP == "" {
 		p.ISP = d.Organization
 	}
-	return p, nil
+	return normalize(p), nil
 }

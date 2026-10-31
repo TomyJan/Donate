@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/TomyJan/Donate/internal/auth"
@@ -179,12 +180,13 @@ type Detail struct {
 	Province        string               `json:"province"`
 	Reconciliations []ReconciliationView `json:"reconciliations,omitempty"`
 	order.Order
-	IP        string        `json:"ip,omitempty"`
-	QQNumber  string        `json:"qq_number,omitempty"`
-	Nickname  string        `json:"nickname"`
-	AvatarURL string        `json:"avatar_url"`
-	Location  *geo.Location `json:"location,omitempty"`
-	Jobs      []JobView     `json:"jobs,omitempty"`
+	IP            string        `json:"ip,omitempty"`
+	QQNumber      string        `json:"qq_number,omitempty"`
+	Nickname      string        `json:"nickname"`
+	AvatarURL     string        `json:"avatar_url"`
+	Location      *geo.Location `json:"location,omitempty"`
+	LocationCheck *geo.Location `json:"location_check,omitempty"`
+	Jobs          []JobView     `json:"jobs,omitempty"`
 }
 type JobView struct {
 	Source    string    `json:"source"`
@@ -234,6 +236,17 @@ func (s *Service) Detail(ctx context.Context, id string, full bool) (Detail, err
 	d.QQNumber = o.DonorQQNumber
 	if e == nil {
 		d.Location = &p
+	}
+	var checkJSON string
+	checkErr := s.Store.DB.QueryRowContext(ctx, "SELECT result_json FROM order_location_checks WHERE order_id=?", oid).Scan(&checkJSON)
+	if checkErr == nil {
+		var check geo.Location
+		if err := json.Unmarshal([]byte(checkJSON), &check); err != nil {
+			return d, err
+		}
+		d.LocationCheck = &check
+	} else if !errors.Is(checkErr, sql.ErrNoRows) {
+		return d, checkErr
 	}
 	rows, e := s.Store.DB.QueryContext(ctx, "SELECT id,kind,status,last_result,attempts,run_at,source,created_at FROM jobs WHERE order_id=? ORDER BY created_at DESC,id DESC", oid)
 	if e != nil {

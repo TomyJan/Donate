@@ -214,6 +214,8 @@ func (r *Runner) Execute(parent context.Context, j Job) {
 }
 func taskDiagnostic(err error) string {
 	switch {
+	case errors.Is(err, geo.ErrConflict):
+		return "geo_source_conflict"
 	case errors.Is(err, geo.ErrIncomplete):
 		return "geo_province_missing"
 	case errors.Is(err, geo.ErrDisabled):
@@ -432,7 +434,17 @@ func (r *Runner) geolocate(ctx context.Context, j Job, o order.Order) {
 		r.finish(ctx, j, "failed", "disabled", time.Time{})
 		return
 	}
+	if e == nil && p.Verification == "conflict" {
+		e = geo.ErrConflict
+	}
+	if saveErr := r.saveGeoResult(ctx, j, o, p, e == nil, refresh); saveErr != nil {
+		r.finish(ctx, j, "failed", "save_failed", time.Time{}, saveErr)
+		return
+	}
 	if e != nil {
+		if errors.Is(e, geo.ErrConflict) {
+			r.Queue.Log.Warn("订单 "+o.ID+" 的 IP "+o.IP+" 属地来源存在分歧，保留原属地并按策略重试", "order_id", o.ID, "ip", o.IP, "job_id", j.ID, "evidence", p.Evidence)
+		}
 		if errors.Is(e, geo.ErrIncomplete) {
 			r.Queue.Log.Warn("订单 "+o.ID+" 的 IP "+o.IP+" 刷新属地未取得省级信息，保留原属地", "order_id", o.ID, "ip", o.IP, "job_id", j.ID, "source", p.Source)
 		}
@@ -445,28 +457,6 @@ func (r *Runner) geolocate(ctx context.Context, j Job, o order.Order) {
 			}
 			r.finish(ctx, j, "ready", "source_unavailable", r.Queue.Now().Add(delay), e)
 		}
-		return
-	}
-	oid, _ := storage.ParseID(o.ID)
-	jid, _ := storage.ParseID(j.ID)
-	lid := storage.NewID()
-	e = r.Queue.Store.Write(ctx, func(tx *sql.Tx) error {
-		var n int
-		if e := tx.QueryRowContext(ctx, "SELECT count(*) FROM jobs WHERE id=? AND order_id=? AND kind='geo' AND source=? AND lease_token=? AND status='running' AND lease_until>?", jid, oid, j.Source, j.LeaseToken, r.Queue.Now().Unix()).Scan(&n); e != nil {
-			return e
-		}
-		if n != 1 {
-			return order.ErrBusy
-		}
-		conflict := "DO NOTHING"
-		if refresh {
-			conflict = "DO UPDATE SET country=excluded.country,province=excluded.province,city=excluded.city,district=excluded.district,street=excluded.street,isp=excluded.isp,asn=excluded.asn,latitude=excluded.latitude,longitude=excluded.longitude,accuracy_radius=excluded.accuracy_radius,source=excluded.source,source_version=excluded.source_version,queried_at=excluded.queried_at"
-		}
-		_, e := tx.ExecContext(ctx, "INSERT INTO order_locations(id,order_id,country,province,city,district,street,isp,asn,latitude,longitude,accuracy_radius,source,source_version,queried_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE EXISTS(SELECT 1 FROM orders WHERE id=?) ON CONFLICT(order_id) "+conflict, lid[:], oid, p.Country, p.Province, p.City, p.District, p.Street, p.ISP, p.ASN, p.Latitude, p.Longitude, p.AccuracyRadius, p.Source, p.Version, p.QueriedAt.Unix(), oid)
-		return e
-	})
-	if e != nil {
-		r.finish(ctx, j, "failed", "save_failed", time.Time{}, e)
 		return
 	}
 	r.finish(ctx, j, "done", "located_"+p.Source, time.Time{})

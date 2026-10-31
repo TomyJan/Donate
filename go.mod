@@ -10,6 +10,7 @@ require (
 	github.com/gofrs/flock v0.13.1
 	github.com/google/uuid v1.6.0
 	github.com/joho/godotenv v1.5.1
+	github.com/lionsoul2014/ip2region/binding/golang v0.0.0-20261028042204-6a276cc7c4f9
 	github.com/oschwald/maxminddb-golang/v2 v2.8.0
 	github.com/pressly/goose/v3 v3.29.0
 	golang.org/x/net v0.61.0

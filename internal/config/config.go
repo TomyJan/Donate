@@ -31,6 +31,7 @@ type Config struct {
 	EpayURL, EpayPID, EpayProtocol, EpayKey, EpayPrivateKey, EpayPublicKey string
 	PaymentRedirectHosts                                                   []string
 	GeoMode, GeoPath                                                       string
+	GeoXDBv4, GeoXDBv6                                                     string
 	GeoOnlineFallback                                                      bool
 }
 
@@ -161,8 +162,10 @@ func Load() (Config, error) {
 	if c.GeoMode != "online" && c.GeoMode != "local" && c.GeoMode != "disabled" {
 		return c, errors.New("GEO_MODE 无效")
 	}
-	if c.GeoMode == "local" && c.GeoPath == "" {
-		return c, errors.New("本地属地模式需要 GEO_DATABASE")
+	c.GeoXDBv4 = strings.TrimSpace(os.Getenv("GEO_XDB_IPV4"))
+	c.GeoXDBv6 = strings.TrimSpace(os.Getenv("GEO_XDB_IPV6"))
+	if c.GeoMode == "local" && c.GeoPath == "" && c.GeoXDBv4 == "" && c.GeoXDBv6 == "" {
+		return c, errors.New("本地属地模式需要 GEO_XDB_IPV4、GEO_XDB_IPV6 或 GEO_DATABASE")
 	}
 	c.DataDir, err = filepath.Abs(c.DataDir)
 	return c, err

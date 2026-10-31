@@ -42,19 +42,21 @@ UMAMI_WEBSITE_ID=Umami 后台提供的网站 ID
 
 ## IP 属地
 
-默认 `GEO_MODE=online`，无需下载库或配置 API Key。使用本地库时，先下载并解压支持 MaxMind City 字段结构的 `.mmdb` 文件，再修改 `.env`，例如：
+默认 `GEO_MODE=online`，无需下载库或配置 API Key。本地推荐 ip2region 的 XDB，可选配 City MMDB 回退：
 
 ```dotenv
 GEO_MODE=local
+GEO_XDB_IPV4=./ip2region_v4.xdb
+GEO_XDB_IPV6=./ip2region_v6.xdb
 GEO_DATABASE=./GeoLite2-City.mmdb
 GEO_ONLINE_FALLBACK=true
 ```
 
 - 示例文件放在启动程序的当前目录即可，也可填写其他相对路径或绝对路径；不要求固定目录，路径含空格时加引号。
 - 修改配置、替换库文件后重启。程序不附带库、不自动下载或更新，也不热加载。
-- `GEO_ONLINE_FALLBACK=true` 在本地查询报错、未命中或缺少省份时尝试内置在线服务，会把待查询的公网 IP 发给第三方；只有市、区县缺失不会触发补充。纯离线设为 `false`。库文件缺失或打不开会启动失败，不会降级为在线启动。
+- 本地按对应协议 XDB → MMDB 选择；MMDB 可留空，XDB 可只配一种协议。`GEO_ONLINE_FALLBACK=true` 允许在线补充和省级交叉核验，会向第三方发送公网 IP；纯离线设为 `false`。显式配置的文件缺失、损坏或协议不匹配会启动失败。
 - 关闭查询设 `GEO_MODE=disabled`。前台最多展示省级，后台展示库里实际存在的字段；更新库不会重算历史订单。
-- 已有订单（含迁移订单）可由管理员在订单详情或批量操作中明确选择“刷新属地”。刷新按当前模式绕过应用内 IP 缓存重新查询，取得国家及省份后替换快照，失败或缺省份则重试并保留原值，不改变支付状态；禁用模式不会排队。换库或重启不会自动刷新旧订单。
+- 已有订单可在订单详情或批量操作中“刷新属地”，绕过缓存。失败、缺省份或分歧未解决时重试并保留原属地，后台可展开查看最近一次核验依据；不改变支付状态。换库或重启不会自动刷新旧订单。
 
 下载来源、服务商选择、格式限制及常见问题见 [IP 属地配置](ip-geolocation.md)。
 

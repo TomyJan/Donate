@@ -17,4 +17,8 @@ fixture directly and never depend on `.tools` or external IP services.
 `synthetic-province.mmdb` contains the same fabricated record plus
 `subdivisions[0].names.zh-CN: 合成省`. Together they test that a country-only
 local result falls back online when enabled, while a province-level result
-stays local. No real IP location is represented by either fixture.
+stays local in offline mode. No real IP location is represented by either fixture.
+
+XDB tests generate minimal v3 IPv4 / IPv6 files (and a v2 IPv4 variant) in test
+temporary directories. Each has one fabricated record and a real vector / segment
+index; no real IP dataset is downloaded, bundled, or required by CI.
