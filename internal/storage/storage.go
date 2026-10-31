@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -64,6 +65,29 @@ func normalizeOptions(path string, options Options) (Options, error) {
 
 func openWithOptions(ctx context.Context, path string, options Options) (*Store, error) {
 	_, statErr := os.Stat(path)
+	if os.IsNotExist(statErr) {
+		// Restore replaces the live file with two renames. A crash between them
+		// must not turn a recoverable database into a new empty installation.
+		entries, err := os.ReadDir(filepath.Dir(path))
+		if err != nil && !os.IsNotExist(err) {
+			return nil, err
+		}
+		base := filepath.Base(path)
+		if runtime.GOOS == "windows" {
+			base = strings.ToLower(base)
+		}
+		for _, entry := range entries {
+			name := entry.Name()
+			if runtime.GOOS == "windows" {
+				name = strings.ToLower(name)
+			}
+			if strings.HasPrefix(name, base+".before-restore-") || strings.HasPrefix(name, base+".restore-") {
+				return nil, fmt.Errorf("当前数据库 %q 缺失，检测到中断的恢复文件 %q；请先检查并恢复原库或暂存库", path, entry.Name())
+			}
+		}
+	} else if statErr != nil {
+		return nil, statErr
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return nil, err
 	}
