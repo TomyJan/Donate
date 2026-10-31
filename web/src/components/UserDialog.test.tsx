@@ -4,11 +4,24 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { translate } from '../lib/i18n';
 import { UserDialog } from './UserDialog';
 
-const state = vi.hoisted(() => ({ report: vi.fn(), notify: vi.fn() }));
+const state = vi.hoisted(() => ({
+  report: vi.fn(),
+  notify: vi.fn(),
+  profile: {
+    id: 'administrator',
+    admin: true,
+    nickname: 'Administrator',
+    avatar_url: '',
+    provider: 'oidc',
+    csrf_token: 'csrf',
+    expires_at: '2099-01-01T00:00:00Z',
+    bindings: [],
+  },
+}));
 vi.mock('../app/context', () => ({
   useApp: () => ({
     t: (key: string) => translate(key, 'en'),
-    profile: { id: 'administrator', admin: true },
+    profile: state.profile,
     report: state.report,
     notify: state.notify,
   }),
@@ -55,6 +68,7 @@ it('shows account information and opens its orders without embedding or fetching
     );
   });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(['profile'], state.profile);
   const onViewOrders = vi.fn();
   const onClose = vi.fn();
   try {
@@ -106,6 +120,7 @@ const target = {
 };
 const envelope = (data: unknown) => new Response(JSON.stringify({ code: 'OK', data }), { status: 200 });
 function mountTarget(client: QueryClient) {
+  client.setQueryData(['profile'], state.profile);
   vi.stubGlobal(
     'ResizeObserver',
     class {

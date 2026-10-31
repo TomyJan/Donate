@@ -10,7 +10,9 @@ export class APIError extends Error {
   }
 }
 let csrf = '';
+let credentialGeneration = 0;
 export function setCSRF(v: string) {
+  if (csrf !== v) credentialGeneration += 1;
   csrf = v;
 }
 function signalAccessFailure(path: string, status: number, code: string, isCurrent?: () => boolean) {
@@ -91,23 +93,32 @@ export async function api<T>(
   signal?: AbortSignal,
   isCurrent?: () => boolean,
 ): Promise<T> {
+  const generation = credentialGeneration;
   return request(
     path,
     body,
-    (response) => envelope<T>(path, response, () => !signal?.aborted && (isCurrent?.() ?? true)),
+    (response) =>
+      envelope<T>(
+        path,
+        response,
+        () => generation === credentialGeneration && !signal?.aborted && (isCurrent?.() ?? true),
+      ),
     signal,
   );
 }
 export async function downloadExport(id: string, isCurrent?: () => boolean) {
+  const generation = credentialGeneration;
+  const active = () => generation === credentialGeneration && (isCurrent?.() ?? true);
+  if (!active()) return;
   const path = 'admin/order/export';
   const blob = await request(path, { operation_id: id }, async (response) => {
     if (!response.ok || !response.headers.get('Content-Type')?.includes('text/csv')) {
-      await envelope(path, response, isCurrent);
-      throw responseError(path, response, isCurrent);
+      await envelope(path, response, active);
+      throw responseError(path, response, active);
     }
     return response.blob();
   });
-  if (isCurrent && !isCurrent()) return;
+  if (!active()) return;
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

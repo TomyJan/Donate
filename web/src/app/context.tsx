@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useState } from 'react';
 import { APIError, api, setCSRF } from '../lib/api';
 import { errorMessage } from '../lib/errors';
 import type { Language } from '../lib/i18n';
@@ -99,9 +99,19 @@ export function AppProvider({ children }: { children: ReactNode }) {
     retry: false,
   });
   const current = profile.data ?? null;
-  useEffect(() => {
-    setCSRF(current?.csrf_token ?? site.data?.csrf_token ?? '');
-  }, [current, site.data]);
+  useLayoutEffect(() => {
+    const syncCredentials = () => {
+      const account = client.getQueryData<Profile | null>(['profile']);
+      const info = client.getQueryData<Site>(['site']);
+      setCSRF(account?.csrf_token ?? info?.csrf_token ?? '');
+    };
+    // Install before child query effects. Profile replacements must revoke old
+    // credentials immediately, including the interval before React rerenders.
+    syncCredentials();
+    return client.getQueryCache().subscribe((event) => {
+      if (event.query.queryKey[0] === 'profile' || event.query.queryKey[0] === 'site') syncCredentials();
+    });
+  }, [client]);
   const refresh = useCallback(async () => {
     await client.invalidateQueries({ queryKey: ['profile'] });
     await client.invalidateQueries({ queryKey: ['site'] });

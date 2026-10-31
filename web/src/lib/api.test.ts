@@ -2,9 +2,98 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { APIError, api, downloadExport, setCSRF } from './api';
 
 afterEach(() => {
+  setCSRF('');
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
+
+it.each([
+  ['json 401', 401, 'UNAUTHORIZED'],
+  ['json 403', 403, 'FORBIDDEN'],
+  ['plain 401', 401, ''],
+  ['business ban', 200, 'ACCOUNT_BANNED'],
+] as const)('does not signal access failure for replaced credentials: %s', async (_label, status, code) => {
+  let finish: ((response: Response) => void) | undefined;
+  vi.stubGlobal(
+    'fetch',
+    () =>
+      new Promise<Response>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const failures: string[] = [];
+  const observe = (event: Event) => failures.push(event.type);
+  window.addEventListener('session-invalid', observe);
+  window.addEventListener('admin-forbidden', observe);
+  try {
+    setCSRF('previous-session');
+    const pending = api('admin/overview');
+    setCSRF('replacement-session');
+    finish?.(code ? Response.json({ code, data: null }, { status }) : new Response('expired', { status }));
+    await expect(pending).rejects.toMatchObject({ status });
+    expect(failures).toEqual([]);
+  } finally {
+    window.removeEventListener('session-invalid', observe);
+    window.removeEventListener('admin-forbidden', observe);
+  }
+});
+
+it('does not revive old request credentials after switching away and back', async () => {
+  let finish: ((response: Response) => void) | undefined;
+  vi.stubGlobal(
+    'fetch',
+    () =>
+      new Promise<Response>((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const expired = vi.fn();
+  window.addEventListener('session-invalid', expired);
+  try {
+    setCSRF('original-session');
+    const pending = api('order/detail?id=old');
+    setCSRF('other-session');
+    setCSRF('original-session');
+    finish?.(Response.json({ code: 'UNAUTHORIZED', data: null }, { status: 401 }));
+    await expect(pending).rejects.toMatchObject({ status: 401 });
+    expect(expired).not.toHaveBeenCalled();
+  } finally {
+    window.removeEventListener('session-invalid', expired);
+  }
+});
+
+it.each(['denied', 'csv'] as const)(
+  'ignores an export after credentials change without a caller guard: %s',
+  async (kind) => {
+    let finish: ((response: Response) => void) | undefined;
+    vi.stubGlobal(
+      'fetch',
+      () =>
+        new Promise<Response>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const denied = vi.fn();
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+    window.addEventListener('admin-forbidden', denied);
+    try {
+      setCSRF('previous-session');
+      const pending = downloadExport('previous-export');
+      setCSRF('replacement-session');
+      finish?.(
+        kind === 'denied'
+          ? Response.json({ code: 'FORBIDDEN', data: null }, { status: 403 })
+          : new Response('id\nold', { headers: { 'Content-Type': 'text/csv' } }),
+      );
+      if (kind === 'denied') await expect(pending).rejects.toMatchObject({ status: 403 });
+      else await pending;
+      expect(denied).not.toHaveBeenCalled();
+      expect(click).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener('admin-forbidden', denied);
+    }
+  },
+);
 it.each(['denied', 'csv'] as const)('ignores a stale export %s response', async (kind) => {
   let current = true;
   let finish: ((value: Response) => void) | undefined;

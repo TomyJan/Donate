@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRef } from 'react';
 import { useApp } from '../app/context';
+import { useRequestScope } from '../app/useRequestScope';
 import { api, dateTime, money, query } from '../lib/api';
 import type { Profile, User } from '../lib/types';
 import { ActionConfirm } from './ActionConfirm';
@@ -22,21 +22,32 @@ export function UserDialog({
 }) {
   const { t, profile, notify } = useApp();
   const client = useQueryClient();
-  const activeID = useRef(id);
-  activeID.current = id;
+  const { scopeKey, isCurrent } = useRequestScope(id, true);
   const user = useQuery({
-    queryKey: ['admin-user', id],
-    queryFn: () => api<User>(`admin/user/detail?${query({ id: id ?? '' })}`),
-    enabled: !!id,
+    queryKey: ['admin-user', id, scopeKey],
+    queryFn: ({ signal }) =>
+      api<User>(`admin/user/detail?${query({ id: id ?? '' })}`, undefined, signal, isCurrent),
+    enabled: !!id && !!profile?.admin,
     retry: false,
   });
   const u = user.data;
+  const mutate = async (path: string, body: unknown) => {
+    if (!isCurrent()) return false;
+    try {
+      await api(path, body, undefined, isCurrent);
+    } catch (error) {
+      if (isCurrent()) throw error;
+      return false;
+    }
+    return isCurrent();
+  };
   const unbind = async (ownerID: string, identityID: string) => {
-    if (!profile?.admin || activeID.current !== ownerID) throw new Error(t('error'));
-    await api('admin/user/identity/unbind', { id: ownerID, identity_id: identityID });
+    if (id !== ownerID) return;
+    if (!(await mutate('admin/user/identity/unbind', { id: ownerID, identity_id: identityID }))) return;
     let refetchType: 'active' | 'none' = 'active';
-    if (ownerID === profile.id) {
+    if (ownerID === profile?.id) {
       await client.invalidateQueries({ queryKey: ['profile'] });
+      if (!isCurrent()) return;
       const current = client.getQueryState<Profile | null>(['profile']);
       if (current?.status !== 'success' || !current.data?.admin) refetchType = 'none';
     }
@@ -46,7 +57,7 @@ export function UserDialog({
       client.invalidateQueries({ queryKey: ['admin-user-options'], refetchType }),
       client.invalidateQueries({ queryKey: ['records'], refetchType }),
     ]);
-    notify(t('success'));
+    if (isCurrent()) notify(t('success'));
   };
   return (
     <Modal open={!!id} onOpenChange={(open) => !open && onClose()} title={t('userDetail')} wide>
@@ -73,6 +84,7 @@ export function UserDialog({
             ))}
           </div>
           <IdentityBindings
+            key={scopeKey}
             ownerID={u.id}
             bindings={u.bindings}
             onUnbind={(identityID) => unbind(u.id, identityID)}
@@ -88,7 +100,7 @@ export function UserDialog({
               {t('viewDonations')}
             </Button>
             <ActionConfirm
-              scopeKey={u.id + u.status}
+              scopeKey={`${scopeKey}:${u.status}`}
               title={t(u.status === 'banned' ? 'unban' : 'ban')}
               description={t(u.status === 'banned' ? 'unbanHint' : 'banHint')}
               danger={u.status !== 'banned'}
@@ -101,7 +113,8 @@ export function UserDialog({
                 </Button>
               }
               onConfirm={async () => {
-                await api(`admin/user/${u.status === 'banned' ? 'unban' : 'ban'}`, { id: u.id });
+                if (!(await mutate(`admin/user/${u.status === 'banned' ? 'unban' : 'ban'}`, { id: u.id })))
+                  return;
                 notify(t('success'));
                 await client.invalidateQueries();
               }}

@@ -18,6 +18,7 @@ import {
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useApp } from '../app/context';
+import { useRequestScope } from '../app/useRequestScope';
 import { AccessState } from '../components/AccessState';
 import { AdminHeading } from '../components/AdminHeading';
 import { AdminLoading } from '../components/AdminLoading';
@@ -53,6 +54,7 @@ export function Admin() {
   const app = useApp(),
     { t, profile, report } = app;
   const client = useQueryClient();
+  const { scopeKey, scope, isCurrent } = useRequestScope('admin', true);
   const operationEpoch = useRef(0);
   const [tab, setTab] = useState<Tab>('overview'),
     [search, setSearch] = useState(''),
@@ -93,15 +95,18 @@ export function Admin() {
   const endpoint =
     tab === 'orders' ? 'admin/order/list' : tab === 'users' ? 'admin/user/list' : 'admin/audit/list';
   const list = useQuery({
-    queryKey: ['admin-list', tab, filters],
-    queryFn: () => api<Page<Order | User | Audit>>(`${endpoint}?${query(filters)}`),
+    queryKey: ['admin-list', tab, filters, scopeKey],
+    queryFn: ({ signal }) =>
+      api<Page<Order | User | Audit>>(`${endpoint}?${query(filters)}`, undefined, signal, isCurrent),
     enabled: !!profile?.admin && tab !== 'overview' && tab !== 'tasks',
-    placeholderData: (previous, previousQuery) => (previousQuery?.queryKey[1] === tab ? previous : undefined),
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[1] === tab && previousQuery.queryKey[3] === scopeKey ? previous : undefined,
     retry: false,
   });
   const op = useQuery({
-    queryKey: ['operation', operation?.id],
-    queryFn: () => api<Operation>(`admin/operation/detail?id=${operation?.id}`),
+    queryKey: ['operation', operation?.id, scopeKey],
+    queryFn: ({ signal }) =>
+      api<Operation>(`admin/operation/detail?id=${operation?.id}`, undefined, signal, isCurrent),
     enabled: !!profile?.admin && !!operation?.confirmed,
     refetchInterval: (q) =>
       q.state.data?.items.some((i) => i.status === 'ready' || i.status === 'running') ? 2000 : false,
@@ -110,16 +115,18 @@ export function Admin() {
   const closeOperation = () => {
     operationEpoch.current += 1;
     setOperation(null);
+    setBusy(false);
     client.removeQueries({ queryKey: ['operation'] });
   };
-  // biome-ignore lint/correctness/useExhaustiveDependencies: A changed user or permission revokes administrative dialogs and operations.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Changed credentials or permissions revoke administrative work.
   useEffect(() => {
     operationEpoch.current += 1;
     setOperation(null);
     setSelection(new Set());
     setOrderID(null);
     setUserID(null);
-  }, [profile?.id, profile?.admin]);
+    setBusy(false);
+  }, [scope]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: filter changes reset selection and pagination.
   useEffect(() => {
     setPage(1);
@@ -143,30 +150,42 @@ export function Admin() {
     setSelection(new Set());
     setSort({ key: 'created_at', direction: 'desc' });
   };
-  const run = async (fn: () => Promise<unknown>) => {
-    if (busy) return;
+  const run = async (fn: (active: () => boolean) => Promise<unknown>) => {
+    if (busy || !isCurrent()) return;
+    const epoch = ++operationEpoch.current;
+    const active = () => isCurrent() && epoch === operationEpoch.current;
     setBusy(true);
     try {
-      await fn();
+      await fn(active);
     } catch (e) {
-      report(e);
+      if (active()) report(e);
     } finally {
-      setBusy(false);
+      if (active()) setBusy(false);
     }
   };
-  const preview = async (action: string, ids = [...selection]) => {
-    const epoch = ++operationEpoch.current;
-    const prepared = await api<Operation>('admin/order/action/preview', { action, ids });
-    if (epoch === operationEpoch.current) setOperation(prepared);
+  const preview = async (action: string, active: () => boolean) => {
+    const prepared = await api<Operation>(
+      'admin/order/action/preview',
+      { action, ids: [...selection] },
+      undefined,
+      active,
+    );
+    if (active()) setOperation(prepared);
   };
-  const execute = async () => {
-    if (!operation) return;
-    const epoch = operationEpoch.current;
-    const result = await api<Operation>('admin/order/action/execute', { operation_id: operation.id });
-    if (epoch === operationEpoch.current) setOperation(result);
+  const execute = async (active: () => boolean) => {
+    if (!operation || !active()) return;
+    const result = await api<Operation>(
+      'admin/order/action/execute',
+      { operation_id: operation.id },
+      undefined,
+      active,
+    );
+    if (!active()) return;
+    setOperation(result);
     await client.invalidateQueries();
+    if (!active()) return;
     setSelection(new Set());
-    if (result.action === 'export') await downloadExport(result.id);
+    if (result.action === 'export') await downloadExport(result.id, active);
   };
   useEffect(() => {
     if (list.data)
@@ -233,7 +252,7 @@ export function Admin() {
                   className="a-icon d-ghost"
                   aria-label={t('export')}
                   disabled={busy}
-                  onClick={() => void run(() => preview('export'))}
+                  onClick={() => void run((active) => preview('export', active))}
                 >
                   <Download />
                 </Button>
@@ -254,7 +273,7 @@ export function Admin() {
                   items={bulkActions.map((action) => ({
                     label: t(action === 'close' ? 'closeOrder' : action),
                     danger: action === 'delete',
-                    action: () => void run(() => preview(action)),
+                    action: () => void run((active) => preview(action, active)),
                   }))}
                 />
               </>
