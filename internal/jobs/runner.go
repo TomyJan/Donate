@@ -134,7 +134,19 @@ func (r *Runner) Execute(parent context.Context, j Job) {
 	defer cancel()
 	o, e := r.Orders.Get(ctx, j.OrderID)
 	if e != nil {
-		r.finish(ctx, j, "done", "target_missing", time.Time{})
+		if errors.Is(e, order.ErrNotFound) {
+			r.finish(ctx, j, "done", "target_missing", time.Time{})
+		} else {
+			// An unavailable read cannot establish that the target is missing.
+			// Keep the current lease intact for the normal recovery path rather
+			// than completing work that has never inspected the order.
+			level := slog.LevelError
+			if errors.Is(e, context.Canceled) || errors.Is(e, context.DeadlineExceeded) {
+				level = slog.LevelWarn
+			}
+			reason := taskDiagnostic(e)
+			r.Queue.Log.Log(parent, level, fmt.Sprintf("订单 %s 的任务 %s 读取目标未完成，保留租约等待恢复，原因 %s", j.OrderID, j.ID, reason), "order_id", j.OrderID, "job_id", j.ID, "error", reason)
+		}
 		return
 	}
 	if j.Kind == "geo" {
