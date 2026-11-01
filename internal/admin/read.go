@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 	_ "time/tzdata"
+	"unicode/utf8"
 )
 
 type Filter struct {
@@ -23,6 +24,11 @@ type Filter struct {
 	Page, Size                                                                     int
 	Min, Max                                                                       *int64
 }
+
+func validSearch(search string) bool {
+	return len(search) <= 128*utf8.UTFMax && utf8.ValidString(search) && utf8.RuneCountInString(search) <= 128
+}
+
 type Page[T any] struct {
 	Items []T `json:"items"`
 	Total int `json:"total"`
@@ -111,7 +117,7 @@ func orderWhere(f Filter) (string, []any, error) {
 		where += " AND o.user_id=?"
 		args = append(args, uid)
 	}
-	if len(f.Search) > 128 {
+	if !validSearch(f.Search) {
 		return "", nil, auth.ErrInvalid
 	}
 	if f.Search != "" {
@@ -319,7 +325,7 @@ func (s *Service) Users(ctx context.Context, f Filter) (Page[User], error) {
 	where := "1=1"
 	args := []any{}
 	if f.Search != "" {
-		if len(f.Search) > 128 {
+		if !validSearch(f.Search) {
 			return out, auth.ErrInvalid
 		}
 		q := strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(f.Search)

@@ -114,7 +114,7 @@ var taskSorts = map[string]string{"id": "j.id", "created_at": "j.created_at", "u
 var taskSources = map[string]bool{"automatic": true, "manual": true, "browser_return": true, "admin": true, "admin_refresh": true, "admin_retry": true, "close_followup": true}
 
 func taskWhere(f TaskFilter) (string, []any, error) {
-	if len(f.Search) > 128 || f.Page < 0 || f.Size < 0 || f.Size > 100 || f.Page > 1000000 {
+	if !validSearch(f.Search) || f.Page < 0 || f.Size < 0 || f.Size > 100 || f.Page > 1000000 {
 		return "", nil, auth.ErrInvalid
 	}
 	if f.Direction != "" && f.Direction != "asc" && f.Direction != "desc" {
