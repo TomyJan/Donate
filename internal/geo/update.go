@@ -2,6 +2,7 @@ package geo
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -14,6 +15,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/TomyJan/Donate/internal/config"
 	"github.com/TomyJan/Donate/internal/observability"
@@ -222,6 +224,10 @@ func verifyXDBRecords(ctx context.Context, path string, version *xdb.Version) er
 	segment := make([]byte, size)
 	previousEnd := make([]byte, version.Bytes)
 	currentStart := make([]byte, version.Bytes)
+	// Lengths are uint16. Reuse one bounded buffer and avoid rereading
+	// shared payloads without allowing the validation cache to grow forever.
+	data := make([]byte, 64*1024)
+	checked := make(map[[2]int64]struct{})
 	copyAddress := func(dst, src []byte) {
 		copy(dst, src)
 		// The SDK compares network-order input with little-endian IPv4 indexes.
@@ -232,6 +238,9 @@ func verifyXDBRecords(ctx context.Context, path string, version *xdb.Version) er
 		}
 	}
 	for offset := int64(0); offset < length; offset += size {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		if _, err := io.ReadFull(r, segment); err != nil {
 			return errors.New("XDB 分段索引截断或读取失败")
 		}
@@ -263,6 +272,25 @@ func verifyXDBRecords(ctx context.Context, path string, version *xdb.Version) er
 		dataOffset := int64(binary.LittleEndian.Uint32(segment[at+2:]))
 		if dataLength > 0 && (dataOffset < xdb.HeaderInfoLength+256*256*8 || dataOffset+dataLength > info.Size()) {
 			return errors.New("XDB 记录数据越界或截断")
+		}
+		if dataLength == 0 {
+			continue
+		}
+		key := [2]int64{dataOffset, dataLength}
+		if _, ok := checked[key]; ok {
+			continue
+		}
+		record := data[:dataLength]
+		if _, err := f.ReadAt(record, dataOffset); err != nil {
+			return errors.New("XDB 记录内容截断或读取失败")
+		}
+		// Both supported formats have five UTF-8 fields. Empty/unknown
+		// fields are legitimate and must not invalidate the whole library.
+		if !utf8.Valid(record) || bytes.Count(record, []byte{'|'}) != 4 {
+			return errors.New("XDB 记录内容格式无效")
+		}
+		if len(checked) < 64*1024 {
+			checked[key] = struct{}{}
 		}
 	}
 	return ctx.Err()
