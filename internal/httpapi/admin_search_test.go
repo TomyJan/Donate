@@ -149,3 +149,68 @@ func TestAdminSearchEnforcesUnicodeCodepointAndUTF8Bounds(t *testing.T) {
 		})
 	}
 }
+
+func TestAdminSearchRejectsNULWithoutBroadeningResults(t *testing.T) {
+	s, h, a := setup(t)
+	ctx := context.Background()
+	owner, err := a.LoginIdentity(ctx, auth.Identity{Provider: "oidc", Issuer: "nul-search", Subject: "owner", Nickname: "Unique Normal Owner"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Config.AdminIDs[owner.Session.UserID] = true
+	if _, err = s.Orders.Create(ctx, order.CreateInput{UserID: owner.Session.UserID, AmountFen: 888, Channel: "alipay", Key: "nul-search"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, search   string
+		valid, matches bool
+	}{
+		{"empty", "", true, true},
+		{"ordinary", "Unique Normal Owner", true, true},
+		{"absent", "DefinitelyAbsentName", true, false},
+		{"literal-patterns", "Unique\\_%Owner", true, false},
+		{"other-control-characters", "\t\nDefinitelyAbsentName\r", true, false},
+		{"leading-ordinary", "\x00Unique Normal Owner", false, false},
+		{"middle-ordinary", "Unique Normal\x00 Owner", false, false},
+		{"trailing-ordinary", "Unique Normal Owner\x00", false, false},
+		{"leading-absent", "\x00DefinitelyAbsentName", false, false},
+		{"middle-absent", "Definitely\x00AbsentName", false, false},
+		{"trailing-absent", "DefinitelyAbsentName\x00", false, false},
+		{"leading-patterns", "\x00Unique\\_%Owner", false, false},
+		{"middle-patterns", "Unique\\_\x00%Owner", false, false},
+		{"trailing-patterns", "Unique\\_%Owner\x00", false, false},
+		{"nul-only", "\x00", false, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, resource := range []struct {
+				name string
+				rows int
+			}{{"user", 1}, {"order", 1}, {"task", 2}} {
+				w := adminSearchResponse(h, s, owner, resource.name, tc.search)
+				var body struct {
+					Code string
+					Data struct {
+						Total int
+						Items []json.RawMessage
+					}
+				}
+				if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+					t.Fatal(err)
+				}
+				if !tc.valid {
+					if w.Code != http.StatusOK || body.Code != "VALIDATION_FAILED" {
+						t.Errorf("%s search %q must reject NUL: status=%d body=%s", resource.name, tc.search, w.Code, w.Body)
+					}
+					continue
+				}
+				rows := 0
+				if tc.matches {
+					rows = resource.rows
+				}
+				if w.Code != http.StatusOK || body.Code != "OK" || body.Data.Total != rows || len(body.Data.Items) != rows {
+					t.Errorf("%s valid search %q changed: want=%d status=%d body=%s", resource.name, tc.search, rows, w.Code, w.Body)
+				}
+			}
+		})
+	}
+}

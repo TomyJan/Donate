@@ -26,7 +26,8 @@ type Filter struct {
 }
 
 func validSearch(search string) bool {
-	return len(search) <= 128*utf8.UTFMax && utf8.ValidString(search) && utf8.RuneCountInString(search) <= 128
+	// SQLite LIKE truncates patterns at NUL, which can broaden a literal query.
+	return len(search) <= 128*utf8.UTFMax && utf8.ValidString(search) && !strings.ContainsRune(search, '\x00') && utf8.RuneCountInString(search) <= 128
 }
 
 type Page[T any] struct {
