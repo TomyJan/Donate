@@ -569,7 +569,7 @@ func (s *Service) Audit(ctx context.Context, f Filter) (Page[Audit], error) {
 	if e := s.Store.DB.QueryRowContext(ctx, "SELECT count(*) FROM audit_events a WHERE "+where, args...).Scan(&out.Total); e != nil {
 		return out, e
 	}
-	col := map[string]string{"created_at": "a.created_at", "id": "a.id", "actor": "i.nickname", "action": "a.action", "target": "COALESCE(NULLIF(trim(o.donor_nickname, ' '||char(9)||char(10)||char(13)||char(12288)),''),oi.nickname,ti.nickname,'')", "result": "a.result"}[f.Sort]
+	col := map[string]string{"created_at": "a.created_at", "id": "a.id", "actor": "i.nickname", "action": "a.action", "target": "CASE WHEN a.target_type='task' THEN COALESCE(j.resource,'') ELSE COALESCE(NULLIF(trim(o.donor_nickname, ' '||char(9)||char(10)||char(13)||char(12288)),''),oi.nickname,ti.nickname,'') END", "result": "a.result"}[f.Sort]
 	if col == "" {
 		col = "a.created_at"
 	}
