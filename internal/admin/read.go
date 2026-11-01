@@ -116,8 +116,11 @@ func orderWhere(f Filter) (string, []any, error) {
 	}
 	if f.Search != "" {
 		where += " AND (lower(COALESCE(NULLIF(trim(o.donor_nickname, ' '||char(9)||char(10)||char(13)||char(12288)),''),i.nickname)) LIKE ? ESCAPE '\\' OR lower(hex(o.id)) LIKE ? ESCAPE '\\' OR o.merchant_order_no LIKE ? ESCAPE '\\' OR lower(hex(o.user_id)) LIKE ? ESCAPE '\\')"
-		q := strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(strings.ToLower(f.Search))
-		args = append(args, "%"+q+"%", "%"+strings.ReplaceAll(q, "-", "")+"%", "%"+q+"%", "%"+strings.ReplaceAll(q, "-", "")+"%")
+		// Preserve Unicode nickname spelling; SQLite LIKE/lower only fold ASCII.
+		q := strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(f.Search)
+		lowerq := strings.ToLower(q)
+		hexq := strings.ReplaceAll(lowerq, "-", "")
+		args = append(args, "%"+q+"%", "%"+hexq+"%", "%"+lowerq+"%", "%"+hexq+"%")
 	}
 	if f.Status != "" {
 		if f.Status != "paid" && f.Status != "pending" && f.Status != "closed" {

@@ -156,10 +156,12 @@ func taskWhere(f TaskFilter) (string, []any, error) {
 		return "", nil, auth.ErrInvalid
 	}
 	if f.Search != "" {
-		q := strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(strings.ToLower(f.Search))
-		hexq := strings.ReplaceAll(q, "-", "")
+		// Preserve Unicode nickname spelling; SQLite LIKE/lower only fold ASCII.
+		q := strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(f.Search)
+		lowerq := strings.ToLower(q)
+		hexq := strings.ReplaceAll(lowerq, "-", "")
 		where += " AND (lower(hex(j.id)) LIKE ? ESCAPE '\\' OR lower(hex(j.order_id)) LIKE ? ESCAPE '\\' OR lower(o.merchant_order_no) LIKE ? ESCAPE '\\' OR lower(COALESCE(NULLIF(trim(o.donor_nickname),''),i.nickname,'')) LIKE ? ESCAPE '\\')"
-		args = append(args, "%"+hexq+"%", "%"+hexq+"%", "%"+q+"%", "%"+q+"%")
+		args = append(args, "%"+hexq+"%", "%"+hexq+"%", "%"+lowerq+"%", "%"+q+"%")
 	}
 	return where, args, nil
 }
