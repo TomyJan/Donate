@@ -1,243 +1,1994 @@
 (() => {
-  const root=document.getElementById('donate-admin'),app=root.querySelector('.a-app');
-  const session=DonatePrototype.demo.read();
-  const preferences={appearance:session.appearance,device:'自适应'};
-  const adminProfile=session.profile;
-  let currentIdentity=session.identity;
-  const state={page:'orders',lang:session.lang,q:'',status:'all',channel:'all',visibility:'all',from:'',to:'',minimum:'',maximum:'',advanced:false,index:0,selected:new Set(),userQ:'',userStatus:'all',auditType:'all'};
-  const words={
-    'zh-CN':{admin:'站点管理',overview:'概览',orders:'订单',users:'用户',audit:'审计',home:'返回站点',language:'切换语言',theme:'切换外观',system:'跟随系统',light:'浅色',dark:'深色',export:'导出',search:'昵称 / 订单 ID',allStatus:'全部状态',paid:'已支付',pending:'待支付',closed:'已关闭',allChannels:'全部渠道',alipay:'支付宝',wechat:'微信',filters:'筛选',allVisibility:'全部可见性',public:'公开',hiddenOrder:'订单隐藏',hiddenMessage:'留言隐藏',from:'开始日期',to:'结束日期',minimum:'最低金额',maximum:'最高金额',reset:'重置',time:'日期时间 / 订单',user:'用户',amount:'金额',channel:'渠道',status:'状态',visibility:'公开范围',details:'详情',empty:'暂无结果',selected:'已选',clear:'取消选择',batch:'批量操作',closeOrder:'关闭未支付',hideOrder:'隐藏订单',showOrder:'恢复订单',hideMessage:'隐藏留言',showMessage:'恢复留言',delete:'删除',previous:'上一页',next:'下一页',total:'共',items:'条',orderDetail:'订单详情',created:'创建时间',paidAt:'支付时间',ip:'下单 IP',region:'属地',orderId:'订单 ID',provider:'属地来源',message:'留言',noMessage:'未填写留言',cancel:'取消',confirm:'确认',close:'关闭',confirmDelete:'删除订单',deleteHint:'删除后无法恢复。',confirmClose:'关闭未支付订单',closeHint:'仅处理仍未支付的订单。',result:'操作结果',done:'已处理',skipped:'跳过',notFound:'记录不存在',userSearch:'昵称 / 用户 ID',allUsers:'全部用户',normal:'正常',banned:'已封禁',bindings:'绑定账号',lastLogin:'最近登录',userDetail:'用户详情',userId:'用户 ID',ban:'封禁',unban:'解禁',banHint:'撤销现有会话，禁止所有已绑定身份登录。',unbanHint:'解禁后用户需重新登录。',history:'捐赠历史',role:'权限',member:'用户',adminRole:'管理员',totalPaid:'到账金额',paidOrders:'成功订单',pendingOrders:'待支付订单',closedOrders:'关闭订单',daily:'每日到账',channels:'支付渠道',actor:'操作者',action:'操作',target:'目标',allActions:'全部操作',ordersAction:'订单操作',usersAction:'用户操作',exported:'已导出',copied:'已复制',account:'账号信息',noAudit:'暂无操作记录',scope:'全部现存订单',copy:'复制 ID',showAll:'查看全部',amountRule:'请输入有效金额范围',dateRule:'开始日期不能晚于结束日期',applied:'筛选已应用'},
-    en:{admin:'Site admin',overview:'Overview',orders:'Orders',users:'Users',audit:'Audit',home:'Back to site',language:'Language',theme:'Appearance',system:'System',light:'Light',dark:'Dark',export:'Export',search:'Name / order ID',allStatus:'All statuses',paid:'Paid',pending:'Pending',closed:'Closed',allChannels:'All channels',alipay:'Alipay',wechat:'WeChat',filters:'Filters',allVisibility:'All visibility',public:'Public',hiddenOrder:'Order hidden',hiddenMessage:'Message hidden',from:'From',to:'To',minimum:'Min amount',maximum:'Max amount',reset:'Reset',time:'Date / order',user:'User',amount:'Amount',channel:'Channel',status:'Status',visibility:'Visibility',details:'Details',empty:'No results',selected:'Selected',clear:'Clear',batch:'Bulk actions',closeOrder:'Close unpaid',hideOrder:'Hide orders',showOrder:'Show orders',hideMessage:'Hide messages',showMessage:'Show messages',delete:'Delete',previous:'Previous',next:'Next',total:'Total',items:'records',orderDetail:'Order details',created:'Created',paidAt:'Paid at',ip:'Order IP',region:'Location',orderId:'Order ID',provider:'Location source',message:'Message',noMessage:'No message',cancel:'Cancel',confirm:'Confirm',close:'Close',confirmDelete:'Delete orders',deleteHint:'Deletion is permanent.',confirmClose:'Close unpaid orders',closeHint:'Only orders still unpaid are eligible.',result:'Results',done:'Updated',skipped:'Skipped',notFound:'Record no longer exists',userSearch:'Name / user ID',allUsers:'All users',normal:'Active',banned:'Banned',bindings:'Linked accounts',lastLogin:'Last sign-in',userDetail:'User details',userId:'User ID',ban:'Ban',unban:'Unban',banHint:'Revoke sessions and block every linked sign-in.',unbanHint:'The user must sign in again after unbanning.',history:'Donation history',role:'Role',member:'User',adminRole:'Administrator',totalPaid:'Received',paidOrders:'Paid orders',pendingOrders:'Pending orders',closedOrders:'Closed orders',daily:'Daily receipts',channels:'Payment channels',actor:'Actor',action:'Action',target:'Target',allActions:'All actions',ordersAction:'Order actions',usersAction:'User actions',exported:'Exported',copied:'Copied',account:'Account',noAudit:'No actions yet',scope:'All existing orders',copy:'Copy ID',showAll:'View all',amountRule:'Enter a valid amount range',dateRule:'Start date must not follow end date',applied:'Filters applied'}
+  const root = document.getElementById('donate-admin'),
+    app = root.querySelector('.a-app');
+  const session = DonatePrototype.demo.read();
+  const preferences = { appearance: session.appearance, device: '自适应' };
+  const adminProfile = session.profile;
+  let currentIdentity = session.identity;
+  const state = {
+    page: 'orders',
+    lang: session.lang,
+    q: '',
+    status: 'all',
+    channel: 'all',
+    visibility: 'all',
+    from: '',
+    to: '',
+    minimum: '',
+    maximum: '',
+    advanced: false,
+    index: 0,
+    selected: new Set(),
+    userQ: '',
+    userStatus: 'all',
+    auditType: 'all',
   };
-  const t=k=>words[state.lang][k]||k,esc=x=>String(x).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-  const icon=name=>`<i data-lucide="${name}" aria-hidden="true"></i>`;
-  const btn=(text,act,cls='a-ghost',attrs='')=>DonatePrototype.control(text,act,'a',cls,attrs);
-  const uuid=(kind,n)=>`019a2e54-${kind}-7000-8000-${String(n).padStart(12,'0')}`;
-  const users=[{id:adminProfile.id,name:'TomyJan',avatar:'T',banned:false,admin:true,bindings:[['OIDC','TomyJan']],login:'2026-10-29 14:20'},{id:uuid('0001',2),name:'小林',avatar:'林',banned:false,admin:false,bindings:[['QQ','小林']],login:'2026-10-29 14:01'},{id:uuid('0001',3),name:'阿澈',avatar:'澈',banned:false,admin:false,bindings:[['OIDC','阿澈']],login:'2026-10-28 20:36'},{id:uuid('0001',4),name:'远山',avatar:'山',banned:true,admin:false,bindings:[['QQ','远山'],['OIDC','远山']],login:'2026-10-27 09:12'}];
-  const rows=[['2026-10-29 14:30',0,888,'pending','wechat','请喝一杯。',false,false],['2026-10-29 14:26',1,2026,'paid','alipay','一点支持，继续创作。',false,false],['2026-10-29 13:49',0,5000,'paid','alipay','谢谢你整理这些资料。\n请喝一杯咖啡。',false,false],['2026-10-29 11:28',2,888,'paid','wechat','请喝咖啡。',false,true],['2026-10-28 20:12',3,12800,'paid','alipay','',true,false],['2026-10-28 18:31',1,25600,'paid','wechat','',false,false],['2026-10-28 16:00',0,2026,'paid','alipay','下次见。',false,false],['2026-10-28 14:12',2,888,'pending','wechat','',false,false],['2026-10-27 20:10',1,1,'paid','alipay','',false,false],['2026-10-27 18:00',3,12800,'paid','wechat','一点心意。',false,false],['2026-10-27 17:20',0,2026,'closed','alipay','',false,false],['2026-10-27 15:00',2,5000,'pending','wechat','加油。',false,false]];
-  const sampleLocations=[
-    {country:'中国',province:'浙江',city:'杭州市',district:'西湖区',isp:'电信',asn:'AS4134'},
-    {country:'中国',province:'广东',city:'深圳市',district:'南山区',isp:'移动',asn:'AS9808'},
-    {country:'中国',province:'北京',city:'北京市',district:'海淀区',isp:'联通',asn:'AS4837'},
-    {country:'中国',province:'四川',city:'成都市',isp:'电信',asn:'AS4134'}
+  const words = {
+    'zh-CN': {
+      admin: '站点管理',
+      overview: '概览',
+      orders: '订单',
+      users: '用户',
+      audit: '审计',
+      home: '返回站点',
+      language: '切换语言',
+      theme: '切换外观',
+      system: '跟随系统',
+      light: '浅色',
+      dark: '深色',
+      export: '导出',
+      search: '昵称 / 订单 ID',
+      allStatus: '全部状态',
+      paid: '已支付',
+      pending: '待支付',
+      closed: '已关闭',
+      allChannels: '全部渠道',
+      alipay: '支付宝',
+      wechat: '微信',
+      filters: '筛选',
+      allVisibility: '全部可见性',
+      public: '公开',
+      hiddenOrder: '订单隐藏',
+      hiddenMessage: '留言隐藏',
+      from: '开始日期',
+      to: '结束日期',
+      minimum: '最低金额',
+      maximum: '最高金额',
+      reset: '重置',
+      time: '日期时间 / 订单',
+      user: '用户',
+      amount: '金额',
+      channel: '渠道',
+      status: '状态',
+      visibility: '公开范围',
+      details: '详情',
+      empty: '暂无结果',
+      selected: '已选',
+      clear: '取消选择',
+      batch: '批量操作',
+      closeOrder: '关闭未支付',
+      hideOrder: '隐藏订单',
+      showOrder: '恢复订单',
+      hideMessage: '隐藏留言',
+      showMessage: '恢复留言',
+      delete: '删除',
+      previous: '上一页',
+      next: '下一页',
+      total: '共',
+      items: '条',
+      orderDetail: '订单详情',
+      created: '创建时间',
+      paidAt: '支付时间',
+      ip: '下单 IP',
+      region: '属地',
+      orderId: '订单 ID',
+      provider: '属地来源',
+      message: '留言',
+      noMessage: '未填写留言',
+      cancel: '取消',
+      confirm: '确认',
+      close: '关闭',
+      confirmDelete: '删除订单',
+      deleteHint: '删除后无法恢复。',
+      confirmClose: '关闭未支付订单',
+      closeHint: '仅处理仍未支付的订单。',
+      result: '操作结果',
+      done: '已处理',
+      skipped: '跳过',
+      notFound: '记录不存在',
+      userSearch: '昵称 / 用户 ID',
+      allUsers: '全部用户',
+      normal: '正常',
+      banned: '已封禁',
+      bindings: '绑定账号',
+      lastLogin: '最近登录',
+      userDetail: '用户详情',
+      userId: '用户 ID',
+      ban: '封禁',
+      unban: '解禁',
+      banHint: '撤销现有会话，禁止所有已绑定身份登录。',
+      unbanHint: '解禁后用户需重新登录。',
+      history: '捐赠历史',
+      role: '权限',
+      member: '用户',
+      adminRole: '管理员',
+      totalPaid: '到账金额',
+      paidOrders: '成功订单',
+      pendingOrders: '待支付订单',
+      closedOrders: '关闭订单',
+      daily: '每日到账',
+      channels: '支付渠道',
+      actor: '操作者',
+      action: '操作',
+      target: '目标',
+      allActions: '全部操作',
+      ordersAction: '订单操作',
+      usersAction: '用户操作',
+      exported: '已导出',
+      copied: '已复制',
+      account: '账号信息',
+      noAudit: '暂无操作记录',
+      scope: '全部现存订单',
+      copy: '复制 ID',
+      showAll: '查看全部',
+      amountRule: '请输入有效金额范围',
+      dateRule: '开始日期不能晚于结束日期',
+      applied: '筛选已应用',
+    },
+    en: {
+      admin: 'Site admin',
+      overview: 'Overview',
+      orders: 'Orders',
+      users: 'Users',
+      audit: 'Audit',
+      home: 'Back to site',
+      language: 'Language',
+      theme: 'Appearance',
+      system: 'System',
+      light: 'Light',
+      dark: 'Dark',
+      export: 'Export',
+      search: 'Name / order ID',
+      allStatus: 'All statuses',
+      paid: 'Paid',
+      pending: 'Pending',
+      closed: 'Closed',
+      allChannels: 'All channels',
+      alipay: 'Alipay',
+      wechat: 'WeChat',
+      filters: 'Filters',
+      allVisibility: 'All visibility',
+      public: 'Public',
+      hiddenOrder: 'Order hidden',
+      hiddenMessage: 'Message hidden',
+      from: 'From',
+      to: 'To',
+      minimum: 'Min amount',
+      maximum: 'Max amount',
+      reset: 'Reset',
+      time: 'Date / order',
+      user: 'User',
+      amount: 'Amount',
+      channel: 'Channel',
+      status: 'Status',
+      visibility: 'Visibility',
+      details: 'Details',
+      empty: 'No results',
+      selected: 'Selected',
+      clear: 'Clear',
+      batch: 'Bulk actions',
+      closeOrder: 'Close unpaid',
+      hideOrder: 'Hide orders',
+      showOrder: 'Show orders',
+      hideMessage: 'Hide messages',
+      showMessage: 'Show messages',
+      delete: 'Delete',
+      previous: 'Previous',
+      next: 'Next',
+      total: 'Total',
+      items: 'records',
+      orderDetail: 'Order details',
+      created: 'Created',
+      paidAt: 'Paid at',
+      ip: 'Order IP',
+      region: 'Location',
+      orderId: 'Order ID',
+      provider: 'Location source',
+      message: 'Message',
+      noMessage: 'No message',
+      cancel: 'Cancel',
+      confirm: 'Confirm',
+      close: 'Close',
+      confirmDelete: 'Delete orders',
+      deleteHint: 'Deletion is permanent.',
+      confirmClose: 'Close unpaid orders',
+      closeHint: 'Only orders still unpaid are eligible.',
+      result: 'Results',
+      done: 'Updated',
+      skipped: 'Skipped',
+      notFound: 'Record no longer exists',
+      userSearch: 'Name / user ID',
+      allUsers: 'All users',
+      normal: 'Active',
+      banned: 'Banned',
+      bindings: 'Linked accounts',
+      lastLogin: 'Last sign-in',
+      userDetail: 'User details',
+      userId: 'User ID',
+      ban: 'Ban',
+      unban: 'Unban',
+      banHint: 'Revoke sessions and block every linked sign-in.',
+      unbanHint: 'The user must sign in again after unbanning.',
+      history: 'Donation history',
+      role: 'Role',
+      member: 'User',
+      adminRole: 'Administrator',
+      totalPaid: 'Received',
+      paidOrders: 'Paid orders',
+      pendingOrders: 'Pending orders',
+      closedOrders: 'Closed orders',
+      daily: 'Daily receipts',
+      channels: 'Payment channels',
+      actor: 'Actor',
+      action: 'Action',
+      target: 'Target',
+      allActions: 'All actions',
+      ordersAction: 'Order actions',
+      usersAction: 'User actions',
+      exported: 'Exported',
+      copied: 'Copied',
+      account: 'Account',
+      noAudit: 'No actions yet',
+      scope: 'All existing orders',
+      copy: 'Copy ID',
+      showAll: 'View all',
+      amountRule: 'Enter a valid amount range',
+      dateRule: 'Start date must not follow end date',
+      applied: 'Filters applied',
+    },
+  };
+  const t = (k) => words[state.lang][k] || k,
+    esc = (x) =>
+      String(x).replace(
+        /[&<>"']/g,
+        (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c],
+      );
+  const icon = (name) => `<i data-lucide="${name}" aria-hidden="true"></i>`;
+  const btn = (text, act, cls = 'a-ghost', attrs = '') => DonatePrototype.control(text, act, 'a', cls, attrs);
+  const uuid = (kind, n) => `019a2e54-${kind}-7000-8000-${String(n).padStart(12, '0')}`;
+  const users = [
+    {
+      id: adminProfile.id,
+      name: 'TomyJan',
+      avatar: 'T',
+      banned: false,
+      admin: true,
+      bindings: [['OIDC', 'TomyJan']],
+      login: '2026-10-29 14:20',
+    },
+    {
+      id: uuid('0001', 2),
+      name: '小林',
+      avatar: '林',
+      banned: false,
+      admin: false,
+      bindings: [['QQ', '小林']],
+      login: '2026-10-29 14:01',
+    },
+    {
+      id: uuid('0001', 3),
+      name: '阿澈',
+      avatar: '澈',
+      banned: false,
+      admin: false,
+      bindings: [['OIDC', '阿澈']],
+      login: '2026-10-28 20:36',
+    },
+    {
+      id: uuid('0001', 4),
+      name: '远山',
+      avatar: '山',
+      banned: true,
+      admin: false,
+      bindings: [
+        ['QQ', '远山'],
+        ['OIDC', '远山'],
+      ],
+      login: '2026-10-27 09:12',
+    },
   ];
-  let orders=rows.map((v,i)=>({id:uuid('0002',i+1),created:v[0],userId:users[v[1]].id,cents:v[2],status:v[3],channel:v[4],message:v[5],hiddenOrder:v[6],hiddenMessage:v[7],ip:i===2?'2001:db8:85a3::8a2e:370:7334':`192.0.2.${i+10}`,location:{...sampleLocations[v[1]]},provider:'示例数据',locationVersion:'2026.10',reference:v[3]==='paid'?`20261029${String(i+1).padStart(12,'0')}`:null,paidAt:v[3]==='paid'?v[0]:null}));
-  const audit=[{id:uuid('0003',1),time:'2026-10-29 11:40',type:'orders',action:'hideMessage',target:orders[3].id,actor:'TomyJan'},{id:uuid('0003',2),time:'2026-10-28 21:03',type:'orders',action:'hideOrder',target:orders[4].id,actor:'TomyJan'},{id:uuid('0003',3),time:'2026-10-27 09:20',type:'users',action:'ban',target:users[3].id,actor:'TomyJan'}];
-  const user=id=>users.find(u=>u.id===id),money=c=>'¥'+(c/100).toLocaleString(state.lang,{minimumFractionDigits:2,maximumFractionDigits:2}),short=id=>id.slice(-8),reduced=()=>matchMedia('(prefers-reduced-motion:reduce)').matches;
-  Object.assign(words['zh-CN'],{
-    time:'日期时间',from:'开始时间',to:'结束时间',sort:'排序',ascending:'升序',descending:'降序',id:'ID',name:'昵称',count:'订单数',date:'日期',payment:'支付信息',source:'来源信息',range:'公开范围',orderVisible:'订单',messageVisible:'留言',visible:'公开',hidden:'已隐藏',more:'更多操作',apply:'应用',clearDate:'清空',today:'今天',hour:'小时',minute:'分钟',calendar:'选择日期时间',chooseMonth:'选择年月',year:'年份',receipt:'到账',unchanged:'无需变更',exportHint:'仅导出所选订单，金额以整数分记录。',hideOrderHint:'所选订单将从公开列表隐藏，仍计入后台统计。',showOrderHint:'所选订单将恢复公开显示。',hideMessageHint:'仅隐藏公开留言，订单仍可展示。',showMessageHint:'所选订单的留言将恢复公开显示。',previewResult:'示例结果',processed:'已处理',dismissNotice:'关闭通知',notifications:'消息通知',copyFailed:'无法自动复制，请选中 ID 复制',dateInvalid:'请输入有效日期时间',yearInvalid:'年份范围为 1900–2100',invalidTime:'时间范围为 00:00–23:59',noSelection:'请先选择订单',selectPage:'选择本页',selectOrder:'选择订单',back:'返回',selectedScope:'所选订单',paymentReference:'支付流水',noReference:'尚无流水',orderCount:'订单',disabledClose:'仅待支付订单可关闭',resultHint:'演示操作，不调用支付渠道。',allExisting:'现存订单',userRecords:'用户记录',bindingsNote:'账号绑定',account:'账号信息',cancelled:'已取消',exported:'已导出',complete:'完成',scope:'全部现存订单 · 含隐藏',selfBan:'当前管理员'
+  const rows = [
+    ['2026-10-29 14:30', 0, 888, 'pending', 'wechat', '请喝一杯。', false, false],
+    ['2026-10-29 14:26', 1, 2026, 'paid', 'alipay', '一点支持，继续创作。', false, false],
+    ['2026-10-29 13:49', 0, 5000, 'paid', 'alipay', '谢谢你整理这些资料。\n请喝一杯咖啡。', false, false],
+    ['2026-10-29 11:28', 2, 888, 'paid', 'wechat', '请喝咖啡。', false, true],
+    ['2026-10-28 20:12', 3, 12800, 'paid', 'alipay', '', true, false],
+    ['2026-10-28 18:31', 1, 25600, 'paid', 'wechat', '', false, false],
+    ['2026-10-28 16:00', 0, 2026, 'paid', 'alipay', '下次见。', false, false],
+    ['2026-10-28 14:12', 2, 888, 'pending', 'wechat', '', false, false],
+    ['2026-10-27 20:10', 1, 1, 'paid', 'alipay', '', false, false],
+    ['2026-10-27 18:00', 3, 12800, 'paid', 'wechat', '一点心意。', false, false],
+    ['2026-10-27 17:20', 0, 2026, 'closed', 'alipay', '', false, false],
+    ['2026-10-27 15:00', 2, 5000, 'pending', 'wechat', '加油。', false, false],
+  ];
+  const sampleLocations = [
+    { country: '中国', province: '浙江', city: '杭州市', district: '西湖区', isp: '电信', asn: 'AS4134' },
+    { country: '中国', province: '广东', city: '深圳市', district: '南山区', isp: '移动', asn: 'AS9808' },
+    { country: '中国', province: '北京', city: '北京市', district: '海淀区', isp: '联通', asn: 'AS4837' },
+    { country: '中国', province: '四川', city: '成都市', isp: '电信', asn: 'AS4134' },
+  ];
+  let orders = rows.map((v, i) => ({
+    id: uuid('0002', i + 1),
+    created: v[0],
+    userId: users[v[1]].id,
+    cents: v[2],
+    status: v[3],
+    channel: v[4],
+    message: v[5],
+    hiddenOrder: v[6],
+    hiddenMessage: v[7],
+    ip: i === 2 ? '2001:db8:85a3::8a2e:370:7334' : `192.0.2.${i + 10}`,
+    location: { ...sampleLocations[v[1]] },
+    provider: '示例数据',
+    locationVersion: '2026.10',
+    reference: v[3] === 'paid' ? `20261029${String(i + 1).padStart(12, '0')}` : null,
+    paidAt: v[3] === 'paid' ? v[0] : null,
+  }));
+  const audit = [
+    {
+      id: uuid('0003', 1),
+      time: '2026-10-29 11:40',
+      type: 'orders',
+      action: 'hideMessage',
+      target: orders[3].id,
+      actor: 'TomyJan',
+    },
+    {
+      id: uuid('0003', 2),
+      time: '2026-10-28 21:03',
+      type: 'orders',
+      action: 'hideOrder',
+      target: orders[4].id,
+      actor: 'TomyJan',
+    },
+    {
+      id: uuid('0003', 3),
+      time: '2026-10-27 09:20',
+      type: 'users',
+      action: 'ban',
+      target: users[3].id,
+      actor: 'TomyJan',
+    },
+  ];
+  const user = (id) => users.find((u) => u.id === id),
+    money = (c) =>
+      '¥' + (c / 100).toLocaleString(state.lang, { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+    short = (id) => id.slice(-8),
+    reduced = () => matchMedia('(prefers-reduced-motion:reduce)').matches;
+  Object.assign(words['zh-CN'], {
+    time: '日期时间',
+    from: '开始时间',
+    to: '结束时间',
+    sort: '排序',
+    ascending: '升序',
+    descending: '降序',
+    id: 'ID',
+    name: '昵称',
+    count: '订单数',
+    date: '日期',
+    payment: '支付信息',
+    source: '来源信息',
+    range: '公开范围',
+    orderVisible: '订单',
+    messageVisible: '留言',
+    visible: '公开',
+    hidden: '已隐藏',
+    more: '更多操作',
+    apply: '应用',
+    clearDate: '清空',
+    today: '今天',
+    hour: '小时',
+    minute: '分钟',
+    calendar: '选择日期时间',
+    chooseMonth: '选择年月',
+    year: '年份',
+    receipt: '到账',
+    unchanged: '无需变更',
+    exportHint: '仅导出所选订单，金额以整数分记录。',
+    hideOrderHint: '所选订单将从公开列表隐藏，仍计入后台统计。',
+    showOrderHint: '所选订单将恢复公开显示。',
+    hideMessageHint: '仅隐藏公开留言，订单仍可展示。',
+    showMessageHint: '所选订单的留言将恢复公开显示。',
+    previewResult: '示例结果',
+    processed: '已处理',
+    dismissNotice: '关闭通知',
+    notifications: '消息通知',
+    copyFailed: '无法自动复制，请选中 ID 复制',
+    dateInvalid: '请输入有效日期时间',
+    yearInvalid: '年份范围为 1900–2100',
+    invalidTime: '时间范围为 00:00–23:59',
+    noSelection: '请先选择订单',
+    selectPage: '选择本页',
+    selectOrder: '选择订单',
+    back: '返回',
+    selectedScope: '所选订单',
+    paymentReference: '支付流水',
+    noReference: '尚无流水',
+    orderCount: '订单',
+    disabledClose: '仅待支付订单可关闭',
+    resultHint: '演示操作，不调用支付渠道。',
+    allExisting: '现存订单',
+    userRecords: '用户记录',
+    bindingsNote: '账号绑定',
+    account: '账号信息',
+    cancelled: '已取消',
+    exported: '已导出',
+    complete: '完成',
+    scope: '全部现存订单 · 含隐藏',
+    selfBan: '当前管理员',
   });
-  Object.assign(words.en,{
-    time:'Date & time',from:'From',to:'To',sort:'Sort',ascending:'Ascending',descending:'Descending',id:'ID',name:'Name',count:'Orders',date:'Date',payment:'Payment',source:'Source',range:'Visibility',orderVisible:'Order',messageVisible:'Message',visible:'Public',hidden:'Hidden',more:'More actions',apply:'Apply',clearDate:'Clear',today:'Today',hour:'Hours',minute:'Minutes',calendar:'Choose date and time',chooseMonth:'Choose month',year:'Year',receipt:'Received',unchanged:'No change',exportHint:'Export selected orders only, with amounts in integer cents.',hideOrderHint:'Hide selected orders from the public list. Statistics still include them.',showOrderHint:'Restore selected orders to the public list.',hideMessageHint:'Hide public messages while keeping the orders visible.',showMessageHint:'Restore public messages for selected orders.',previewResult:'Example results',processed:'Processed',dismissNotice:'Dismiss notification',notifications:'Notifications',copyFailed:'Select and copy the ID manually',dateInvalid:'Enter a valid date and time',yearInvalid:'Year must be 1900–2100',invalidTime:'Time must be 00:00–23:59',noSelection:'Select orders first',selectPage:'Select this page',selectOrder:'Select order',back:'Back',selectedScope:'Selected orders',paymentReference:'Payment reference',noReference:'No reference yet',orderCount:'orders',disabledClose:'Only unpaid orders can be closed',resultHint:'Demo actions; no payment API calls.',allExisting:'Existing orders',userRecords:'Users',bindingsNote:'Linked identities',complete:'Done',scope:'All existing orders · including hidden',selfBan:'Current administrator'
+  Object.assign(words.en, {
+    time: 'Date & time',
+    from: 'From',
+    to: 'To',
+    sort: 'Sort',
+    ascending: 'Ascending',
+    descending: 'Descending',
+    id: 'ID',
+    name: 'Name',
+    count: 'Orders',
+    date: 'Date',
+    payment: 'Payment',
+    source: 'Source',
+    range: 'Visibility',
+    orderVisible: 'Order',
+    messageVisible: 'Message',
+    visible: 'Public',
+    hidden: 'Hidden',
+    more: 'More actions',
+    apply: 'Apply',
+    clearDate: 'Clear',
+    today: 'Today',
+    hour: 'Hours',
+    minute: 'Minutes',
+    calendar: 'Choose date and time',
+    chooseMonth: 'Choose month',
+    year: 'Year',
+    receipt: 'Received',
+    unchanged: 'No change',
+    exportHint: 'Export selected orders only, with amounts in integer cents.',
+    hideOrderHint: 'Hide selected orders from the public list. Statistics still include them.',
+    showOrderHint: 'Restore selected orders to the public list.',
+    hideMessageHint: 'Hide public messages while keeping the orders visible.',
+    showMessageHint: 'Restore public messages for selected orders.',
+    previewResult: 'Example results',
+    processed: 'Processed',
+    dismissNotice: 'Dismiss notification',
+    notifications: 'Notifications',
+    copyFailed: 'Select and copy the ID manually',
+    dateInvalid: 'Enter a valid date and time',
+    yearInvalid: 'Year must be 1900–2100',
+    invalidTime: 'Time must be 00:00–23:59',
+    noSelection: 'Select orders first',
+    selectPage: 'Select this page',
+    selectOrder: 'Select order',
+    back: 'Back',
+    selectedScope: 'Selected orders',
+    paymentReference: 'Payment reference',
+    noReference: 'No reference yet',
+    orderCount: 'orders',
+    disabledClose: 'Only unpaid orders can be closed',
+    resultHint: 'Demo actions; no payment API calls.',
+    allExisting: 'Existing orders',
+    userRecords: 'Users',
+    bindingsNote: 'Linked identities',
+    complete: 'Done',
+    scope: 'All existing orders · including hidden',
+    selfBan: 'Current administrator',
   });
-  const readableId=id=>esc(id).replace(/-/g,'-<wbr>');
-  Object.assign(words['zh-CN'],{deletedOrder:'订单已删除',missingUser:'用户已不存在',orderTarget:'订单',userTarget:'用户'});
-  Object.assign(words.en,{deletedOrder:'Order deleted',missingUser:'User no longer exists',orderTarget:'Order',userTarget:'User'});
-  Object.assign(words['zh-CN'],{login:'登录',hide:'隐藏',restore:'恢复',isp:'运营商',asn:'ASN',dataVersion:'数据版本',coordinates:'坐标',accuracy:'精度范围',notLinked:'未绑定',accessTitle:'请先登录',accessHint:'使用管理员账号继续',forbidden:'当前账号无管理权限',exportOrder:'导出订单',backOrder:'返回订单',readDetails:'查看详情'});
-  Object.assign(words.en,{login:'Sign in',hide:'Hide',restore:'Restore',isp:'ISP',asn:'ASN',dataVersion:'Data version',coordinates:'Coordinates',accuracy:'Accuracy radius',notLinked:'Not linked',accessTitle:'Sign in to continue',accessHint:'Use an administrator account',forbidden:'This account has no admin access',exportOrder:'Export order',backOrder:'Back to order',readDetails:'View details'});
-  function auditTargetLabel(entry){
-    if(entry.type==='users')return user(entry.target)?.name||t('missingUser');
-    const record=orders.find(o=>o.id===entry.target);
-    return record?`${user(record.userId).name} · ${money(record.cents)}`:t('deletedOrder');
-  }
-  function auditTarget(entry){
-    const record=entry.type==='orders'?orders.find(o=>o.id===entry.target):user(entry.target);
-    const label=auditTargetLabel(entry),action=entry.type==='orders'?'order':'user';
-    return `<div class="a-audit-target">${record?btn(esc(label),action,'a-textlink',`data-id="${entry.target}"`):`<span class="a-muted">${esc(label)}</span>`}<span class="a-sub">${t(entry.type==='orders'?'orderTarget':'userTarget')}${record&&entry.type==='orders'?' · '+record.created:''}</span><code class="a-uuid">${readableId(entry.target)}</code></div>`;
-  }
-  const actionKeys=['export','closeOrder','hideOrder','showOrder','hideMessage','showMessage','delete'];
-  const actionIcons={export:'download',closeOrder:'circle-x',hideOrder:'eye-off',showOrder:'eye',hideMessage:'message-square-off',showMessage:'message-square',delete:'trash-2'};
-  const sorts={orders:{key:'created',dir:-1},users:{key:'login',dir:-1},audit:{key:'time',dir:-1},daily:{key:'date',dir:-1},channels:{key:'cents',dir:-1}};
-  let menu=null,overlay=null,modalContext=null,focusReturn=null,pendingAction=null,calendar=null,serial=0,filterAnimation=null;
-  const toasts=new Map();
-  function icons(){DonatePrototype.icons(app);}
-  function motion(el,frames,duration=220){
-    if(!el||reduced())return Promise.resolve();
-    return el.animate(frames,{duration,easing:'cubic-bezier(.2,.75,.25,1)'}).finished.catch(()=>{});
-  }
-  const enter=(el,x=0,y=6)=>motion(el,[{opacity:0,transform:`translate3d(${x}px,${y}px,0)`},{opacity:1,transform:'translate3d(0,0,0)'}]);
-  function remember(){DonatePrototype.demo.write({identity:currentIdentity,lang:state.lang,appearance:preferences.appearance,profile:adminProfile});}
-  function look(){app.style.colorScheme=preferences.appearance==='浅色'?'light':preferences.appearance==='深色'?'dark':'light dark';app.style.maxWidth=preferences.device==='手机'?'390px':'100%';app.style.marginInline='auto';}
-  const shell=DonatePrototype.createShell(app,{
-    context:()=>({lang:state.lang,appearance:preferences.appearance,signed:currentIdentity!=='游客',admin:currentIdentity==='管理员',adminPage:true,profile:adminProfile}),
-    beforeOpen:()=>{closeMenu(false,true);if(overlay)removeModal();},
-    onPreference:(key,value)=>{if(key==='lang'){state.lang=value;render();}else{preferences.appearance=value;look();shell.refreshHeader();}remember();},
-    onBinding:()=>{syncProfile();remember();if(state.page==='users')results();},
-    onLogin:()=>{currentIdentity='管理员';syncProfile();remember();render();},
-    onLogout:()=>{currentIdentity='游客';remember();if(['http:','https:'].includes(location.protocol))location.assign('/');else location.assign('index.html');}
+  const readableId = (id) => esc(id).replace(/-/g, '-<wbr>');
+  Object.assign(words['zh-CN'], {
+    deletedOrder: '订单已删除',
+    missingUser: '用户已不存在',
+    orderTarget: '订单',
+    userTarget: '用户',
   });
-  function syncProfile(){users[0].name=adminProfile.provider==='QQ'?'沐风':'TomyJan';users[0].avatar=adminProfile.provider==='QQ'?'沐':'T';users[0].bindings=['OIDC','QQ'].filter(p=>adminProfile.bindings[p]).map(p=>[p,p==='QQ'?'沐风':'TomyJan']);}
-  function nav(){return `<nav class="a-side" aria-label="${t('admin')}">${[['overview','chart-no-axes-column'],['orders','receipt-text'],['users','users-round'],['audit','list-checks']].map(([p,i])=>btn(icon(i)+t(p),'navigate','a-ghost',`data-page="${p}" ${state.page===p?'aria-current="page"':''}`)).join('')}</nav>`;}
-  function empty(){return `<div class="a-empty">${icon('search-x')}${t('empty')}</div>`;}
-  function status(o){return `<span class="a-badge ${o.status==='paid'?'a-paid':'a-muted'}">${t(o.status)}</span>`;}
-  function visibility(o){return [o.hiddenOrder?t('hiddenOrder'):'',o.hiddenMessage?t('hiddenMessage'):''].filter(Boolean).join(' · ')||t('public');}
-  function sortValue(row,key,table){if(table==='audit'&&key==='target')return auditTargetLabel(row);if(key==='name'&&table==='orders')return user(row.userId).name;if(key==='bindings')return row.bindings.map(x=>x[0]).sort().join(' ');if(['status','channel','action'].includes(key))return t(row[key]);return row[key];}
-  function sorted(list,table){const {key,dir}=sorts[table];return [...list].sort((a,b)=>{const x=sortValue(a,key,table),y=sortValue(b,key,table);return (typeof x==='number'||typeof x==='boolean'?Number(x)-Number(y):String(x).localeCompare(String(y),state.lang,{numeric:true}))*dir||String(a.id||a.date||a.channel).localeCompare(String(b.id||b.date||b.channel));});}
-  function th(table,key,label,end=false,extra=''){const active=sorts[table].key===key,groupActive=active||extra.includes('data-key="'+sorts[table].key+'"');return `<th class="${end?'a-end':''}" ${groupActive?`aria-sort="${sorts[table].dir===1?'ascending':'descending'}"`:''}>${btn(esc(t(label))+icon(active?(sorts[table].dir===1?'arrow-up':'arrow-down'):'arrow-down-up'),'sort','a-sort',`data-table="${table}" data-key="${key}" aria-label="${esc(t(label)+' · '+t(active&&sorts[table].dir===1?'descending':'ascending'))}"`)}${extra}</th>`;}
-  function secondarySort(table,key,label){const active=sorts[table].key===key;return `<div>${btn(t(label)+icon(active?(sorts[table].dir===1?'arrow-up':'arrow-down'):'arrow-down-up'),'sort','a-sort a-muted',`data-table="${table}" data-key="${key}" aria-label="${t(label)} · ${t(active&&sorts[table].dir===1?'descending':'ascending')}"`)}</div>`;}
+  Object.assign(words.en, {
+    deletedOrder: 'Order deleted',
+    missingUser: 'User no longer exists',
+    orderTarget: 'Order',
+    userTarget: 'User',
+  });
+  Object.assign(words['zh-CN'], {
+    login: '登录',
+    hide: '隐藏',
+    restore: '恢复',
+    isp: '运营商',
+    asn: 'ASN',
+    dataVersion: '数据版本',
+    coordinates: '坐标',
+    accuracy: '精度范围',
+    notLinked: '未绑定',
+    accessTitle: '请先登录',
+    accessHint: '使用管理员账号继续',
+    forbidden: '当前账号无管理权限',
+    exportOrder: '导出订单',
+    backOrder: '返回订单',
+    readDetails: '查看详情',
+  });
+  Object.assign(words.en, {
+    login: 'Sign in',
+    hide: 'Hide',
+    restore: 'Restore',
+    isp: 'ISP',
+    asn: 'ASN',
+    dataVersion: 'Data version',
+    coordinates: 'Coordinates',
+    accuracy: 'Accuracy radius',
+    notLinked: 'Not linked',
+    accessTitle: 'Sign in to continue',
+    accessHint: 'Use an administrator account',
+    forbidden: 'This account has no admin access',
+    exportOrder: 'Export order',
+    backOrder: 'Back to order',
+    readDetails: 'View details',
+  });
+  function auditTargetLabel(entry) {
+    if (entry.type === 'users') return user(entry.target)?.name || t('missingUser');
+    const record = orders.find((o) => o.id === entry.target);
+    return record ? `${user(record.userId).name} · ${money(record.cents)}` : t('deletedOrder');
+  }
+  function auditTarget(entry) {
+    const record = entry.type === 'orders' ? orders.find((o) => o.id === entry.target) : user(entry.target);
+    const label = auditTargetLabel(entry),
+      action = entry.type === 'orders' ? 'order' : 'user';
+    return `<div class="a-audit-target">${record ? btn(esc(label), action, 'a-textlink', `data-id="${entry.target}"`) : `<span class="a-muted">${esc(label)}</span>`}<span class="a-sub">${t(entry.type === 'orders' ? 'orderTarget' : 'userTarget')}${record && entry.type === 'orders' ? ' · ' + record.created : ''}</span><code class="a-uuid">${readableId(entry.target)}</code></div>`;
+  }
+  const actionKeys = [
+    'export',
+    'closeOrder',
+    'hideOrder',
+    'showOrder',
+    'hideMessage',
+    'showMessage',
+    'delete',
+  ];
+  const actionIcons = {
+    export: 'download',
+    closeOrder: 'circle-x',
+    hideOrder: 'eye-off',
+    showOrder: 'eye',
+    hideMessage: 'message-square-off',
+    showMessage: 'message-square',
+    delete: 'trash-2',
+  };
+  const sorts = {
+    orders: { key: 'created', dir: -1 },
+    users: { key: 'login', dir: -1 },
+    audit: { key: 'time', dir: -1 },
+    daily: { key: 'date', dir: -1 },
+    channels: { key: 'cents', dir: -1 },
+  };
+  let menu = null,
+    overlay = null,
+    modalContext = null,
+    focusReturn = null,
+    pendingAction = null,
+    calendar = null,
+    serial = 0,
+    filterAnimation = null;
+  const toasts = new Map();
+  function icons() {
+    DonatePrototype.icons(app);
+  }
+  function motion(el, frames, duration = 220) {
+    if (!el || reduced()) return Promise.resolve();
+    return el.animate(frames, { duration, easing: 'cubic-bezier(.2,.75,.25,1)' }).finished.catch(() => {});
+  }
+  const enter = (el, x = 0, y = 6) =>
+    motion(el, [
+      { opacity: 0, transform: `translate3d(${x}px,${y}px,0)` },
+      { opacity: 1, transform: 'translate3d(0,0,0)' },
+    ]);
+  function remember() {
+    DonatePrototype.demo.write({
+      identity: currentIdentity,
+      lang: state.lang,
+      appearance: preferences.appearance,
+      profile: adminProfile,
+    });
+  }
+  function look() {
+    app.style.colorScheme =
+      preferences.appearance === '浅色' ? 'light' : preferences.appearance === '深色' ? 'dark' : 'light dark';
+    app.style.maxWidth = preferences.device === '手机' ? '390px' : '100%';
+    app.style.marginInline = 'auto';
+  }
+  const shell = DonatePrototype.createShell(app, {
+    context: () => ({
+      lang: state.lang,
+      appearance: preferences.appearance,
+      signed: currentIdentity !== '游客',
+      admin: currentIdentity === '管理员',
+      adminPage: true,
+      profile: adminProfile,
+    }),
+    beforeOpen: () => {
+      closeMenu(false, true);
+      if (overlay) removeModal();
+    },
+    onPreference: (key, value) => {
+      if (key === 'lang') {
+        state.lang = value;
+        render();
+      } else {
+        preferences.appearance = value;
+        look();
+        shell.refreshHeader();
+      }
+      remember();
+    },
+    onBinding: () => {
+      syncProfile();
+      remember();
+      if (state.page === 'users') results();
+    },
+    onLogin: () => {
+      currentIdentity = '管理员';
+      syncProfile();
+      remember();
+      render();
+    },
+    onLogout: () => {
+      currentIdentity = '游客';
+      remember();
+      if (['http:', 'https:'].includes(location.protocol)) location.assign('/');
+      else location.assign('index.html');
+    },
+  });
+  function syncProfile() {
+    users[0].name = adminProfile.provider === 'QQ' ? '沐风' : 'TomyJan';
+    users[0].avatar = adminProfile.provider === 'QQ' ? '沐' : 'T';
+    users[0].bindings = ['OIDC', 'QQ']
+      .filter((p) => adminProfile.bindings[p])
+      .map((p) => [p, p === 'QQ' ? '沐风' : 'TomyJan']);
+  }
+  function nav() {
+    return `<nav class="a-side" aria-label="${t('admin')}">${[
+      ['overview', 'chart-no-axes-column'],
+      ['orders', 'receipt-text'],
+      ['users', 'users-round'],
+      ['audit', 'list-checks'],
+    ]
+      .map(([p, i]) =>
+        btn(
+          icon(i) + t(p),
+          'navigate',
+          'a-ghost',
+          `data-page="${p}" ${state.page === p ? 'aria-current="page"' : ''}`,
+        ),
+      )
+      .join('')}</nav>`;
+  }
+  function empty() {
+    return `<div class="a-empty">${icon('search-x')}${t('empty')}</div>`;
+  }
+  function status(o) {
+    return `<span class="a-badge ${o.status === 'paid' ? 'a-paid' : 'a-muted'}">${t(o.status)}</span>`;
+  }
+  function visibility(o) {
+    return (
+      [o.hiddenOrder ? t('hiddenOrder') : '', o.hiddenMessage ? t('hiddenMessage') : '']
+        .filter(Boolean)
+        .join(' · ') || t('public')
+    );
+  }
+  function sortValue(row, key, table) {
+    if (table === 'audit' && key === 'target') return auditTargetLabel(row);
+    if (key === 'name' && table === 'orders') return user(row.userId).name;
+    if (key === 'bindings')
+      return row.bindings
+        .map((x) => x[0])
+        .sort()
+        .join(' ');
+    if (['status', 'channel', 'action'].includes(key)) return t(row[key]);
+    return row[key];
+  }
+  function sorted(list, table) {
+    const { key, dir } = sorts[table];
+    return [...list].sort((a, b) => {
+      const x = sortValue(a, key, table),
+        y = sortValue(b, key, table);
+      return (
+        (typeof x === 'number' || typeof x === 'boolean'
+          ? Number(x) - Number(y)
+          : String(x).localeCompare(String(y), state.lang, { numeric: true })) * dir ||
+        String(a.id || a.date || a.channel).localeCompare(String(b.id || b.date || b.channel))
+      );
+    });
+  }
+  function th(table, key, label, end = false, extra = '') {
+    const active = sorts[table].key === key,
+      groupActive = active || extra.includes('data-key="' + sorts[table].key + '"');
+    return `<th class="${end ? 'a-end' : ''}" ${groupActive ? `aria-sort="${sorts[table].dir === 1 ? 'ascending' : 'descending'}"` : ''}>${btn(esc(t(label)) + icon(active ? (sorts[table].dir === 1 ? 'arrow-up' : 'arrow-down') : 'arrow-down-up'), 'sort', 'a-sort', `data-table="${table}" data-key="${key}" aria-label="${esc(t(label) + ' · ' + t(active && sorts[table].dir === 1 ? 'descending' : 'ascending'))}"`)}${extra}</th>`;
+  }
+  function secondarySort(table, key, label) {
+    const active = sorts[table].key === key;
+    return `<div>${btn(t(label) + icon(active ? (sorts[table].dir === 1 ? 'arrow-up' : 'arrow-down') : 'arrow-down-up'), 'sort', 'a-sort a-muted', `data-table="${table}" data-key="${key}" aria-label="${t(label)} · ${t(active && sorts[table].dir === 1 ? 'descending' : 'ascending')}"`)}</div>`;
+  }
 
-  function select(name,options,value){const selected=options.find(x=>x[0]===value);return btn(`<span>${t(selected?.[1]||options[0][1])}</span>${icon('chevron-down')}`,'select','a-select',`data-name="${name}" aria-label="${t(options[0][1])}" aria-haspopup="listbox" aria-expanded="false"`);}
-  const selectOptions={status:[['all','allStatus'],['paid','paid'],['pending','pending'],['closed','closed']],channel:[['all','allChannels'],['alipay','alipay'],['wechat','wechat']],visibility:[['all','allVisibility'],['public','public'],['hiddenOrder','hiddenOrder'],['hiddenMessage','hiddenMessage']],userStatus:[['all','allUsers'],['normal','normal'],['banned','banned']],auditType:[['all','allActions'],['orders','ordersAction'],['users','usersAction']]};
-  function search(name,label){return `<label class="a-search">${icon('search')}<span class="a-sr">${t(label)}</span><input name="${name}" type="search" autocomplete="off" placeholder="${t(label)}" value="${esc(state[name])}"></label>`;}
-  function heading(page,actions=''){return `<div class="a-heading"><h1>${t(page)}</h1><div class="a-heading-actions">${actions}</div></div>`;}
-  function batch(){return state.selected.size?`<span class="a-selection-count" aria-live="polite">${t('selected')} ${state.selected.size}</span>${btn(icon('x'),'clear','a-icon a-ghost',`aria-label="${t('clear')}"`)}${btn(icon('download'),'request-export','a-icon a-ghost',`aria-label="${t('export')}"`)}${btn(icon('list-checks')+`<span class="a-batch-label">${t('batch')}</span>`+icon('chevron-down'),'batch','a-batch-trigger',`aria-label="${t('batch')}" aria-expanded="false" aria-haspopup="menu"`)}`:'';}
-  function advanced(){return `<div class="a-filter-wrap" ${state.advanced?'':'hidden'}><div class="a-filters">${['from','to'].map(k=>`<div class="a-field"><span id="a-${k}-label">${t(k)}</span>${btn(`<span>${state[k]||'—'}</span>${icon('calendar-days')}`,'date','a-select',`data-name="${k}" aria-labelledby="a-${k}-label" aria-haspopup="dialog" aria-expanded="false"`)}</div>`).join('')}${['minimum','maximum'].map(k=>`<label class="a-field"><span>${t(k)}</span><input class="a-input" name="${k}" inputmode="decimal" autocomplete="off" placeholder="0.00" value="${esc(state[k])}"></label>`).join('')}<div class="a-filter-bottom">${select('visibility',selectOptions.visibility,state.visibility)}${btn(t('reset'),'reset','a-ghost')}</div></div></div>`;}
-  function filterOrders(){const q=state.q.trim().toLowerCase();return sorted(orders.filter(o=>(!q||o.id.includes(q)||o.userId.includes(q)||user(o.userId).name.toLowerCase().includes(q))&&(state.status==='all'||o.status===state.status)&&(state.channel==='all'||o.channel===state.channel)&&(state.visibility==='all'||state.visibility==='public'&&!o.hiddenOrder&&!o.hiddenMessage||state.visibility==='hiddenOrder'&&o.hiddenOrder||state.visibility==='hiddenMessage'&&o.hiddenMessage)&&(!state.from||o.created>=state.from)&&(!state.to||o.created<=state.to)&&(!state.minimum||o.cents>=Math.round(Number(state.minimum)*100))&&(!state.maximum||o.cents<=Math.round(Number(state.maximum)*100))),'orders');}
-  function visibleOrders(){return filterOrders().slice(state.index*6,state.index*6+6);}
-  function orderTable(){const list=visibleOrders(),all=list.length&&list.every(o=>state.selected.has(o.id));return list.length?`<table class="a-table a-orders" aria-label="${t('orders')}"><colgroup><col style="width:32px"><col style="width:22%"><col style="width:14%"><col style="width:13%"><col style="width:11%"><col style="width:12%"><col><col style="width:46px"></colgroup><thead><tr><th><label class="a-check"><input type="checkbox" name="select-all" ${all?'checked':''} aria-label="${t('selectPage')}"></label></th>${th('orders','created','time',false,secondarySort('orders','id','id'))}${th('orders','name','user')}${th('orders','cents','amount',true)}${th('orders','channel','channel')}${th('orders','status','status')}${th('orders','hiddenOrder','orderVisible',false,secondarySort('orders','hiddenMessage','messageVisible'))}<th><span class="a-sr">${t('details')}</span></th></tr></thead><tbody>${list.map(o=>`<tr data-row="${o.id}" class="${state.selected.has(o.id)?'a-selected':''}"><td class="a-cell-check"><label class="a-check"><input type="checkbox" data-select="${o.id}" ${state.selected.has(o.id)?'checked':''} aria-label="${t('selectOrder')} ${o.id}"></label></td><td class="a-cell-time"><time>${o.created.slice(5)}</time><span class="a-sub">${short(o.id)}</span></td><td class="a-cell-user">${esc(user(o.userId).name)}</td><td class="a-cell-amount a-amount a-end">${money(o.cents)}</td><td class="a-cell-channel">${t(o.channel)}</td><td class="a-cell-status">${status(o)}</td><td class="a-cell-visibility">${visibility(o)}</td><td class="a-cell-action">${btn(icon('ellipsis'),'order','a-icon a-ghost a-detail',`data-id="${o.id}" aria-label="${t('orderDetail')} ${short(o.id)}"`)}</td></tr>`).join('')}</tbody></table>`:empty();}
-  function orderResults(){const count=filterOrders().length,pages=Math.max(1,Math.ceil(count/6));state.index=Math.min(state.index,pages-1);return `${orderTable()}<div class="a-foot"><span>${t('total')} ${count} ${t('items')}</span><div class="a-pagination">${btn(icon('arrow-left'),'previous','a-icon a-ghost',`aria-label="${t('previous')}" ${state.index===0?'disabled':''}`)}<span>${state.index+1} / ${pages}</span>${btn(icon('arrow-right'),'next','a-icon a-ghost',`aria-label="${t('next')}" ${state.index>=pages-1?'disabled':''}`)}</div></div>`;}
-  function orderPage(){return heading('orders',batch())+`<div class="a-tools">${search('q','search')}${select('status',selectOptions.status,state.status)}${select('channel',selectOptions.channel,state.channel)}${btn(icon('sliders-horizontal')+t('filters'),'filters','a-ghost a-filter-toggle',`aria-expanded="${state.advanced}"`)}</div>${advanced()}<div class="a-results">${orderResults()}</div>`;}
-  function filteredUsers(){const q=state.userQ.trim().toLowerCase();return sorted(users.filter(u=>(!q||u.name.toLowerCase().includes(q)||u.id.includes(q))&&(state.userStatus==='all'||u.banned===(state.userStatus==='banned'))),'users');}
-  function userResults(){const list=filteredUsers();return list.length?`<table class="a-table a-users" aria-label="${t('users')}"><colgroup><col style="width:29%"><col style="width:20%"><col style="width:15%"><col><col style="width:46px"></colgroup><thead><tr>${th('users','name','user',false,secondarySort('users','id','id'))}${th('users','bindings','bindings')}${th('users','banned','status')}${th('users','login','lastLogin')}<th><span class="a-sr">${t('details')}</span></th></tr></thead><tbody>${list.map(u=>`<tr data-row="${u.id}"><td><div class="a-person">${DonatePrototype.avatar(u.avatar,'a-avatar')}<div>${esc(u.name)}<span class="a-sub">${short(u.id)}</span></div></div></td><td>${u.bindings.map(p=>p[0]).join(' · ')}</td><td class="${u.banned?'a-danger':''}">${t(u.banned?'banned':'normal')}</td><td>${u.login.slice(5)}</td><td class="a-cell-action">${btn(icon('ellipsis'),'user','a-icon a-ghost a-detail',`data-id="${u.id}" aria-label="${t('userDetail')} ${esc(u.name)}"`)}</td></tr>`).join('')}</tbody></table>`:empty();}
-  function usersPage(){return heading('users')+`<div class="a-tools">${search('userQ','userSearch')}${select('userStatus',selectOptions.userStatus,state.userStatus)}</div><div class="a-results">${userResults()}</div>`;}
-  function auditResults(){const list=sorted(audit.filter(a=>state.auditType==='all'||a.type===state.auditType),'audit');return list.length?`<table class="a-table a-audit" aria-label="${t('audit')}"><colgroup><col style="width:27%"><col style="width:22%"><col></colgroup><thead><tr>${th('audit','time','time',false,secondarySort('audit','actor','actor'))}${th('audit','action','action')}${th('audit','target','target')}</tr></thead><tbody>${list.map(a=>`<tr data-row="${a.id}"><td>${a.time.slice(5)}<span class="a-sub">${a.actor}</span></td><td>${t(a.action)}</td><td>${auditTarget(a)}</td></tr>`).join('')}</tbody></table>`:empty();}
-  function auditPage(){return heading('audit')+`<div class="a-tools">${select('auditType',selectOptions.auditType,state.auditType)}</div><div class="a-results">${auditResults()}</div>`;}
-  function summaryTable(table,list){return `<table class="a-table a-summary-table" aria-label="${t(table==='daily'?'daily':'channels')}"><thead><tr>${th(table,table==='daily'?'date':'channel',table==='daily'?'date':'channel')}${th(table,'count','count',true)}${th(table,'cents','amount',true)}</tr></thead><tbody>${sorted(list,table).map(r=>`<tr data-row="${r.date||r.channel}"><td>${r.date||t(r.channel)}</td><td class="a-end">${r.count}</td><td class="a-end a-amount">${money(r.cents)}</td></tr>`).join('')}</tbody></table>`;}
-  function overview(){const paid=orders.filter(o=>o.status==='paid'),total=paid.reduce((s,o)=>s+o.cents,0),days=[...new Set(orders.map(o=>o.created.slice(0,10)))],sum=list=>({count:list.length,cents:list.reduce((s,o)=>s+o.cents,0)});return heading('overview',`<span class="a-muted a-small">${t('scope')}</span>`)+`<div class="a-stat-grid">${[['totalPaid',money(total)],['paidOrders',paid.length],['pendingOrders',orders.filter(o=>o.status==='pending').length],['closedOrders',orders.filter(o=>o.status==='closed').length]].map(([k,v])=>`<div class="a-stat"><span>${t(k)}</span><strong>${v}</strong></div>`).join('')}</div><section class="a-section"><h2>${t('daily')}</h2>${summaryTable('daily',days.map(date=>({date,...sum(paid.filter(o=>o.created.startsWith(date)))})))}</section><section class="a-section"><h2>${t('channels')}</h2>${summaryTable('channels',['alipay','wechat'].map(channel=>({channel,...sum(paid.filter(o=>o.channel===channel))})))}</section>`;}
-  function content(){return state.page==='orders'?orderPage():state.page==='users'?usersPage():state.page==='audit'?auditPage():overview();}
-  function captureRows(){return new Map([...app.querySelectorAll('.a-main [data-row]')].map(e=>[e.dataset.row,e.getBoundingClientRect()]));}
-  function animateRows(before){app.querySelectorAll('.a-main [data-row]').forEach((e,i)=>{const old=before?.get(e.dataset.row),r=e.getBoundingClientRect();if(old){const dy=old.y-r.y;if(Math.abs(dy)>1)motion(e,[{transform:`translate3d(0,${dy}px,0)`},{transform:'translate3d(0,0,0)'}],280);}else if(before)enter(e,0,Math.min(12,4+i*2));});}
-  function render(initial=false){
-    shell.reset();closeMenu(false,true);if(overlay)removeModal();
-    const before=initial?null:captureRows();app.lang=state.lang;look();
-    if(currentIdentity!=='管理员'){
-      app.innerHTML=shell.layout(`<main class="a-access"><div>${icon(currentIdentity==='游客'?'user-round':'lock-keyhole')}<h1>${t(currentIdentity==='游客'?'accessTitle':'forbidden')}</h1>${currentIdentity==='游客'?`<p>${t('accessHint')}</p><button type="button" class="d-btn d-primary" data-shell-act="login">${t('login')}</button>`:''}<a href="${location.protocol==='file:'?'index.html':'/'}">${t('home')}</a></div></main>`)+`<div class="a-pop-host"></div><div class="a-modal-host"></div><div class="a-toast-host"></div>`;shell.mount();return;
+  function select(name, options, value) {
+    const selected = options.find((x) => x[0] === value);
+    return btn(
+      `<span>${t(selected?.[1] || options[0][1])}</span>${icon('chevron-down')}`,
+      'select',
+      'a-select',
+      `data-name="${name}" aria-label="${t(options[0][1])}" aria-haspopup="listbox" aria-expanded="false"`,
+    );
+  }
+  const selectOptions = {
+    status: [
+      ['all', 'allStatus'],
+      ['paid', 'paid'],
+      ['pending', 'pending'],
+      ['closed', 'closed'],
+    ],
+    channel: [
+      ['all', 'allChannels'],
+      ['alipay', 'alipay'],
+      ['wechat', 'wechat'],
+    ],
+    visibility: [
+      ['all', 'allVisibility'],
+      ['public', 'public'],
+      ['hiddenOrder', 'hiddenOrder'],
+      ['hiddenMessage', 'hiddenMessage'],
+    ],
+    userStatus: [
+      ['all', 'allUsers'],
+      ['normal', 'normal'],
+      ['banned', 'banned'],
+    ],
+    auditType: [
+      ['all', 'allActions'],
+      ['orders', 'ordersAction'],
+      ['users', 'usersAction'],
+    ],
+  };
+  function search(name, label) {
+    return `<label class="a-search">${icon('search')}<span class="a-sr">${t(label)}</span><input name="${name}" type="search" autocomplete="off" placeholder="${t(label)}" value="${esc(state[name])}"></label>`;
+  }
+  function heading(page, actions = '') {
+    return `<div class="a-heading"><h1>${t(page)}</h1><div class="a-heading-actions">${actions}</div></div>`;
+  }
+  function batch() {
+    return state.selected.size
+      ? `<span class="a-selection-count" aria-live="polite">${t('selected')} ${state.selected.size}</span>${btn(icon('x'), 'clear', 'a-icon a-ghost', `aria-label="${t('clear')}"`)}${btn(icon('download'), 'request-export', 'a-icon a-ghost', `aria-label="${t('export')}"`)}${btn(icon('list-checks') + `<span class="a-batch-label">${t('batch')}</span>` + icon('chevron-down'), 'batch', 'a-batch-trigger', `aria-label="${t('batch')}" aria-expanded="false" aria-haspopup="menu"`)}`
+      : '';
+  }
+  function advanced() {
+    return `<div class="a-filter-wrap" ${state.advanced ? '' : 'hidden'}><div class="a-filters">${['from', 'to'].map((k) => `<div class="a-field"><span id="a-${k}-label">${t(k)}</span>${btn(`<span>${state[k] || '—'}</span>${icon('calendar-days')}`, 'date', 'a-select', `data-name="${k}" aria-labelledby="a-${k}-label" aria-haspopup="dialog" aria-expanded="false"`)}</div>`).join('')}${['minimum', 'maximum'].map((k) => `<label class="a-field"><span>${t(k)}</span><input class="a-input" name="${k}" inputmode="decimal" autocomplete="off" placeholder="0.00" value="${esc(state[k])}"></label>`).join('')}<div class="a-filter-bottom">${select('visibility', selectOptions.visibility, state.visibility)}${btn(t('reset'), 'reset', 'a-ghost')}</div></div></div>`;
+  }
+  function filterOrders() {
+    const q = state.q.trim().toLowerCase();
+    return sorted(
+      orders.filter(
+        (o) =>
+          (!q || o.id.includes(q) || o.userId.includes(q) || user(o.userId).name.toLowerCase().includes(q)) &&
+          (state.status === 'all' || o.status === state.status) &&
+          (state.channel === 'all' || o.channel === state.channel) &&
+          (state.visibility === 'all' ||
+            (state.visibility === 'public' && !o.hiddenOrder && !o.hiddenMessage) ||
+            (state.visibility === 'hiddenOrder' && o.hiddenOrder) ||
+            (state.visibility === 'hiddenMessage' && o.hiddenMessage)) &&
+          (!state.from || o.created >= state.from) &&
+          (!state.to || o.created <= state.to) &&
+          (!state.minimum || o.cents >= Math.round(Number(state.minimum) * 100)) &&
+          (!state.maximum || o.cents <= Math.round(Number(state.maximum) * 100)),
+      ),
+      'orders',
+    );
+  }
+  function visibleOrders() {
+    return filterOrders().slice(state.index * 6, state.index * 6 + 6);
+  }
+  function orderTable() {
+    const list = visibleOrders(),
+      all = list.length && list.every((o) => state.selected.has(o.id));
+    return list.length
+      ? `<table class="a-table a-orders" aria-label="${t('orders')}"><colgroup><col style="width:32px"><col style="width:22%"><col style="width:14%"><col style="width:13%"><col style="width:11%"><col style="width:12%"><col><col style="width:46px"></colgroup><thead><tr><th><label class="a-check"><input type="checkbox" name="select-all" ${all ? 'checked' : ''} aria-label="${t('selectPage')}"></label></th>${th('orders', 'created', 'time', false, secondarySort('orders', 'id', 'id'))}${th('orders', 'name', 'user')}${th('orders', 'cents', 'amount', true)}${th('orders', 'channel', 'channel')}${th('orders', 'status', 'status')}${th('orders', 'hiddenOrder', 'orderVisible', false, secondarySort('orders', 'hiddenMessage', 'messageVisible'))}<th><span class="a-sr">${t('details')}</span></th></tr></thead><tbody>${list.map((o) => `<tr data-row="${o.id}" class="${state.selected.has(o.id) ? 'a-selected' : ''}"><td class="a-cell-check"><label class="a-check"><input type="checkbox" data-select="${o.id}" ${state.selected.has(o.id) ? 'checked' : ''} aria-label="${t('selectOrder')} ${o.id}"></label></td><td class="a-cell-time"><time>${o.created.slice(5)}</time><span class="a-sub">${short(o.id)}</span></td><td class="a-cell-user">${esc(user(o.userId).name)}</td><td class="a-cell-amount a-amount a-end">${money(o.cents)}</td><td class="a-cell-channel">${t(o.channel)}</td><td class="a-cell-status">${status(o)}</td><td class="a-cell-visibility">${visibility(o)}</td><td class="a-cell-action">${btn(icon('ellipsis'), 'order', 'a-icon a-ghost a-detail', `data-id="${o.id}" aria-label="${t('orderDetail')} ${short(o.id)}"`)}</td></tr>`).join('')}</tbody></table>`
+      : empty();
+  }
+  function orderResults() {
+    const count = filterOrders().length,
+      pages = Math.max(1, Math.ceil(count / 6));
+    state.index = Math.min(state.index, pages - 1);
+    return `${orderTable()}<div class="a-foot"><span>${t('total')} ${count} ${t('items')}</span><div class="a-pagination">${btn(icon('arrow-left'), 'previous', 'a-icon a-ghost', `aria-label="${t('previous')}" ${state.index === 0 ? 'disabled' : ''}`)}<span>${state.index + 1} / ${pages}</span>${btn(icon('arrow-right'), 'next', 'a-icon a-ghost', `aria-label="${t('next')}" ${state.index >= pages - 1 ? 'disabled' : ''}`)}</div></div>`;
+  }
+  function orderPage() {
+    return (
+      heading('orders', batch()) +
+      `<div class="a-tools">${search('q', 'search')}${select('status', selectOptions.status, state.status)}${select('channel', selectOptions.channel, state.channel)}${btn(icon('sliders-horizontal') + t('filters'), 'filters', 'a-ghost a-filter-toggle', `aria-expanded="${state.advanced}"`)}</div>${advanced()}<div class="a-results">${orderResults()}</div>`
+    );
+  }
+  function filteredUsers() {
+    const q = state.userQ.trim().toLowerCase();
+    return sorted(
+      users.filter(
+        (u) =>
+          (!q || u.name.toLowerCase().includes(q) || u.id.includes(q)) &&
+          (state.userStatus === 'all' || u.banned === (state.userStatus === 'banned')),
+      ),
+      'users',
+    );
+  }
+  function userResults() {
+    const list = filteredUsers();
+    return list.length
+      ? `<table class="a-table a-users" aria-label="${t('users')}"><colgroup><col style="width:29%"><col style="width:20%"><col style="width:15%"><col><col style="width:46px"></colgroup><thead><tr>${th('users', 'name', 'user', false, secondarySort('users', 'id', 'id'))}${th('users', 'bindings', 'bindings')}${th('users', 'banned', 'status')}${th('users', 'login', 'lastLogin')}<th><span class="a-sr">${t('details')}</span></th></tr></thead><tbody>${list.map((u) => `<tr data-row="${u.id}"><td><div class="a-person">${DonatePrototype.avatar(u.avatar, 'a-avatar')}<div>${esc(u.name)}<span class="a-sub">${short(u.id)}</span></div></div></td><td>${u.bindings.map((p) => p[0]).join(' · ')}</td><td class="${u.banned ? 'a-danger' : ''}">${t(u.banned ? 'banned' : 'normal')}</td><td>${u.login.slice(5)}</td><td class="a-cell-action">${btn(icon('ellipsis'), 'user', 'a-icon a-ghost a-detail', `data-id="${u.id}" aria-label="${t('userDetail')} ${esc(u.name)}"`)}</td></tr>`).join('')}</tbody></table>`
+      : empty();
+  }
+  function usersPage() {
+    return (
+      heading('users') +
+      `<div class="a-tools">${search('userQ', 'userSearch')}${select('userStatus', selectOptions.userStatus, state.userStatus)}</div><div class="a-results">${userResults()}</div>`
+    );
+  }
+  function auditResults() {
+    const list = sorted(
+      audit.filter((a) => state.auditType === 'all' || a.type === state.auditType),
+      'audit',
+    );
+    return list.length
+      ? `<table class="a-table a-audit" aria-label="${t('audit')}"><colgroup><col style="width:27%"><col style="width:22%"><col></colgroup><thead><tr>${th('audit', 'time', 'time', false, secondarySort('audit', 'actor', 'actor'))}${th('audit', 'action', 'action')}${th('audit', 'target', 'target')}</tr></thead><tbody>${list.map((a) => `<tr data-row="${a.id}"><td>${a.time.slice(5)}<span class="a-sub">${a.actor}</span></td><td>${t(a.action)}</td><td>${auditTarget(a)}</td></tr>`).join('')}</tbody></table>`
+      : empty();
+  }
+  function auditPage() {
+    return (
+      heading('audit') +
+      `<div class="a-tools">${select('auditType', selectOptions.auditType, state.auditType)}</div><div class="a-results">${auditResults()}</div>`
+    );
+  }
+  function summaryTable(table, list) {
+    return `<table class="a-table a-summary-table" aria-label="${t(table === 'daily' ? 'daily' : 'channels')}"><thead><tr>${th(table, table === 'daily' ? 'date' : 'channel', table === 'daily' ? 'date' : 'channel')}${th(table, 'count', 'count', true)}${th(table, 'cents', 'amount', true)}</tr></thead><tbody>${sorted(
+      list,
+      table,
+    )
+      .map(
+        (r) =>
+          `<tr data-row="${r.date || r.channel}"><td>${r.date || t(r.channel)}</td><td class="a-end">${r.count}</td><td class="a-end a-amount">${money(r.cents)}</td></tr>`,
+      )
+      .join('')}</tbody></table>`;
+  }
+  function overview() {
+    const paid = orders.filter((o) => o.status === 'paid'),
+      total = paid.reduce((s, o) => s + o.cents, 0),
+      days = [...new Set(orders.map((o) => o.created.slice(0, 10)))],
+      sum = (list) => ({ count: list.length, cents: list.reduce((s, o) => s + o.cents, 0) });
+    return (
+      heading('overview', `<span class="a-muted a-small">${t('scope')}</span>`) +
+      `<div class="a-stat-grid">${[
+        ['totalPaid', money(total)],
+        ['paidOrders', paid.length],
+        ['pendingOrders', orders.filter((o) => o.status === 'pending').length],
+        ['closedOrders', orders.filter((o) => o.status === 'closed').length],
+      ]
+        .map(([k, v]) => `<div class="a-stat"><span>${t(k)}</span><strong>${v}</strong></div>`)
+        .join('')}</div><section class="a-section"><h2>${t('daily')}</h2>${summaryTable(
+        'daily',
+        days.map((date) => ({ date, ...sum(paid.filter((o) => o.created.startsWith(date))) })),
+      )}</section><section class="a-section"><h2>${t('channels')}</h2>${summaryTable(
+        'channels',
+        ['alipay', 'wechat'].map((channel) => ({
+          channel,
+          ...sum(paid.filter((o) => o.channel === channel)),
+        })),
+      )}</section>`
+    );
+  }
+  function content() {
+    return state.page === 'orders'
+      ? orderPage()
+      : state.page === 'users'
+        ? usersPage()
+        : state.page === 'audit'
+          ? auditPage()
+          : overview();
+  }
+  function captureRows() {
+    return new Map(
+      [...app.querySelectorAll('.a-main [data-row]')].map((e) => [e.dataset.row, e.getBoundingClientRect()]),
+    );
+  }
+  function animateRows(before) {
+    app.querySelectorAll('.a-main [data-row]').forEach((e, i) => {
+      const old = before?.get(e.dataset.row),
+        r = e.getBoundingClientRect();
+      if (old) {
+        const dy = old.y - r.y;
+        if (Math.abs(dy) > 1)
+          motion(e, [{ transform: `translate3d(0,${dy}px,0)` }, { transform: 'translate3d(0,0,0)' }], 280);
+      } else if (before) enter(e, 0, Math.min(12, 4 + i * 2));
+    });
+  }
+  function render(initial = false) {
+    shell.reset();
+    closeMenu(false, true);
+    if (overlay) removeModal();
+    const before = initial ? null : captureRows();
+    app.lang = state.lang;
+    look();
+    if (currentIdentity !== '管理员') {
+      app.innerHTML =
+        shell.layout(
+          `<main class="a-access"><div>${icon(currentIdentity === '游客' ? 'user-round' : 'lock-keyhole')}<h1>${t(currentIdentity === '游客' ? 'accessTitle' : 'forbidden')}</h1>${currentIdentity === '游客' ? `<p>${t('accessHint')}</p><button type="button" class="d-btn d-primary" data-shell-act="login">${t('login')}</button>` : ''}<a href="${location.protocol === 'file:' ? 'index.html' : '/'}">${t('home')}</a></div></main>`,
+        ) + `<div class="a-pop-host"></div><div class="a-modal-host"></div><div class="a-toast-host"></div>`;
+      shell.mount();
+      return;
     }
-    if(!app.querySelector('.a-main'))app.innerHTML=shell.layout(`<div class="a-layout">${nav()}<main class="a-main"></main></div>`)+`<div class="a-pop-host"></div><div class="a-modal-host"></div><div class="a-toast-host" role="region" aria-label="${t('notifications')}"></div>`;
-    else{shell.refreshHeader();app.querySelector('.a-side').outerHTML=nav();}
-    app.querySelector('.a-main').innerHTML=content();icons();shell.mount();syncCheck();if(!initial)animateRows(before);
+    if (!app.querySelector('.a-main'))
+      app.innerHTML =
+        shell.layout(`<div class="a-layout">${nav()}<main class="a-main"></main></div>`) +
+        `<div class="a-pop-host"></div><div class="a-modal-host"></div><div class="a-toast-host" role="region" aria-label="${t('notifications')}"></div>`;
+    else {
+      shell.refreshHeader();
+      app.querySelector('.a-side').outerHTML = nav();
+    }
+    app.querySelector('.a-main').innerHTML = content();
+    icons();
+    shell.mount();
+    syncCheck();
+    if (!initial) animateRows(before);
   }
 
-  function renderMain(animate=true){const before=animate?captureRows():null;closeMenu(false,true);app.querySelector('.a-main').innerHTML=content();icons();syncCheck();if(animate)animateRows(before);}
-  function results(animate=true){const before=animate?captureRows():null,host=app.querySelector('.a-results');if(!host)return;host.innerHTML=state.page==='orders'?orderResults():state.page==='users'?userResults():auditResults();syncBatch();icons();syncCheck();if(animate)animateRows(before);}
-  function syncCheck(){const input=app.querySelector('[name=select-all]'),list=visibleOrders();if(input){input.checked=list.length>0&&list.every(o=>state.selected.has(o.id));input.indeterminate=list.some(o=>state.selected.has(o.id))&&!input.checked;}}
-  function syncBatch(){if(state.page!=='orders')return;const el=app.querySelector('.a-heading-actions'),was=!!el.children.length;el.getAnimations().forEach(a=>a.cancel());if(was&&!state.selected.size){el.style.opacity='0';motion(el,[{opacity:1,transform:'translate3d(0,0,0)'},{opacity:0,transform:'translate3d(5px,0,0)'}],140).then(()=>{if(!state.selected.size&&el.isConnected){if(el.contains(document.activeElement))app.querySelector('[name=select-all]')?.focus({preventScroll:true});el.innerHTML='';el.style.opacity='1';}});}else{el.style.opacity='1';el.innerHTML=batch();icons();if(!was&&state.selected.size)enter(el,5,0);}app.querySelectorAll('[data-select]').forEach(i=>{i.checked=state.selected.has(i.dataset.select);i.closest('tr').classList.toggle('a-selected',i.checked);});syncCheck();}
-  function setFilter(name,value){if(state[name]===value)return;state[name]=value;state.index=0;state.selected.clear();renderMain();}
-  function addAudit(type,action,target){const now=new Date(),p=n=>String(n).padStart(2,'0');audit.unshift({id:crypto.randomUUID(),time:`${now.getFullYear()}-${p(now.getMonth()+1)}-${p(now.getDate())} ${p(now.getHours())}:${p(now.getMinutes())}`,type,action,target,actor:'TomyJan'});}
-  function place(el,trigger,width){const ar=app.getBoundingClientRect(),tr=trigger.getBoundingClientRect(),vh=window.innerHeight;el.style.width=Math.min(width,ar.width-24)+'px';el.style.maxHeight=Math.max(180,Math.min(480,vh-Math.max(0,ar.top)-24))+'px';const h=el.offsetHeight;let top=tr.bottom-ar.top+8;if(tr.bottom+8+h>vh&&tr.top-h-8>8)top=tr.top-ar.top-h-8;top=Math.max(8,8-ar.top,Math.min(top,app.offsetHeight-h-8,vh-ar.top-h-8));el.style.left=Math.max(12,Math.min(ar.width-el.offsetWidth-12,tr.right-ar.left-el.offsetWidth))+'px';el.style.top=top+'px';}
-  async function closeMenu(focus=true,immediate=false){if(!menu)return;const old=menu;menu=null;calendar=null;old.trigger?.setAttribute('aria-expanded','false');old.el.inert=true;if(focus&&old.trigger?.isConnected)old.trigger.focus({preventScroll:true});if(!immediate){old.el.style.opacity='0';await motion(old.el,[{opacity:1,transform:'translate3d(0,0,0)'},{opacity:0,transform:'translate3d(0,-4px,0)'}],130);}old.el.remove();}
-  function popup(kind,trigger,html,role='menu',width=210){closeMenu(false,true);const el=document.createElement('div');el.id='a-popup-'+(++serial);el.className='d-pop a-pop';el.setAttribute('role',role);el.setAttribute('aria-label',trigger.getAttribute('aria-label')||trigger.textContent);el.innerHTML=html;app.querySelector('.a-pop-host').append(el);menu={kind,el,trigger};trigger.setAttribute('aria-expanded','true');trigger.setAttribute('aria-controls',el.id);icons();place(el,trigger,width);enter(el,0,-6);return el;}
-  function option(label,act,value='',i='',checked=null,extra=''){return DonatePrototype.option({label,value,leading:i?icon(i):'',selected:checked,classes:'a-option '+(value==='delete'?'a-danger':''),attributes:`data-act="${act}" ${extra}`});}
-  function openMenu(kind,trigger){if(menu?.kind===kind){closeMenu();return;}const keys=actionKeys.filter(k=>k!=='export'),html=keys.map(k=>(k==='delete'?'<hr>':'')+option(t(k),'bulk',k,actionIcons[k])).join(''),el=popup(kind,trigger,html);el.querySelector('button')?.focus({preventScroll:true});}
-  function openSelect(trigger){const name=trigger.dataset.name,kind='select-'+name;if(menu?.kind===kind){closeMenu();return;}const html=selectOptions[name].map(([value,key])=>DonatePrototype.option({label:t(key),value,selected:state[name]===value,role:'option',classes:'a-option',attributes:`data-act="choose-select" data-name="${name}"`})).join(''),el=popup(kind,trigger,html,'listbox',Math.max(180,trigger.offsetWidth));el.querySelector('[aria-selected=true]')?.focus({preventScroll:true});}
+  function renderMain(animate = true) {
+    const before = animate ? captureRows() : null;
+    closeMenu(false, true);
+    app.querySelector('.a-main').innerHTML = content();
+    icons();
+    syncCheck();
+    if (animate) animateRows(before);
+  }
+  function results(animate = true) {
+    const before = animate ? captureRows() : null,
+      host = app.querySelector('.a-results');
+    if (!host) return;
+    host.innerHTML =
+      state.page === 'orders' ? orderResults() : state.page === 'users' ? userResults() : auditResults();
+    syncBatch();
+    icons();
+    syncCheck();
+    if (animate) animateRows(before);
+  }
+  function syncCheck() {
+    const input = app.querySelector('[name=select-all]'),
+      list = visibleOrders();
+    if (input) {
+      input.checked = list.length > 0 && list.every((o) => state.selected.has(o.id));
+      input.indeterminate = list.some((o) => state.selected.has(o.id)) && !input.checked;
+    }
+  }
+  function syncBatch() {
+    if (state.page !== 'orders') return;
+    const el = app.querySelector('.a-heading-actions'),
+      was = !!el.children.length;
+    el.getAnimations().forEach((a) => a.cancel());
+    if (was && !state.selected.size) {
+      el.style.opacity = '0';
+      motion(
+        el,
+        [
+          { opacity: 1, transform: 'translate3d(0,0,0)' },
+          { opacity: 0, transform: 'translate3d(5px,0,0)' },
+        ],
+        140,
+      ).then(() => {
+        if (!state.selected.size && el.isConnected) {
+          if (el.contains(document.activeElement))
+            app.querySelector('[name=select-all]')?.focus({ preventScroll: true });
+          el.innerHTML = '';
+          el.style.opacity = '1';
+        }
+      });
+    } else {
+      el.style.opacity = '1';
+      el.innerHTML = batch();
+      icons();
+      if (!was && state.selected.size) enter(el, 5, 0);
+    }
+    app.querySelectorAll('[data-select]').forEach((i) => {
+      i.checked = state.selected.has(i.dataset.select);
+      i.closest('tr').classList.toggle('a-selected', i.checked);
+    });
+    syncCheck();
+  }
+  function setFilter(name, value) {
+    if (state[name] === value) return;
+    state[name] = value;
+    state.index = 0;
+    state.selected.clear();
+    renderMain();
+  }
+  function addAudit(type, action, target) {
+    const now = new Date(),
+      p = (n) => String(n).padStart(2, '0');
+    audit.unshift({
+      id: crypto.randomUUID(),
+      time: `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())} ${p(now.getHours())}:${p(now.getMinutes())}`,
+      type,
+      action,
+      target,
+      actor: 'TomyJan',
+    });
+  }
+  function place(el, trigger, width) {
+    const ar = app.getBoundingClientRect(),
+      tr = trigger.getBoundingClientRect(),
+      vh = window.innerHeight;
+    el.style.width = Math.min(width, ar.width - 24) + 'px';
+    el.style.maxHeight = Math.max(180, Math.min(480, vh - Math.max(0, ar.top) - 24)) + 'px';
+    const h = el.offsetHeight;
+    let top = tr.bottom - ar.top + 8;
+    if (tr.bottom + 8 + h > vh && tr.top - h - 8 > 8) top = tr.top - ar.top - h - 8;
+    top = Math.max(8, 8 - ar.top, Math.min(top, app.offsetHeight - h - 8, vh - ar.top - h - 8));
+    el.style.left =
+      Math.max(12, Math.min(ar.width - el.offsetWidth - 12, tr.right - ar.left - el.offsetWidth)) + 'px';
+    el.style.top = top + 'px';
+  }
+  async function closeMenu(focus = true, immediate = false) {
+    if (!menu) return;
+    const old = menu;
+    menu = null;
+    calendar = null;
+    old.trigger?.setAttribute('aria-expanded', 'false');
+    old.el.inert = true;
+    if (focus && old.trigger?.isConnected) old.trigger.focus({ preventScroll: true });
+    if (!immediate) {
+      old.el.style.opacity = '0';
+      await motion(
+        old.el,
+        [
+          { opacity: 1, transform: 'translate3d(0,0,0)' },
+          { opacity: 0, transform: 'translate3d(0,-4px,0)' },
+        ],
+        130,
+      );
+    }
+    old.el.remove();
+  }
+  function popup(kind, trigger, html, role = 'menu', width = 210) {
+    closeMenu(false, true);
+    const el = document.createElement('div');
+    el.id = 'a-popup-' + ++serial;
+    el.className = 'd-pop a-pop';
+    el.setAttribute('role', role);
+    el.setAttribute('aria-label', trigger.getAttribute('aria-label') || trigger.textContent);
+    el.innerHTML = html;
+    app.querySelector('.a-pop-host').append(el);
+    menu = { kind, el, trigger };
+    trigger.setAttribute('aria-expanded', 'true');
+    trigger.setAttribute('aria-controls', el.id);
+    icons();
+    place(el, trigger, width);
+    enter(el, 0, -6);
+    return el;
+  }
+  function option(label, act, value = '', i = '', checked = null, extra = '') {
+    return DonatePrototype.option({
+      label,
+      value,
+      leading: i ? icon(i) : '',
+      selected: checked,
+      classes: 'a-option ' + (value === 'delete' ? 'a-danger' : ''),
+      attributes: `data-act="${act}" ${extra}`,
+    });
+  }
+  function openMenu(kind, trigger) {
+    if (menu?.kind === kind) {
+      closeMenu();
+      return;
+    }
+    const keys = actionKeys.filter((k) => k !== 'export'),
+      html = keys
+        .map((k) => (k === 'delete' ? '<hr>' : '') + option(t(k), 'bulk', k, actionIcons[k]))
+        .join(''),
+      el = popup(kind, trigger, html);
+    el.querySelector('button')?.focus({ preventScroll: true });
+  }
+  function openSelect(trigger) {
+    const name = trigger.dataset.name,
+      kind = 'select-' + name;
+    if (menu?.kind === kind) {
+      closeMenu();
+      return;
+    }
+    const html = selectOptions[name]
+        .map(([value, key]) =>
+          DonatePrototype.option({
+            label: t(key),
+            value,
+            selected: state[name] === value,
+            role: 'option',
+            classes: 'a-option',
+            attributes: `data-act="choose-select" data-name="${name}"`,
+          }),
+        )
+        .join(''),
+      el = popup(kind, trigger, html, 'listbox', Math.max(180, trigger.offsetWidth));
+    el.querySelector('[aria-selected=true]')?.focus({ preventScroll: true });
+  }
 
-  function sortTable(table,key,dir){const active=document.activeElement,focusKey=active?.dataset.key;closeMenu(false,true);const s=sorts[table];s.dir=dir??(s.key===key?-s.dir:1);s.key=key;state.index=0;if(state.page==='overview')renderMain();else results();app.querySelector(`[data-act=sort][data-table="${table}"][data-key="${focusKey||key}"]`)?.focus({preventScroll:true});}
-  function inert(value){app.querySelectorAll('.d-top,.a-layout,.d-footer').forEach(e=>e.inert=value);}
-  function positionPanel(panel,drawer){const ar=app.getBoundingClientRect(),top=Math.max(0,-ar.top)+18;panel.style.marginTop=(drawer?top-18:Math.max(top-18,Math.min(74,window.innerHeight*.08)))+'px';const y=panel.getBoundingClientRect().top;panel.style.maxHeight=Math.max(220,window.innerHeight-y-18)+'px';}
-  function modal(title,body,footerHtml='',context={},drawer=false){closeMenu(false,true);const replacing=!!overlay;if(!replacing)focusReturn=document.activeElement;overlay?.remove();const el=document.createElement('div');el.className='a-overlay';el.innerHTML=DonatePrototype.dialogFrame({title,body,footer:footerHtml,panelClass:'a-panel '+(drawer?'a-drawer':'a-dialog'),headClass:'a-dialog-head',bodyClass:'a-dialog-body',footerClass:'a-dialog-footer',closeButton:btn(icon('x'),'dismiss','a-icon a-ghost',`aria-label="${t('close')}"`)});app.querySelector('.a-modal-host').append(el);overlay=el;modalContext=context;inert(true);positionPanel(el.firstElementChild,drawer);icons();if(!replacing)motion(el,[{backgroundColor:'transparent'},{backgroundColor:getComputedStyle(el).backgroundColor}],180);enter(el.firstElementChild,drawer?20:0,drawer?0:10);el.querySelector('[data-act=cancel-action],button')?.focus({preventScroll:true});}
-  function removeModal(){overlay?.remove();overlay=null;modalContext=null;pendingAction=null;inert(false);}
-  async function dismiss(force=false){if(menu){await closeMenu();return;}if(!overlay)return;if(!force&&pendingAction){cancelAction();return;}const old=overlay;overlay=null;modalContext=null;pendingAction=null;old.inert=true;old.style.opacity='0';await motion(old,[{opacity:1},{opacity:0}],140);old.remove();if(!overlay){inert(false);(focusReturn?.isConnected?focusReturn:app.querySelector('.a-side [aria-current=page]'))?.focus({preventScroll:true});}}
-  function identity(u,action=true){return `<div class="a-person">${DonatePrototype.avatar(u.avatar,'a-avatar')}<div>${action?btn(esc(u.name),'user','a-textlink',`data-id="${u.id}"`):esc(u.name)}<code class="a-uuid">${readableId(u.id)}</code></div></div>`;}
-  function copyButton(id){return btn(icon('copy'),'copy','a-icon a-ghost',`data-id="${id}" aria-label="${t('copy')}"`);}
-  function detailFacts(rows){return `<dl class="a-facts">${rows.filter(([,value])=>value!==null&&value!==undefined&&value!=='').map(([label,value])=>`<div class="a-fact"><dt>${t(label)}</dt><dd>${value}</dd></div>`).join('')}</dl>`;}
-  function orderDetailView(o){
-    const id=o.id,u=user(o.userId),loc=o.location;
-    const setting=(label,hidden,action)=>`<div class="a-setting-row"><span class="a-setting-label">${t(label)}<span class="a-visibility-state">${icon(hidden?'eye-off':'eye')}${t(hidden?'hidden':'visible')}</span></span>${btn(t(hidden?'restore':'hide'),'single','a-ghost',`data-value="${action}" data-id="${id}"`)}</div>`;
-    const sourceRows=[['ip',esc(o.ip)],['region',esc([...new Set([loc.country,loc.province,loc.city,loc.district,loc.street].filter(Boolean))].join(' · '))],['isp',loc.isp&&esc(loc.isp)],['asn',loc.asn&&esc(loc.asn)],['coordinates',loc.latitude!==undefined&&loc.longitude!==undefined?esc(`${loc.latitude}, ${loc.longitude}`):null],['accuracy',loc.accuracyKm!==undefined?esc(`${loc.accuracyKm} km`):null],['provider',state.lang==='en'?'Sample data':esc(o.provider)],['dataVersion',esc(o.locationVersion)]];
+  function sortTable(table, key, dir) {
+    const active = document.activeElement,
+      focusKey = active?.dataset.key;
+    closeMenu(false, true);
+    const s = sorts[table];
+    s.dir = dir ?? (s.key === key ? -s.dir : 1);
+    s.key = key;
+    state.index = 0;
+    if (state.page === 'overview') renderMain();
+    else results();
+    app
+      .querySelector(`[data-act=sort][data-table="${table}"][data-key="${focusKey || key}"]`)
+      ?.focus({ preventScroll: true });
+  }
+  function inert(value) {
+    app.querySelectorAll('.d-top,.a-layout,.d-footer').forEach((e) => (e.inert = value));
+  }
+  function positionPanel(panel, drawer) {
+    const ar = app.getBoundingClientRect(),
+      top = Math.max(0, -ar.top) + 18;
+    panel.style.marginTop =
+      (drawer ? top - 18 : Math.max(top - 18, Math.min(74, window.innerHeight * 0.08))) + 'px';
+    const y = panel.getBoundingClientRect().top;
+    panel.style.maxHeight = Math.max(220, window.innerHeight - y - 18) + 'px';
+  }
+  function modal(title, body, footerHtml = '', context = {}, drawer = false) {
+    closeMenu(false, true);
+    const replacing = !!overlay;
+    if (!replacing) focusReturn = document.activeElement;
+    overlay?.remove();
+    const el = document.createElement('div');
+    el.className = 'a-overlay';
+    el.innerHTML = DonatePrototype.dialogFrame({
+      title,
+      body,
+      footer: footerHtml,
+      panelClass: 'a-panel ' + (drawer ? 'a-drawer' : 'a-dialog'),
+      headClass: 'a-dialog-head',
+      bodyClass: 'a-dialog-body',
+      footerClass: 'a-dialog-footer',
+      closeButton: btn(icon('x'), 'dismiss', 'a-icon a-ghost', `aria-label="${t('close')}"`),
+    });
+    app.querySelector('.a-modal-host').append(el);
+    overlay = el;
+    modalContext = context;
+    inert(true);
+    positionPanel(el.firstElementChild, drawer);
+    icons();
+    if (!replacing)
+      motion(
+        el,
+        [{ backgroundColor: 'transparent' }, { backgroundColor: getComputedStyle(el).backgroundColor }],
+        180,
+      );
+    enter(el.firstElementChild, drawer ? 20 : 0, drawer ? 0 : 10);
+    el.querySelector('[data-act=cancel-action],button')?.focus({ preventScroll: true });
+  }
+  function removeModal() {
+    overlay?.remove();
+    overlay = null;
+    modalContext = null;
+    pendingAction = null;
+    inert(false);
+  }
+  async function dismiss(force = false) {
+    if (menu) {
+      await closeMenu();
+      return;
+    }
+    if (!overlay) return;
+    if (!force && pendingAction) {
+      cancelAction();
+      return;
+    }
+    const old = overlay;
+    overlay = null;
+    modalContext = null;
+    pendingAction = null;
+    old.inert = true;
+    old.style.opacity = '0';
+    await motion(old, [{ opacity: 1 }, { opacity: 0 }], 140);
+    old.remove();
+    if (!overlay) {
+      inert(false);
+      (focusReturn?.isConnected ? focusReturn : app.querySelector('.a-side [aria-current=page]'))?.focus({
+        preventScroll: true,
+      });
+    }
+  }
+  function identity(u, action = true) {
+    return `<div class="a-person">${DonatePrototype.avatar(u.avatar, 'a-avatar')}<div>${action ? btn(esc(u.name), 'user', 'a-textlink', `data-id="${u.id}"`) : esc(u.name)}<code class="a-uuid">${readableId(u.id)}</code></div></div>`;
+  }
+  function copyButton(id) {
+    return btn(icon('copy'), 'copy', 'a-icon a-ghost', `data-id="${id}" aria-label="${t('copy')}"`);
+  }
+  function detailFacts(rows) {
+    return `<dl class="a-facts">${rows
+      .filter(([, value]) => value !== null && value !== undefined && value !== '')
+      .map(([label, value]) => `<div class="a-fact"><dt>${t(label)}</dt><dd>${value}</dd></div>`)
+      .join('')}</dl>`;
+  }
+  function orderDetailView(o) {
+    const id = o.id,
+      u = user(o.userId),
+      loc = o.location;
+    const setting = (label, hidden, action) =>
+      `<div class="a-setting-row"><span class="a-setting-label">${t(label)}<span class="a-visibility-state">${icon(hidden ? 'eye-off' : 'eye')}${t(hidden ? 'hidden' : 'visible')}</span></span>${btn(t(hidden ? 'restore' : 'hide'), 'single', 'a-ghost', `data-value="${action}" data-id="${id}"`)}</div>`;
+    const sourceRows = [
+      ['ip', esc(o.ip)],
+      [
+        'region',
+        esc(
+          [...new Set([loc.country, loc.province, loc.city, loc.district, loc.street].filter(Boolean))].join(
+            ' · ',
+          ),
+        ),
+      ],
+      ['isp', loc.isp && esc(loc.isp)],
+      ['asn', loc.asn && esc(loc.asn)],
+      [
+        'coordinates',
+        loc.latitude !== undefined && loc.longitude !== undefined
+          ? esc(`${loc.latitude}, ${loc.longitude}`)
+          : null,
+      ],
+      ['accuracy', loc.accuracyKm !== undefined ? esc(`${loc.accuracyKm} km`) : null],
+      ['provider', state.lang === 'en' ? 'Sample data' : esc(o.provider)],
+      ['dataVersion', esc(o.locationVersion)],
+    ];
     return {
-      body:`<div data-component="admin-order-detail" data-order-id="${id}"><div class="a-detail-hero"><div class="a-detail-amount">${money(o.cents)}</div><div class="a-payment-summary"><span>${icon(o.channel==='alipay'?'wallet':'message-circle')}${t(o.channel)}</span>${status(o)}</div></div><div class="a-reference"><div class="a-reference-heading"><span>${t('orderId')}</span>${copyButton(o.id)}</div><code class="a-uuid">${readableId(o.id)}</code></div><section class="a-detail-section"><div class="a-section-heading"><h3>${t('user')}</h3></div>${identity(u)}${detailFacts([['created',`<time>${o.created}</time>`],['paidAt',o.paidAt?`<time>${o.paidAt}</time>`:null],['paymentReference',o.reference?`<span class="a-payment-reference">${esc(o.reference)}</span>`:null]])}</section><section class="a-detail-section"><div class="a-section-heading"><h3>${t('message')}</h3></div><p class="a-note ${o.message?'':'a-muted'}">${esc(o.message||t('noMessage'))}</p></section><section class="a-detail-section"><div class="a-section-heading"><h3>${t('range')}</h3></div>${setting('orderVisible',o.hiddenOrder,o.hiddenOrder?'showOrder':'hideOrder')}${setting('messageVisible',o.hiddenMessage,o.hiddenMessage?'showMessage':'hideMessage')}</section><section class="a-detail-section"><div class="a-section-heading"><h3>${t('source')}</h3></div>${detailFacts(sourceRows)}</section></div>`,
-      footer:`${btn(icon('trash-2')+t('delete'),'single','a-danger a-footer-delete',`data-value="delete" data-id="${id}"`)}<div class="a-footer-actions">${btn(icon('download')+t('export'),'single','',`data-value="export" data-id="${id}"`)}${o.status==='pending'?btn(t('closeOrder'),'single','a-primary',`data-value="closeOrder" data-id="${id}"`):''}</div>`
+      body: `<div data-component="admin-order-detail" data-order-id="${id}"><div class="a-detail-hero"><div class="a-detail-amount">${money(o.cents)}</div><div class="a-payment-summary"><span>${icon(o.channel === 'alipay' ? 'wallet' : 'message-circle')}${t(o.channel)}</span>${status(o)}</div></div><div class="a-reference"><div class="a-reference-heading"><span>${t('orderId')}</span>${copyButton(o.id)}</div><code class="a-uuid">${readableId(o.id)}</code></div><section class="a-detail-section"><div class="a-section-heading"><h3>${t('user')}</h3></div>${identity(u)}${detailFacts(
+        [
+          ['created', `<time>${o.created}</time>`],
+          ['paidAt', o.paidAt ? `<time>${o.paidAt}</time>` : null],
+          [
+            'paymentReference',
+            o.reference ? `<span class="a-payment-reference">${esc(o.reference)}</span>` : null,
+          ],
+        ],
+      )}</section><section class="a-detail-section"><div class="a-section-heading"><h3>${t('message')}</h3></div><p class="a-note ${o.message ? '' : 'a-muted'}">${esc(o.message || t('noMessage'))}</p></section><section class="a-detail-section"><div class="a-section-heading"><h3>${t('range')}</h3></div>${setting('orderVisible', o.hiddenOrder, o.hiddenOrder ? 'showOrder' : 'hideOrder')}${setting('messageVisible', o.hiddenMessage, o.hiddenMessage ? 'showMessage' : 'hideMessage')}</section><section class="a-detail-section"><div class="a-section-heading"><h3>${t('source')}</h3></div>${detailFacts(sourceRows)}</section></div>`,
+      footer: `${btn(icon('trash-2') + t('delete'), 'single', 'a-danger a-footer-delete', `data-value="delete" data-id="${id}"`)}<div class="a-footer-actions">${btn(icon('download') + t('export'), 'single', '', `data-value="export" data-id="${id}"`)}${o.status === 'pending' ? btn(t('closeOrder'), 'single', 'a-primary', `data-value="closeOrder" data-id="${id}"`) : ''}</div>`,
     };
   }
   // Both the order table and audit targets enter this same renderer and action controller.
-  function orderDetail(id){const o=orders.find(x=>x.id===id);if(!o){notify(t('notFound'),'error');return;}const view=orderDetailView(o);modal(t('orderDetail'),view.body,view.footer,{type:'order',id},true);}
-  function userDetail(id,back=null){
-    const u=user(id);if(!u){notify(t('notFound'),'error');return;}
-    const bindings=Object.fromEntries(u.bindings.map(([p])=>[p,true])),names=Object.fromEntries(u.bindings);
-    const body=`<div data-component="admin-user-detail">${DonatePrototype.personSummary({id:u.id,name:u.name,letter:u.avatar,action:copyButton(u.id)})}<section class="a-detail-section a-user-properties">${detailFacts([['status',`<span class="${u.banned?'a-danger':''}">${t(u.banned?'banned':'normal')}</span>`],['role',t(u.admin?'adminRole':'member')],['lastLogin',`<time>${u.login}</time>`]])}</section><section class="a-detail-section a-user-bindings"><div class="a-section-heading"><h3>${t('bindingsNote')}</h3></div>${DonatePrototype.bindingRows({bindings,names,lang:state.lang})}</section></div>`;
-    modal(t('userDetail'),body,`${back?btn(icon('arrow-left')+t('backOrder'),'back-order','a-ghost a-footer-back',`data-id="${back}"`):''}<div class="a-footer-actions">${btn(t('history'),'user-orders','',`data-id="${id}"`)}${btn(t(u.banned?'unban':'ban'),'ban-user',u.banned?'':'a-danger',`data-id="${id}" ${u.admin?`disabled aria-label="${t('selfBan')}"`:''}`)}</div>`,{type:'user',id,back},true);
+  function orderDetail(id) {
+    const o = orders.find((x) => x.id === id);
+    if (!o) {
+      notify(t('notFound'), 'error');
+      return;
+    }
+    const view = orderDetailView(o);
+    modal(t('orderDetail'), view.body, view.footer, { type: 'order', id }, true);
+  }
+  function userDetail(id, back = null) {
+    const u = user(id);
+    if (!u) {
+      notify(t('notFound'), 'error');
+      return;
+    }
+    const bindings = Object.fromEntries(u.bindings.map(([p]) => [p, true])),
+      names = Object.fromEntries(u.bindings);
+    const body = `<div data-component="admin-user-detail">${DonatePrototype.personSummary({ id: u.id, name: u.name, letter: u.avatar, action: copyButton(u.id) })}<section class="a-detail-section a-user-properties">${detailFacts(
+      [
+        ['status', `<span class="${u.banned ? 'a-danger' : ''}">${t(u.banned ? 'banned' : 'normal')}</span>`],
+        ['role', t(u.admin ? 'adminRole' : 'member')],
+        ['lastLogin', `<time>${u.login}</time>`],
+      ],
+    )}</section><section class="a-detail-section a-user-bindings"><div class="a-section-heading"><h3>${t('bindingsNote')}</h3></div>${DonatePrototype.bindingRows({ bindings, names, lang: state.lang })}</section></div>`;
+    modal(
+      t('userDetail'),
+      body,
+      `${back ? btn(icon('arrow-left') + t('backOrder'), 'back-order', 'a-ghost a-footer-back', `data-id="${back}"`) : ''}<div class="a-footer-actions">${btn(t('history'), 'user-orders', '', `data-id="${id}"`)}${btn(t(u.banned ? 'unban' : 'ban'), 'ban-user', u.banned ? '' : 'a-danger', `data-id="${id}" ${u.admin ? `disabled aria-label="${t('selfBan')}"` : ''}`)}</div>`,
+      { type: 'user', id, back },
+      true,
+    );
   }
 
-  function returnContext(context){if(context?.type==='order'&&orders.some(o=>o.id===context.id))orderDetail(context.id);else if(context?.type==='user')userDetail(context.id,context.back);else{removeModal();(focusReturn?.isConnected?focusReturn:app.querySelector('[data-act=batch],.a-side [aria-current=page]'))?.focus({preventScroll:true});}}
-  function confirmAction(action,ids){const valid=[...new Set(ids)].filter(id=>orders.some(o=>o.id===id));if(!valid.length){notify(t('noSelection'),'error');return;}const context=modalContext;pendingAction={action,ids:valid,context};const hint=action==='delete'?'deleteHint':action==='closeOrder'?'closeHint':action+'Hint',list=valid.map(id=>orders.find(o=>o.id===id)),eligible=list.filter(o=>action!=='closeOrder'||o.status==='pending');modal(t(action),`<p class="a-confirm-note">${t(hint)}</p><div class="a-confirm-scope"><span>${t('selectedScope')} <strong>${valid.length}</strong></span><span class="a-muted">${money(list.reduce((s,o)=>s+o.cents,0))}</span></div><ul class="a-result-list">${list.map(o=>`<li><div>${esc(user(o.userId).name)}<span class="a-sub">${o.created} · ${short(o.id)}</span></div><div class="a-result-value"><span class="a-amount">${money(o.cents)}</span><span class="a-sub">${action==='closeOrder'&&o.status!=='pending'?t(o.status)+(state.lang==='en'?', ':'，')+t('skipped'):t(o.status)}</span></div></li>`).join('')}</ul>`,`${btn(t('cancel'),'cancel-action')}${btn(t('confirm')+(action==='closeOrder'?` · ${eligible.length}`:''),'confirm',action==='delete'?'a-destructive':'a-primary',eligible.length?'':'disabled')}`,{type:'confirm'});pendingAction={action,ids:valid,context};}
-  function cancelAction(){const previous=pendingAction?.context;pendingAction=null;returnContext(previous);}
-  function confirmBan(id){const u=user(id),context=modalContext;modal(t(u.banned?'unban':'ban'),`<p class="a-confirm-note">${t(u.banned?'unbanHint':'banHint')}</p>${DonatePrototype.personSummary({id:u.id,name:u.name,letter:u.avatar})}`,`${btn(t('cancel'),'cancel-action')}${btn(t('confirm'),'confirm-ban',u.banned?'a-primary':'a-destructive',`data-id="${id}"`)}`,{type:'confirm'});pendingAction={userId:id,context};}
-  function exportCsv(ids){const records=orders.filter(o=>ids.includes(o.id)),cell=v=>{const value=String(v??'');return '"'+(/^[=+\-@\t\r]/.test(value)?"'":'')+value.replace(/"/g,'""')+'"';},csv=[['id','user_id','created_at','amount_cents','status','channel','order_hidden','message_hidden','message'],...records.map(o=>[o.id,o.userId,o.created,o.cents,o.status,o.channel,o.hiddenOrder,o.hiddenMessage,o.message])].map(row=>row.map(cell).join(',')).join('\r\n');const url=URL.createObjectURL(new Blob(['\ufeff'+csv],{type:'text/csv;charset=utf-8'})),a=document.createElement('a');a.href=url;a.download='donations-preview.csv';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);records.forEach(o=>addAudit('orders','export',o.id));}
-  function perform(action,ids,context){const result=[];if(action==='export')exportCsv(ids);for(const id of ids){const o=orders.find(x=>x.id===id);if(!o){result.push({id,result:'notFound'});continue;}let outcome='done';if(action==='closeOrder'){if(o.status!=='pending')outcome='skipped';else o.status='closed';}else if(action==='delete'){orders=orders.filter(x=>x.id!==id);state.selected.delete(id);}else if(['hideOrder','showOrder','hideMessage','showMessage'].includes(action)){const key=action.endsWith('Order')?'hiddenOrder':'hiddenMessage',value=action.startsWith('hide');if(o[key]===value)outcome='unchanged';else o[key]=value;}if(!['skipped','unchanged','notFound'].includes(outcome)&&action!=='export')addAudit('orders',action,id);result.push({id,result:outcome,status:o.status,name:user(o.userId).name,cents:o.cents});}pendingAction=null;removeModal();renderMain();if(ids.length===1&&context?.type==='order'&&action!=='delete'){orderDetail(ids[0]);notify(t(action)+' · '+t(result[0].result));return;}if(action==='export'){notify(`${t('exported')} ${ids.length} ${t('items')}`);returnContext(context);return;}const done=result.filter(r=>!['skipped','unchanged','notFound'].includes(r.result)).length;modal(t('result'),`<div class="a-count-summary">${icon('circle-check')}${t('processed')} ${done} / ${result.length}</div><ul class="a-result-list">${result.map(r=>`<li><div>${esc(r.name||short(r.id))}<span class="a-sub">${short(r.id)}</span></div><span class="a-result-value ${r.result==='notFound'?'a-danger':'a-muted'}">${r.result==='skipped'?t(r.status)+(state.lang==='en'?', ':'，')+t('skipped'):t(r.result)}</span></li>`).join('')}</ul>`,btn(t('complete'),'dismiss','a-primary'),{type:'results'});notify(`${t(action)} · ${done} / ${result.length}`);}
-  function toastPositions(){return new Map([...app.querySelectorAll('.a-toast')].map(e=>[e,e.getBoundingClientRect().top]));}
-  function toastLayout(before){for(const [e,y] of before)if(e.isConnected){const dy=y-e.getBoundingClientRect().top;if(Math.abs(dy)>1)motion(e,[{transform:`translate3d(0,${dy}px,0)`},{transform:'translate3d(0,0,0)'}]);}}
-  function positionToasts(){const host=app.querySelector('.a-toast-host');if(host)host.style.top=Math.max(118,-app.getBoundingClientRect().top+18)+'px';}
-  function armToast(item){item.started=performance.now();item.timer=setTimeout(()=>removeToast(item.id),item.remaining);}
-  function pauseToast(item){if(!item||!item.timer)return;clearTimeout(item.timer);item.timer=null;item.remaining-=performance.now()-item.started;}
-  function resumeToast(item){if(item&&!item.timer&&!item.el.matches(':hover')&&!item.el.contains(document.activeElement))armToast(item);}
-  async function removeToast(id){const item=toasts.get(id);if(!item)return;toasts.delete(id);clearTimeout(item.timer);item.el.inert=true;item.el.style.opacity='0';await motion(item.el,[{opacity:1,transform:'translate3d(0,0,0)'},{opacity:0,transform:'translate3d(12px,0,0)'}],160);const before=toastPositions();item.el.remove();toastLayout(before);}
-  function notify(message,type='success'){const before=toastPositions(),id=crypto.randomUUID(),el=document.createElement('div');el.className='a-toast'+(type==='error'?' a-error':'');el.dataset.toast=id;el.setAttribute('role',type==='error'?'alert':'status');el.innerHTML=icon(type==='error'?'circle-alert':'circle-check')+`<span class="a-toast-text">${esc(message)}</span>`+btn(icon('x'),'dismiss-toast','a-icon a-ghost',`data-id="${id}" aria-label="${t('dismissNotice')}"`);app.querySelector('.a-toast-host').append(el);const item={id,el,remaining:6500,timer:null};toasts.set(id,item);el.addEventListener('pointerenter',()=>pauseToast(item));el.addEventListener('pointerleave',()=>resumeToast(item));el.addEventListener('focusin',()=>pauseToast(item));el.addEventListener('focusout',()=>queueMicrotask(()=>resumeToast(item)));icons();positionToasts();toastLayout(before);enter(el,16,0);armToast(item);if(toasts.size>4)removeToast(toasts.keys().next().value);}
-  const pad=n=>String(n).padStart(2,'0'),dateString=d=>`${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
-  function parseDate(value){const m=/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/.exec(value);if(!m)return null;const [,y,mo,d,h,mi]=m.map(Number),date=new Date(y,mo-1,d,h,mi);return date.getFullYear()===y&&date.getMonth()===mo-1&&date.getDate()===d&&h<24&&mi<60?date:null;}
-  function calendarHtml(){const c=calendar,month=new Date(c.year,c.month,1),start=new Date(c.year,c.month,1-((month.getDay()+6)%7)),today=dateString(new Date()),weekdays=state.lang==='en'?['M','T','W','T','F','S','S']:['一','二','三','四','五','六','日'];let grid='';if(c.pickingMonth){grid=`<div class="a-month-grid">${Array.from({length:12},(_,m)=>btn(state.lang==='en'?new Date(2026,m).toLocaleString('en',{month:'short'}):(m+1)+'月','calendar-month','a-ghost',`data-month="${m}"`)).join('')}</div>`;}else grid=`<div class="a-calendar-grid" role="group" aria-label="${t('date')}">${weekdays.map(d=>`<span class="a-weekday">${d}</span>`).join('')}${Array.from({length:42},(_,n)=>{const d=new Date(start);d.setDate(d.getDate()+n);const value=dateString(d);return `<button type="button" class="a-day ${d.getMonth()===c.month?'':'a-outside'}" data-act="calendar-day" data-date="${value}" aria-label="${value}" aria-pressed="${value===c.day}" data-today="${value===today}">${d.getDate()}</button>`;}).join('')}</div>`;return `<div class="a-calendar-head">${btn(icon('chevron-left'),'calendar-prev','a-icon a-ghost',`aria-label="${t('previous')}"`)}${c.pickingMonth?`<input class="a-input a-year-input" inputmode="numeric" name="calendar-year" value="${c.year}" maxlength="4" aria-label="${t('year')}">`:btn(`${c.year} · ${pad(c.month+1)}`,'calendar-period','a-ghost',`aria-label="${t('chooseMonth')}"`)}${btn(icon('chevron-right'),'calendar-next','a-icon a-ghost',`aria-label="${t('next')}"`)}</div><div class="a-calendar-content">${grid}</div><div class="a-calendar-time">${icon('clock-3')}<span>${c.day}</span><label><span class="a-sr">${t('hour')}</span><input class="a-input" name="calendar-hour" inputmode="numeric" maxlength="2" value="${c.hour}" aria-label="${t('hour')}">:</label><label style="margin-left:0"><span class="a-sr">${t('minute')}</span><input class="a-input" name="calendar-minute" inputmode="numeric" maxlength="2" value="${c.minute}" aria-label="${t('minute')}"></label></div><div class="a-calendar-foot">${btn(t('clearDate'),'calendar-clear','a-ghost')}${btn(t('apply'),'calendar-apply','a-primary')}</div>`;}
-  function openCalendar(trigger){if(menu?.kind==='calendar'){closeMenu();return;}closeMenu(false,true);const name=trigger.dataset.name,d=parseDate(state[name])||new Date(2026,9,29,name==='from'?0:23,name==='from'?0:59);calendar={name,day:dateString(d),year:d.getFullYear(),month:d.getMonth(),hour:pad(d.getHours()),minute:pad(d.getMinutes()),pickingMonth:false};const current=calendar,el=popup('calendar',trigger,'','dialog',matchMedia('(pointer:coarse)').matches?328:304);calendar=current;el.classList.add('a-calendar');el.innerHTML=calendarHtml();icons();place(el,trigger,matchMedia('(pointer:coarse)').matches?328:304);el.querySelector('[aria-pressed=true]')?.focus({preventScroll:true});}
-  function renderCalendar(focusSelector,animate=false){if(!calendar||!menu)return;const el=menu.el;el.innerHTML=calendarHtml();icons();place(el,menu.trigger,matchMedia('(pointer:coarse)').matches?328:304);if(animate)enter(el.querySelector('.a-calendar-content'),3,0);el.querySelector(focusSelector||'[aria-pressed=true]')?.focus({preventScroll:true});}
-  function calendarShift(delta){if(calendar.pickingMonth){calendar.year=Math.max(1900,Math.min(2100,calendar.year+delta));}else{const d=new Date(calendar.year,calendar.month+delta,1);if(d.getFullYear()<1900||d.getFullYear()>2100)return;calendar.year=d.getFullYear();calendar.month=d.getMonth();}renderCalendar(`[data-act="${delta<0?'calendar-prev':'calendar-next'}"]`,true);}
-  function applyDate(value){const name=calendar.name,other=name==='from'?state.to:state.from;if(value&&!parseDate(value)){notify(t('dateInvalid'),'error');return;}if(value&&other&&(name==='from'?value>other:value<other)){notify(t('dateRule'),'error');return;}setFilter(name,value);}
-  app.addEventListener('click',async e=>{
-    if(e.target===overlay){dismiss();return;}
-    const b=e.target.closest('button');if(!b||b.disabled)return;const act=b.dataset.act;
-    if(act==='batch'){openMenu(act,b);return;}
-    switch(act){
-      case 'navigate':{if(state.page===b.dataset.page)return;state.page=b.dataset.page;state.selected.clear();render();enter(app.querySelector('.a-main'),0,8);app.querySelector(`.a-side [data-page="${state.page}"]`)?.focus({preventScroll:true});remember();break;}
-      case 'select':openSelect(b);break;
-      case 'choose-select':{const name=b.dataset.name,value=b.dataset.value;await closeMenu();setFilter(name,value);app.querySelector(`[data-act=select][data-name="${name}"]`)?.focus({preventScroll:true});break;}
-      case 'sort':sortTable(b.dataset.table,b.dataset.key);break;
-      case 'filters':{
-        state.advanced=!state.advanced;b.setAttribute('aria-expanded',state.advanced);
-        const wrap=app.querySelector('.a-filter-wrap'),from=wrap.hidden?0:wrap.getBoundingClientRect().height;
-        filterAnimation?.cancel();wrap.hidden=false;
-        if(reduced()){wrap.hidden=!state.advanced;break;}
-        const animation=wrap.animate([{height:from+'px'},{height:(state.advanced?wrap.scrollHeight:0)+'px'}],{duration:260,easing:'cubic-bezier(.2,.75,.25,1)'});
-        filterAnimation=animation;animation.finished.then(()=>{if(filterAnimation!==animation)return;wrap.hidden=!state.advanced;filterAnimation=null;}).catch(()=>{});break;
+  function returnContext(context) {
+    if (context?.type === 'order' && orders.some((o) => o.id === context.id)) orderDetail(context.id);
+    else if (context?.type === 'user') userDetail(context.id, context.back);
+    else {
+      removeModal();
+      (focusReturn?.isConnected
+        ? focusReturn
+        : app.querySelector('[data-act=batch],.a-side [aria-current=page]')
+      )?.focus({ preventScroll: true });
+    }
+  }
+  function confirmAction(action, ids) {
+    const valid = [...new Set(ids)].filter((id) => orders.some((o) => o.id === id));
+    if (!valid.length) {
+      notify(t('noSelection'), 'error');
+      return;
+    }
+    const context = modalContext;
+    pendingAction = { action, ids: valid, context };
+    const hint = action === 'delete' ? 'deleteHint' : action === 'closeOrder' ? 'closeHint' : action + 'Hint',
+      list = valid.map((id) => orders.find((o) => o.id === id)),
+      eligible = list.filter((o) => action !== 'closeOrder' || o.status === 'pending');
+    modal(
+      t(action),
+      `<p class="a-confirm-note">${t(hint)}</p><div class="a-confirm-scope"><span>${t('selectedScope')} <strong>${valid.length}</strong></span><span class="a-muted">${money(list.reduce((s, o) => s + o.cents, 0))}</span></div><ul class="a-result-list">${list.map((o) => `<li><div>${esc(user(o.userId).name)}<span class="a-sub">${o.created} · ${short(o.id)}</span></div><div class="a-result-value"><span class="a-amount">${money(o.cents)}</span><span class="a-sub">${action === 'closeOrder' && o.status !== 'pending' ? t(o.status) + (state.lang === 'en' ? ', ' : '，') + t('skipped') : t(o.status)}</span></div></li>`).join('')}</ul>`,
+      `${btn(t('cancel'), 'cancel-action')}${btn(t('confirm') + (action === 'closeOrder' ? ` · ${eligible.length}` : ''), 'confirm', action === 'delete' ? 'a-destructive' : 'a-primary', eligible.length ? '' : 'disabled')}`,
+      { type: 'confirm' },
+    );
+    pendingAction = { action, ids: valid, context };
+  }
+  function cancelAction() {
+    const previous = pendingAction?.context;
+    pendingAction = null;
+    returnContext(previous);
+  }
+  function confirmBan(id) {
+    const u = user(id),
+      context = modalContext;
+    modal(
+      t(u.banned ? 'unban' : 'ban'),
+      `<p class="a-confirm-note">${t(u.banned ? 'unbanHint' : 'banHint')}</p>${DonatePrototype.personSummary({ id: u.id, name: u.name, letter: u.avatar })}`,
+      `${btn(t('cancel'), 'cancel-action')}${btn(t('confirm'), 'confirm-ban', u.banned ? 'a-primary' : 'a-destructive', `data-id="${id}"`)}`,
+      { type: 'confirm' },
+    );
+    pendingAction = { userId: id, context };
+  }
+  function exportCsv(ids) {
+    const records = orders.filter((o) => ids.includes(o.id)),
+      cell = (v) => {
+        const value = String(v ?? '');
+        return '"' + (/^[=+\-@\t\r]/.test(value) ? "'" : '') + value.replace(/"/g, '""') + '"';
+      },
+      csv = [
+        [
+          'id',
+          'user_id',
+          'created_at',
+          'amount_cents',
+          'status',
+          'channel',
+          'order_hidden',
+          'message_hidden',
+          'message',
+        ],
+        ...records.map((o) => [
+          o.id,
+          o.userId,
+          o.created,
+          o.cents,
+          o.status,
+          o.channel,
+          o.hiddenOrder,
+          o.hiddenMessage,
+          o.message,
+        ]),
+      ]
+        .map((row) => row.map(cell).join(','))
+        .join('\r\n');
+    const url = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' })),
+      a = document.createElement('a');
+    a.href = url;
+    a.download = 'donations-preview.csv';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    records.forEach((o) => addAudit('orders', 'export', o.id));
+  }
+  function perform(action, ids, context) {
+    const result = [];
+    if (action === 'export') exportCsv(ids);
+    for (const id of ids) {
+      const o = orders.find((x) => x.id === id);
+      if (!o) {
+        result.push({ id, result: 'notFound' });
+        continue;
       }
-      case 'reset':Object.assign(state,{q:'',status:'all',channel:'all',visibility:'all',from:'',to:'',minimum:'',maximum:'',index:0});state.selected.clear();renderMain();break;
-      case 'clear':state.selected.clear();syncBatch();break;
-      case 'previous':case 'next':state.index+=act==='next'?1:-1;state.selected.clear();results();break;
-      case 'order':orderDetail(b.dataset.id);break;
-      case 'user':userDetail(b.dataset.id,modalContext?.type==='order'?modalContext.id:null);break;
-      case 'back-order':orderDetail(b.dataset.id);break;
-      case 'dismiss':dismiss();break;
-      case 'cancel-action':cancelAction();break;
-      case 'request-export':confirmAction('export',[...state.selected]);break;
-      case 'bulk':case 'single':{const ids=act==='single'?[b.dataset.id]:[...state.selected];closeMenu(false,true);confirmAction(b.dataset.value,ids);break;}
-      case 'confirm':{const pending=pendingAction;if(!pending?.action)return;b.disabled=true;perform(pending.action,pending.ids,pending.context);break;}
-      case 'user-orders':{const id=b.dataset.id;removeModal();state.page='orders';Object.assign(state,{q:id,status:'all',channel:'all',visibility:'all',from:'',to:'',minimum:'',maximum:'',index:0});state.selected.clear();render();remember();break;}
-      case 'ban-user':confirmBan(b.dataset.id);break;
-      case 'confirm-ban':{const u=user(b.dataset.id),back=pendingAction?.context?.back;if(u.admin)return;u.banned=!u.banned;pendingAction=null;addAudit('users',u.banned?'ban':'unban',u.id);removeModal();renderMain();userDetail(u.id,back);notify(t(u.banned?'ban':'unban')+' · '+u.name);break;}
-      case 'copy':try{await navigator.clipboard.writeText(b.dataset.id);notify(t('copied'));}catch{notify(t('copyFailed'),'error');}break;
-      case 'dismiss-toast':removeToast(b.dataset.id);break;
-      case 'date':openCalendar(b);break;
-      case 'calendar-prev':calendarShift(-1);break;
-      case 'calendar-next':calendarShift(1);break;
-      case 'calendar-period':calendar.pickingMonth=true;renderCalendar('[name=calendar-year]');break;
-      case 'calendar-month':calendar.month=Number(b.dataset.month);calendar.pickingMonth=false;renderCalendar('[data-act=calendar-period]',true);break;
-      case 'calendar-day':{const d=new Date(b.dataset.date+'T12:00:00');calendar.day=b.dataset.date;calendar.year=d.getFullYear();calendar.month=d.getMonth();renderCalendar(`[data-date="${calendar.day}"]`);break;}
-      case 'calendar-clear':applyDate('');break;
-      case 'calendar-apply':applyDate(`${calendar.day} ${calendar.hour}:${calendar.minute}`);break;
+      let outcome = 'done';
+      if (action === 'closeOrder') {
+        if (o.status !== 'pending') outcome = 'skipped';
+        else o.status = 'closed';
+      } else if (action === 'delete') {
+        orders = orders.filter((x) => x.id !== id);
+        state.selected.delete(id);
+      } else if (['hideOrder', 'showOrder', 'hideMessage', 'showMessage'].includes(action)) {
+        const key = action.endsWith('Order') ? 'hiddenOrder' : 'hiddenMessage',
+          value = action.startsWith('hide');
+        if (o[key] === value) outcome = 'unchanged';
+        else o[key] = value;
+      }
+      if (!['skipped', 'unchanged', 'notFound'].includes(outcome) && action !== 'export')
+        addAudit('orders', action, id);
+      result.push({ id, result: outcome, status: o.status, name: user(o.userId).name, cents: o.cents });
+    }
+    pendingAction = null;
+    removeModal();
+    renderMain();
+    if (ids.length === 1 && context?.type === 'order' && action !== 'delete') {
+      orderDetail(ids[0]);
+      notify(t(action) + ' · ' + t(result[0].result));
+      return;
+    }
+    if (action === 'export') {
+      notify(`${t('exported')} ${ids.length} ${t('items')}`);
+      returnContext(context);
+      return;
+    }
+    const done = result.filter((r) => !['skipped', 'unchanged', 'notFound'].includes(r.result)).length;
+    modal(
+      t('result'),
+      `<div class="a-count-summary">${icon('circle-check')}${t('processed')} ${done} / ${result.length}</div><ul class="a-result-list">${result.map((r) => `<li><div>${esc(r.name || short(r.id))}<span class="a-sub">${short(r.id)}</span></div><span class="a-result-value ${r.result === 'notFound' ? 'a-danger' : 'a-muted'}">${r.result === 'skipped' ? t(r.status) + (state.lang === 'en' ? ', ' : '，') + t('skipped') : t(r.result)}</span></li>`).join('')}</ul>`,
+      btn(t('complete'), 'dismiss', 'a-primary'),
+      { type: 'results' },
+    );
+    notify(`${t(action)} · ${done} / ${result.length}`);
+  }
+  function toastPositions() {
+    return new Map([...app.querySelectorAll('.a-toast')].map((e) => [e, e.getBoundingClientRect().top]));
+  }
+  function toastLayout(before) {
+    for (const [e, y] of before)
+      if (e.isConnected) {
+        const dy = y - e.getBoundingClientRect().top;
+        if (Math.abs(dy) > 1)
+          motion(e, [{ transform: `translate3d(0,${dy}px,0)` }, { transform: 'translate3d(0,0,0)' }]);
+      }
+  }
+  function positionToasts() {
+    const host = app.querySelector('.a-toast-host');
+    if (host) host.style.top = Math.max(118, -app.getBoundingClientRect().top + 18) + 'px';
+  }
+  function armToast(item) {
+    item.started = performance.now();
+    item.timer = setTimeout(() => removeToast(item.id), item.remaining);
+  }
+  function pauseToast(item) {
+    if (!item || !item.timer) return;
+    clearTimeout(item.timer);
+    item.timer = null;
+    item.remaining -= performance.now() - item.started;
+  }
+  function resumeToast(item) {
+    if (item && !item.timer && !item.el.matches(':hover') && !item.el.contains(document.activeElement))
+      armToast(item);
+  }
+  async function removeToast(id) {
+    const item = toasts.get(id);
+    if (!item) return;
+    toasts.delete(id);
+    clearTimeout(item.timer);
+    item.el.inert = true;
+    item.el.style.opacity = '0';
+    await motion(
+      item.el,
+      [
+        { opacity: 1, transform: 'translate3d(0,0,0)' },
+        { opacity: 0, transform: 'translate3d(12px,0,0)' },
+      ],
+      160,
+    );
+    const before = toastPositions();
+    item.el.remove();
+    toastLayout(before);
+  }
+  function notify(message, type = 'success') {
+    const before = toastPositions(),
+      id = crypto.randomUUID(),
+      el = document.createElement('div');
+    el.className = 'a-toast' + (type === 'error' ? ' a-error' : '');
+    el.dataset.toast = id;
+    el.setAttribute('role', type === 'error' ? 'alert' : 'status');
+    el.innerHTML =
+      icon(type === 'error' ? 'circle-alert' : 'circle-check') +
+      `<span class="a-toast-text">${esc(message)}</span>` +
+      btn(icon('x'), 'dismiss-toast', 'a-icon a-ghost', `data-id="${id}" aria-label="${t('dismissNotice')}"`);
+    app.querySelector('.a-toast-host').append(el);
+    const item = { id, el, remaining: 6500, timer: null };
+    toasts.set(id, item);
+    el.addEventListener('pointerenter', () => pauseToast(item));
+    el.addEventListener('pointerleave', () => resumeToast(item));
+    el.addEventListener('focusin', () => pauseToast(item));
+    el.addEventListener('focusout', () => queueMicrotask(() => resumeToast(item)));
+    icons();
+    positionToasts();
+    toastLayout(before);
+    enter(el, 16, 0);
+    armToast(item);
+    if (toasts.size > 4) removeToast(toasts.keys().next().value);
+  }
+  const pad = (n) => String(n).padStart(2, '0'),
+    dateString = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  function parseDate(value) {
+    const m = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2})$/.exec(value);
+    if (!m) return null;
+    const [, y, mo, d, h, mi] = m.map(Number),
+      date = new Date(y, mo - 1, d, h, mi);
+    return date.getFullYear() === y && date.getMonth() === mo - 1 && date.getDate() === d && h < 24 && mi < 60
+      ? date
+      : null;
+  }
+  function calendarHtml() {
+    const c = calendar,
+      month = new Date(c.year, c.month, 1),
+      start = new Date(c.year, c.month, 1 - ((month.getDay() + 6) % 7)),
+      today = dateString(new Date()),
+      weekdays =
+        state.lang === 'en'
+          ? ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+          : ['一', '二', '三', '四', '五', '六', '日'];
+    let grid = '';
+    if (c.pickingMonth) {
+      grid = `<div class="a-month-grid">${Array.from({ length: 12 }, (_, m) => btn(state.lang === 'en' ? new Date(2026, m).toLocaleString('en', { month: 'short' }) : m + 1 + '月', 'calendar-month', 'a-ghost', `data-month="${m}"`)).join('')}</div>`;
+    } else
+      grid = `<div class="a-calendar-grid" role="group" aria-label="${t('date')}">${weekdays.map((d) => `<span class="a-weekday">${d}</span>`).join('')}${Array.from(
+        { length: 42 },
+        (_, n) => {
+          const d = new Date(start);
+          d.setDate(d.getDate() + n);
+          const value = dateString(d);
+          return `<button type="button" class="a-day ${d.getMonth() === c.month ? '' : 'a-outside'}" data-act="calendar-day" data-date="${value}" aria-label="${value}" aria-pressed="${value === c.day}" data-today="${value === today}">${d.getDate()}</button>`;
+        },
+      ).join('')}</div>`;
+    return `<div class="a-calendar-head">${btn(icon('chevron-left'), 'calendar-prev', 'a-icon a-ghost', `aria-label="${t('previous')}"`)}${c.pickingMonth ? `<input class="a-input a-year-input" inputmode="numeric" name="calendar-year" value="${c.year}" maxlength="4" aria-label="${t('year')}">` : btn(`${c.year} · ${pad(c.month + 1)}`, 'calendar-period', 'a-ghost', `aria-label="${t('chooseMonth')}"`)}${btn(icon('chevron-right'), 'calendar-next', 'a-icon a-ghost', `aria-label="${t('next')}"`)}</div><div class="a-calendar-content">${grid}</div><div class="a-calendar-time">${icon('clock-3')}<span>${c.day}</span><label><span class="a-sr">${t('hour')}</span><input class="a-input" name="calendar-hour" inputmode="numeric" maxlength="2" value="${c.hour}" aria-label="${t('hour')}">:</label><label style="margin-left:0"><span class="a-sr">${t('minute')}</span><input class="a-input" name="calendar-minute" inputmode="numeric" maxlength="2" value="${c.minute}" aria-label="${t('minute')}"></label></div><div class="a-calendar-foot">${btn(t('clearDate'), 'calendar-clear', 'a-ghost')}${btn(t('apply'), 'calendar-apply', 'a-primary')}</div>`;
+  }
+  function openCalendar(trigger) {
+    if (menu?.kind === 'calendar') {
+      closeMenu();
+      return;
+    }
+    closeMenu(false, true);
+    const name = trigger.dataset.name,
+      d = parseDate(state[name]) || new Date(2026, 9, 29, name === 'from' ? 0 : 23, name === 'from' ? 0 : 59);
+    calendar = {
+      name,
+      day: dateString(d),
+      year: d.getFullYear(),
+      month: d.getMonth(),
+      hour: pad(d.getHours()),
+      minute: pad(d.getMinutes()),
+      pickingMonth: false,
+    };
+    const current = calendar,
+      el = popup('calendar', trigger, '', 'dialog', matchMedia('(pointer:coarse)').matches ? 328 : 304);
+    calendar = current;
+    el.classList.add('a-calendar');
+    el.innerHTML = calendarHtml();
+    icons();
+    place(el, trigger, matchMedia('(pointer:coarse)').matches ? 328 : 304);
+    el.querySelector('[aria-pressed=true]')?.focus({ preventScroll: true });
+  }
+  function renderCalendar(focusSelector, animate = false) {
+    if (!calendar || !menu) return;
+    const el = menu.el;
+    el.innerHTML = calendarHtml();
+    icons();
+    place(el, menu.trigger, matchMedia('(pointer:coarse)').matches ? 328 : 304);
+    if (animate) enter(el.querySelector('.a-calendar-content'), 3, 0);
+    el.querySelector(focusSelector || '[aria-pressed=true]')?.focus({ preventScroll: true });
+  }
+  function calendarShift(delta) {
+    if (calendar.pickingMonth) {
+      calendar.year = Math.max(1900, Math.min(2100, calendar.year + delta));
+    } else {
+      const d = new Date(calendar.year, calendar.month + delta, 1);
+      if (d.getFullYear() < 1900 || d.getFullYear() > 2100) return;
+      calendar.year = d.getFullYear();
+      calendar.month = d.getMonth();
+    }
+    renderCalendar(`[data-act="${delta < 0 ? 'calendar-prev' : 'calendar-next'}"]`, true);
+  }
+  function applyDate(value) {
+    const name = calendar.name,
+      other = name === 'from' ? state.to : state.from;
+    if (value && !parseDate(value)) {
+      notify(t('dateInvalid'), 'error');
+      return;
+    }
+    if (value && other && (name === 'from' ? value > other : value < other)) {
+      notify(t('dateRule'), 'error');
+      return;
+    }
+    setFilter(name, value);
+  }
+  app.addEventListener('click', async (e) => {
+    if (e.target === overlay) {
+      dismiss();
+      return;
+    }
+    const b = e.target.closest('button');
+    if (!b || b.disabled) return;
+    const act = b.dataset.act;
+    if (act === 'batch') {
+      openMenu(act, b);
+      return;
+    }
+    switch (act) {
+      case 'navigate': {
+        if (state.page === b.dataset.page) return;
+        state.page = b.dataset.page;
+        state.selected.clear();
+        render();
+        enter(app.querySelector('.a-main'), 0, 8);
+        app.querySelector(`.a-side [data-page="${state.page}"]`)?.focus({ preventScroll: true });
+        remember();
+        break;
+      }
+      case 'select':
+        openSelect(b);
+        break;
+      case 'choose-select': {
+        const name = b.dataset.name,
+          value = b.dataset.value;
+        await closeMenu();
+        setFilter(name, value);
+        app.querySelector(`[data-act=select][data-name="${name}"]`)?.focus({ preventScroll: true });
+        break;
+      }
+      case 'sort':
+        sortTable(b.dataset.table, b.dataset.key);
+        break;
+      case 'filters': {
+        state.advanced = !state.advanced;
+        b.setAttribute('aria-expanded', state.advanced);
+        const wrap = app.querySelector('.a-filter-wrap'),
+          from = wrap.hidden ? 0 : wrap.getBoundingClientRect().height;
+        filterAnimation?.cancel();
+        wrap.hidden = false;
+        if (reduced()) {
+          wrap.hidden = !state.advanced;
+          break;
+        }
+        const animation = wrap.animate(
+          [{ height: from + 'px' }, { height: (state.advanced ? wrap.scrollHeight : 0) + 'px' }],
+          { duration: 260, easing: 'cubic-bezier(.2,.75,.25,1)' },
+        );
+        filterAnimation = animation;
+        animation.finished
+          .then(() => {
+            if (filterAnimation !== animation) return;
+            wrap.hidden = !state.advanced;
+            filterAnimation = null;
+          })
+          .catch(() => {});
+        break;
+      }
+      case 'reset':
+        Object.assign(state, {
+          q: '',
+          status: 'all',
+          channel: 'all',
+          visibility: 'all',
+          from: '',
+          to: '',
+          minimum: '',
+          maximum: '',
+          index: 0,
+        });
+        state.selected.clear();
+        renderMain();
+        break;
+      case 'clear':
+        state.selected.clear();
+        syncBatch();
+        break;
+      case 'previous':
+      case 'next':
+        state.index += act === 'next' ? 1 : -1;
+        state.selected.clear();
+        results();
+        break;
+      case 'order':
+        orderDetail(b.dataset.id);
+        break;
+      case 'user':
+        userDetail(b.dataset.id, modalContext?.type === 'order' ? modalContext.id : null);
+        break;
+      case 'back-order':
+        orderDetail(b.dataset.id);
+        break;
+      case 'dismiss':
+        dismiss();
+        break;
+      case 'cancel-action':
+        cancelAction();
+        break;
+      case 'request-export':
+        confirmAction('export', [...state.selected]);
+        break;
+      case 'bulk':
+      case 'single': {
+        const ids = act === 'single' ? [b.dataset.id] : [...state.selected];
+        closeMenu(false, true);
+        confirmAction(b.dataset.value, ids);
+        break;
+      }
+      case 'confirm': {
+        const pending = pendingAction;
+        if (!pending?.action) return;
+        b.disabled = true;
+        perform(pending.action, pending.ids, pending.context);
+        break;
+      }
+      case 'user-orders': {
+        const id = b.dataset.id;
+        removeModal();
+        state.page = 'orders';
+        Object.assign(state, {
+          q: id,
+          status: 'all',
+          channel: 'all',
+          visibility: 'all',
+          from: '',
+          to: '',
+          minimum: '',
+          maximum: '',
+          index: 0,
+        });
+        state.selected.clear();
+        render();
+        remember();
+        break;
+      }
+      case 'ban-user':
+        confirmBan(b.dataset.id);
+        break;
+      case 'confirm-ban': {
+        const u = user(b.dataset.id),
+          back = pendingAction?.context?.back;
+        if (u.admin) return;
+        u.banned = !u.banned;
+        pendingAction = null;
+        addAudit('users', u.banned ? 'ban' : 'unban', u.id);
+        removeModal();
+        renderMain();
+        userDetail(u.id, back);
+        notify(t(u.banned ? 'ban' : 'unban') + ' · ' + u.name);
+        break;
+      }
+      case 'copy':
+        try {
+          await navigator.clipboard.writeText(b.dataset.id);
+          notify(t('copied'));
+        } catch {
+          notify(t('copyFailed'), 'error');
+        }
+        break;
+      case 'dismiss-toast':
+        removeToast(b.dataset.id);
+        break;
+      case 'date':
+        openCalendar(b);
+        break;
+      case 'calendar-prev':
+        calendarShift(-1);
+        break;
+      case 'calendar-next':
+        calendarShift(1);
+        break;
+      case 'calendar-period':
+        calendar.pickingMonth = true;
+        renderCalendar('[name=calendar-year]');
+        break;
+      case 'calendar-month':
+        calendar.month = Number(b.dataset.month);
+        calendar.pickingMonth = false;
+        renderCalendar('[data-act=calendar-period]', true);
+        break;
+      case 'calendar-day': {
+        const d = new Date(b.dataset.date + 'T12:00:00');
+        calendar.day = b.dataset.date;
+        calendar.year = d.getFullYear();
+        calendar.month = d.getMonth();
+        renderCalendar(`[data-date="${calendar.day}"]`);
+        break;
+      }
+      case 'calendar-clear':
+        applyDate('');
+        break;
+      case 'calendar-apply':
+        applyDate(`${calendar.day} ${calendar.hour}:${calendar.minute}`);
+        break;
     }
   });
-  app.addEventListener('input',e=>{
-    const el=e.target,name=el.name;
-    if(['q','userQ'].includes(name)){state[name]=el.value;state.index=0;state.selected.clear();results();}
-    if(['minimum','maximum'].includes(name)){const before=el.value,start=el.selectionStart,clean=before.replace(/[^0-9.]/g,'').replace(/(\..*)\./g,'$1');if(clean!==before){el.value=clean;el.setSelectionRange(Math.max(0,start-(before.length-clean.length)),Math.max(0,start-(before.length-clean.length)));}}
-    if(name?.startsWith('calendar-')){const value=el.value.replace(/\D/g,'').slice(0,name==='calendar-year'?4:2);el.value=value;if(name==='calendar-hour'&&Number(value)<=23)calendar.hour=pad(Number(value));if(name==='calendar-minute'&&Number(value)<=59)calendar.minute=pad(Number(value));}
+  app.addEventListener('input', (e) => {
+    const el = e.target,
+      name = el.name;
+    if (['q', 'userQ'].includes(name)) {
+      state[name] = el.value;
+      state.index = 0;
+      state.selected.clear();
+      results();
+    }
+    if (['minimum', 'maximum'].includes(name)) {
+      const before = el.value,
+        start = el.selectionStart,
+        clean = before.replace(/[^0-9.]/g, '').replace(/(\..*)\./g, '$1');
+      if (clean !== before) {
+        el.value = clean;
+        el.setSelectionRange(
+          Math.max(0, start - (before.length - clean.length)),
+          Math.max(0, start - (before.length - clean.length)),
+        );
+      }
+    }
+    if (name?.startsWith('calendar-')) {
+      const value = el.value.replace(/\D/g, '').slice(0, name === 'calendar-year' ? 4 : 2);
+      el.value = value;
+      if (name === 'calendar-hour' && Number(value) <= 23) calendar.hour = pad(Number(value));
+      if (name === 'calendar-minute' && Number(value) <= 59) calendar.minute = pad(Number(value));
+    }
   });
-  app.addEventListener('change',e=>{
-    const el=e.target,name=el.name;
-    if(el.dataset.select||name==='select-all'){if(name==='select-all')visibleOrders().forEach(o=>el.checked?state.selected.add(o.id):state.selected.delete(o.id));else el.checked?state.selected.add(el.dataset.select):state.selected.delete(el.dataset.select);syncBatch();return;}
-    if(['minimum','maximum'].includes(name)){const value=el.value,other=name==='minimum'?state.maximum:state.minimum,valid=value===''||/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.test(value)&&Number(value)<=100000;if(!valid||value&&other&&(name==='minimum'?Number(value)>Number(other):Number(value)<Number(other))){el.value=state[name];notify(t('amountRule'),'error');return;}state[name]=value;state.index=0;state.selected.clear();results();}
-    if(name==='calendar-year'){const y=Number(el.value);if(y<1900||y>2100||el.value.length!==4){el.value=calendar.year;notify(t('yearInvalid'),'error');}else{calendar.year=y;renderCalendar('[name=calendar-year]');}}
-    if(name==='calendar-hour'||name==='calendar-minute'){const max=name==='calendar-hour'?23:59;if(el.value===''||Number(el.value)>max){notify(t('invalidTime'),'error');}el.value=name==='calendar-hour'?calendar.hour:calendar.minute;}
+  app.addEventListener('change', (e) => {
+    const el = e.target,
+      name = el.name;
+    if (el.dataset.select || name === 'select-all') {
+      if (name === 'select-all')
+        visibleOrders().forEach((o) => (el.checked ? state.selected.add(o.id) : state.selected.delete(o.id)));
+      else el.checked ? state.selected.add(el.dataset.select) : state.selected.delete(el.dataset.select);
+      syncBatch();
+      return;
+    }
+    if (['minimum', 'maximum'].includes(name)) {
+      const value = el.value,
+        other = name === 'minimum' ? state.maximum : state.minimum,
+        valid = value === '' || (/^(?:0|[1-9]\d*)(?:\.\d{1,2})?$/.test(value) && Number(value) <= 100000);
+      if (
+        !valid ||
+        (value &&
+          other &&
+          (name === 'minimum' ? Number(value) > Number(other) : Number(value) < Number(other)))
+      ) {
+        el.value = state[name];
+        notify(t('amountRule'), 'error');
+        return;
+      }
+      state[name] = value;
+      state.index = 0;
+      state.selected.clear();
+      results();
+    }
+    if (name === 'calendar-year') {
+      const y = Number(el.value);
+      if (y < 1900 || y > 2100 || el.value.length !== 4) {
+        el.value = calendar.year;
+        notify(t('yearInvalid'), 'error');
+      } else {
+        calendar.year = y;
+        renderCalendar('[name=calendar-year]');
+      }
+    }
+    if (name === 'calendar-hour' || name === 'calendar-minute') {
+      const max = name === 'calendar-hour' ? 23 : 59;
+      if (el.value === '' || Number(el.value) > max) {
+        notify(t('invalidTime'), 'error');
+      }
+      el.value = name === 'calendar-hour' ? calendar.hour : calendar.minute;
+    }
   });
-  app.addEventListener('keydown',e=>{
-    if(e.key==='Escape'){e.preventDefault();menu?closeMenu():dismiss();return;}
-    if(calendar&&e.target.dataset.act==='calendar-day'&&['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','PageUp','PageDown'].includes(e.key)){e.preventDefault();const d=new Date(e.target.dataset.date+'T12:00:00'),day=(d.getDay()+6)%7;if(e.key==='PageUp'||e.key==='PageDown'){const day=d.getDate();d.setDate(1);d.setMonth(d.getMonth()+(e.key==='PageUp'?-1:1));d.setDate(Math.min(day,new Date(d.getFullYear(),d.getMonth()+1,0).getDate()));}else d.setDate(d.getDate()+({ArrowLeft:-1,ArrowRight:1,ArrowUp:-7,ArrowDown:7,Home:-day,End:6-day}[e.key]));if(d.getFullYear()<1900||d.getFullYear()>2100)return;calendar.year=d.getFullYear();calendar.month=d.getMonth();calendar.day=dateString(d);renderCalendar(`[data-date="${calendar.day}"]`);return;}
-    if(calendar&&e.key==='Enter'&&e.target.name?.startsWith('calendar-')){e.preventDefault();e.target.dispatchEvent(new Event('change',{bubbles:true}));if(calendar&&!calendar.pickingMonth)applyDate(`${calendar.day} ${calendar.hour}:${calendar.minute}`);return;}
-    if(menu&&menu.kind!=='calendar'&&['ArrowDown','ArrowUp','Home','End'].includes(e.key)){e.preventDefault();const items=[...menu.el.querySelectorAll('button')],i=items.indexOf(document.activeElement);items[e.key==='Home'?0:e.key==='End'?items.length-1:(i+(e.key==='ArrowDown'?1:-1)+items.length)%items.length]?.focus({preventScroll:true});return;}
-    if(menu&&menu.kind!=='calendar'&&e.key.length===1&&!e.ctrlKey&&!e.metaKey&&!e.altKey){const items=[...menu.el.querySelectorAll('button')],start=items.indexOf(document.activeElement)+1;[...items.slice(start),...items.slice(0,start)].find(el=>el.textContent.trim().toLowerCase().startsWith(e.key.toLowerCase()))?.focus({preventScroll:true});}
-    if(e.key==='Tab'&&menu&&menu.kind!=='calendar'){const trigger=menu.trigger;closeMenu(false,true);trigger?.focus({preventScroll:true});if(overlay){e.preventDefault();return;}}
-    if(e.key==='Tab'&&(overlay||calendar)){const container=calendar?menu.el:overlay,items=[...container.querySelectorAll('button,a[href],input')].filter(el=>!el.disabled&&!el.inert),first=items[0],last=items.at(-1);if(!container.contains(document.activeElement)){e.preventDefault();first?.focus();}else if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus();}}else if(e.key==='Tab'&&menu)closeMenu(false);
+  app.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      menu ? closeMenu() : dismiss();
+      return;
+    }
+    if (
+      calendar &&
+      e.target.dataset.act === 'calendar-day' &&
+      ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End', 'PageUp', 'PageDown'].includes(e.key)
+    ) {
+      e.preventDefault();
+      const d = new Date(e.target.dataset.date + 'T12:00:00'),
+        day = (d.getDay() + 6) % 7;
+      if (e.key === 'PageUp' || e.key === 'PageDown') {
+        const day = d.getDate();
+        d.setDate(1);
+        d.setMonth(d.getMonth() + (e.key === 'PageUp' ? -1 : 1));
+        d.setDate(Math.min(day, new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()));
+      } else
+        d.setDate(
+          d.getDate() +
+            { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7, Home: -day, End: 6 - day }[e.key],
+        );
+      if (d.getFullYear() < 1900 || d.getFullYear() > 2100) return;
+      calendar.year = d.getFullYear();
+      calendar.month = d.getMonth();
+      calendar.day = dateString(d);
+      renderCalendar(`[data-date="${calendar.day}"]`);
+      return;
+    }
+    if (calendar && e.key === 'Enter' && e.target.name?.startsWith('calendar-')) {
+      e.preventDefault();
+      e.target.dispatchEvent(new Event('change', { bubbles: true }));
+      if (calendar && !calendar.pickingMonth)
+        applyDate(`${calendar.day} ${calendar.hour}:${calendar.minute}`);
+      return;
+    }
+    if (menu && menu.kind !== 'calendar' && ['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
+      e.preventDefault();
+      const items = [...menu.el.querySelectorAll('button')],
+        i = items.indexOf(document.activeElement);
+      items[
+        e.key === 'Home'
+          ? 0
+          : e.key === 'End'
+            ? items.length - 1
+            : (i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length
+      ]?.focus({ preventScroll: true });
+      return;
+    }
+    if (menu && menu.kind !== 'calendar' && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const items = [...menu.el.querySelectorAll('button')],
+        start = items.indexOf(document.activeElement) + 1;
+      [...items.slice(start), ...items.slice(0, start)]
+        .find((el) => el.textContent.trim().toLowerCase().startsWith(e.key.toLowerCase()))
+        ?.focus({ preventScroll: true });
+    }
+    if (e.key === 'Tab' && menu && menu.kind !== 'calendar') {
+      const trigger = menu.trigger;
+      closeMenu(false, true);
+      trigger?.focus({ preventScroll: true });
+      if (overlay) {
+        e.preventDefault();
+        return;
+      }
+    }
+    if (e.key === 'Tab' && (overlay || calendar)) {
+      const container = calendar ? menu.el : overlay,
+        items = [...container.querySelectorAll('button,a[href],input')].filter(
+          (el) => !el.disabled && !el.inert,
+        ),
+        first = items[0],
+        last = items.at(-1);
+      if (!container.contains(document.activeElement)) {
+        e.preventDefault();
+        first?.focus();
+      } else if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last?.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first?.focus();
+      }
+    } else if (e.key === 'Tab' && menu) closeMenu(false);
   });
-  document.addEventListener('pointerdown',e=>{if(menu&&!menu.el.contains(e.target)&&!menu.trigger.contains(e.target))closeMenu(false);});
-  window.addEventListener('scroll',()=>{positionToasts();if(overlay)positionPanel(overlay.firstElementChild,modalContext?.type==='order'||modalContext?.type==='user');},{passive:true});
-  window.addEventListener('resize',()=>{positionToasts();if(menu)place(menu.el,menu.trigger,menu.el.offsetWidth);if(overlay)positionPanel(overlay.firstElementChild,modalContext?.type==='order'||modalContext?.type==='user');});
+  document.addEventListener('pointerdown', (e) => {
+    if (menu && !menu.el.contains(e.target) && !menu.trigger.contains(e.target)) closeMenu(false);
+  });
+  window.addEventListener(
+    'scroll',
+    () => {
+      positionToasts();
+      if (overlay)
+        positionPanel(
+          overlay.firstElementChild,
+          modalContext?.type === 'order' || modalContext?.type === 'user',
+        );
+    },
+    { passive: true },
+  );
+  window.addEventListener('resize', () => {
+    positionToasts();
+    if (menu) place(menu.el, menu.trigger, menu.el.offsetWidth);
+    if (overlay)
+      positionPanel(
+        overlay.firstElementChild,
+        modalContext?.type === 'order' || modalContext?.type === 'user',
+      );
+  });
   syncProfile();
   render(true);
-  DonatePrototype.demo.subscribe(next=>{currentIdentity=next.identity;preferences.appearance=next.appearance;state.lang=next.lang;Object.assign(adminProfile,next.profile);syncProfile();render();});
+  DonatePrototype.demo.subscribe((next) => {
+    currentIdentity = next.identity;
+    preferences.appearance = next.appearance;
+    state.lang = next.lang;
+    Object.assign(adminProfile, next.profile);
+    syncProfile();
+    render();
+  });
 })();

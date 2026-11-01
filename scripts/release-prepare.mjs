@@ -2,7 +2,8 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync } from 'node:fs';
 import { versionPattern } from './release-version.mjs';
 
-const git = (...args) => execFileSync('git', args, {encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe']}).trim();
+const git = (...args) =>
+  execFileSync('git', args, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
 const tag = process.env.RELEASE_TAG ?? '';
 const version = tag.slice(1);
 const branch = process.env.DEFAULT_BRANCH;
@@ -17,5 +18,6 @@ if (sha !== expected) throw new Error('Release tag does not point to the workflo
 git('merge-base', '--is-ancestor', sha, 'refs/remotes/origin/' + branch);
 const pkg = JSON.parse(git('show', sha + ':web/package.json'));
 const go = git('show', sha + ':cmd/donate/version.go');
-if (pkg.version !== version || !go.includes('var version = "' + version + '"')) throw new Error('Release tag and source versions do not match');
+if (pkg.version !== version || !go.includes('var version = "' + version + '"'))
+  throw new Error('Release tag and source versions do not match');
 appendFileSync(process.env.GITHUB_OUTPUT, 'sha=' + sha + '\nversion=' + version + '\ntag=' + tag + '\n');

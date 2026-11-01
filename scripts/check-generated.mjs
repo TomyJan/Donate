@@ -10,5 +10,6 @@ function snapshot() {
 }
 const before = JSON.stringify(snapshot());
 pnpm(['generate']);
-if (JSON.stringify(snapshot()) !== before) throw new Error('Generated contracts or queries drifted. Run pnpm generate and commit the results.');
+if (JSON.stringify(snapshot()) !== before)
+  throw new Error('Generated contracts or queries drifted. Run pnpm generate and commit the results.');
 console.log('Generated contracts and queries are current.');
