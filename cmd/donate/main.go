@@ -34,7 +34,7 @@ func main() {
 		os.Exit(1)
 	}
 }
-func run() error {
+func run() (runErr error) {
 	if len(os.Args) > 1 && os.Args[1] == "--version" {
 		fmt.Printf("Donate V%s commit=%s tag=%s built_at=%s\n", version, commit, tag, builtAt)
 		return nil
@@ -60,6 +60,18 @@ func run() error {
 		return e
 	}
 	defer closeLog()
+	runStarted := time.Now()
+	defer func() {
+		if runErr != nil {
+			var operation *storage.OperationError
+			if errors.As(runErr, &operation) {
+				logStorageFailure(log, runErr, "startup", c.DatabasePath(), runStarted)
+			} else {
+				reason := observability.ErrorReason(runErr)
+				log.Error(fmt.Sprintf("Donate %s 运行失败，原因 %s", c.AppName, reason), "app_name", c.AppName, "stage", "run", "reason", reason)
+			}
+		}
+	}()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	storageOptions := storage.Options{AppName: c.AppName, BackupDir: c.BackupDir, BackupRetentionDays: c.BackupRetentionDays}
@@ -70,7 +82,7 @@ func run() error {
 		if e = storage.RestoreWithOptions(ctx, os.Args[2], c.DatabasePath(), storageOptions); e != nil {
 			return e
 		}
-		log.Warn("数据库离线恢复完成，旧会话已撤销；请核实恢复点后的删除、封禁和支付变化")
+		log.Warn(fmt.Sprintf("数据库 %s 已从 %s 离线恢复，旧会话已撤销；请核实恢复点后的删除、封禁和支付变化", c.DatabasePath(), os.Args[2]), "database_path", c.DatabasePath(), "source", os.Args[2], "stage", "restore_complete")
 		return nil
 	}
 	db, e := storage.OpenWithOptions(ctx, c.DatabasePath(), storageOptions)
@@ -120,13 +132,13 @@ func run() error {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
+				started := time.Now()
 				if p, e := db.Backup(ctx, c.BackupDir); e != nil {
-					log.Error("每日数据库备份失败", "error", e)
+					logStorageFailure(log, e, "backup", c.DatabasePath(), started)
 				} else {
 					log.Info(fmt.Sprintf("每日数据库备份已保存至 %s", filepath.Base(p)), "backup", filepath.Base(p))
 				}
-				_, _ = db.DB.ExecContext(ctx, "DELETE FROM auth_flows WHERE expires_at<?", time.Now().Unix())
-				_, _ = db.DB.ExecContext(ctx, "DELETE FROM sessions WHERE expires_at<?", time.Now().Add(-24*time.Hour).Unix())
+				cleanupExpired(ctx, db, c.DatabasePath(), log, time.Now())
 			}
 		}
 	}()

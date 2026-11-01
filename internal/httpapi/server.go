@@ -12,6 +12,7 @@ import (
 	"github.com/TomyJan/Donate/internal/auth"
 	"github.com/TomyJan/Donate/internal/config"
 	"github.com/TomyJan/Donate/internal/jobs"
+	"github.com/TomyJan/Donate/internal/observability"
 	"github.com/TomyJan/Donate/internal/order"
 	"github.com/TomyJan/Donate/internal/payment"
 	"github.com/TomyJan/Donate/internal/storage"
@@ -22,6 +23,7 @@ import (
 	"net/http"
 	"net/netip"
 	"path"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -118,6 +120,7 @@ func (s *Server) respond(w http.ResponseWriter, r *http.Request, status int, cod
 }
 func (s *Server) ok(w http.ResponseWriter, r *http.Request, v any) { s.respond(w, r, 200, "OK", "", v) }
 func (s *Server) failure(w http.ResponseWriter, r *http.Request, e error) {
+	s.logAuthBoundary(r, e)
 	status, code, message := 200, "INTERNAL_ERROR", "请求未完成"
 	switch {
 	case errors.Is(e, auth.ErrUnauthorized):
@@ -150,7 +153,7 @@ func (s *Server) failure(w http.ResponseWriter, r *http.Request, e error) {
 		code, message = "LAST_IDENTITY_FORBIDDEN", e.Error()
 	default:
 		status = 500
-		s.Log.Error(fmt.Sprintf("请求 %s 无法完成，路由 %s", state(r).ID, chi.RouteContext(r.Context()).RoutePattern()), "request_id", state(r).ID, "error", e)
+		s.Log.ErrorContext(r.Context(), fmt.Sprintf("请求 %s 无法完成，路由 %s", state(r).ID, chi.RouteContext(r.Context()).RoutePattern()), "request_id", state(r).ID, "stage", "http_handler", "reason", observability.ErrorReason(e))
 	}
 	s.respond(w, r, status, code, message, nil)
 }
@@ -272,11 +275,18 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		st := &requestState{ID: storage.NewID().String(), Code: "OK", Status: 200}
-		r = r.WithContext(context.WithValue(r.Context(), stateKey{}, st))
+		r = r.WithContext(auth.WithRequestID(context.WithValue(r.Context(), stateKey{}, st), st.ID))
 		started := time.Now()
 		defer func() {
 			if v := recover(); v != nil {
-				s.Log.Error(fmt.Sprintf("请求 %s 发生未处理错误", st.ID), "request_id", st.ID)
+				pattern := chi.RouteContext(r.Context()).RoutePattern()
+				reason := "panic"
+				if err, ok := v.(error); ok {
+					reason = observability.ErrorReason(err)
+				}
+				// Panic strings/errors may contain credentials. The type and stack
+				// identify the failing code without serializing the panic value.
+				s.Log.ErrorContext(r.Context(), fmt.Sprintf("请求 %s %s %s 发生未处理异常，类型 %T，原因 %s", st.ID, r.Method, pattern, v, reason), "request_id", st.ID, "method", r.Method, "route", pattern, "stage", "http_panic", "panic_type", fmt.Sprintf("%T", v), "reason", reason, "duration_ms", time.Since(started).Milliseconds(), "stack", panicCallsites())
 				s.respond(w, r, 500, "INTERNAL_ERROR", "请求未完成", nil)
 			}
 			uid := ""
@@ -284,7 +294,9 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 				uid = st.Session.UserID
 			}
 			pattern := chi.RouteContext(r.Context()).RoutePattern()
-			s.Log.Info(fmt.Sprintf("请求 %s %s %s 完成，用户 %s，HTTP %d，业务 %s，耗时 %d 毫秒", st.ID, r.Method, pattern, uid, st.Status, st.Code, time.Since(started).Milliseconds()), "request_id", st.ID, "route", pattern, "user_id", uid, "status", st.Status, "code", st.Code, "duration_ms", time.Since(started).Milliseconds())
+			elapsed := time.Since(started)
+			level := completionLogLevel(r.Method, pattern, st.Code, st.Status, elapsed)
+			s.Log.Log(r.Context(), level, fmt.Sprintf("请求 %s %s %s 完成，用户 %s，HTTP %d，业务 %s，耗时 %d 毫秒", st.ID, r.Method, pattern, uid, st.Status, st.Code, elapsed.Milliseconds()), "request_id", st.ID, "route", pattern, "user_id", uid, "status", st.Status, "code", st.Code, "duration_ms", elapsed.Milliseconds())
 		}()
 		w.Header().Set("X-Request-ID", st.ID)
 		w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -314,6 +326,24 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 		next.ServeHTTP(w, r)
 	})
 }
+
+// Only code locations are logged: runtime/debug.Stack also serializes argument
+// slots, which may contain credentials even when the panic value is omitted.
+func panicCallsites() string {
+	var pcs [64]uintptr
+	n := runtime.Callers(2, pcs[:])
+	frames := runtime.CallersFrames(pcs[:n])
+	var stack strings.Builder
+	for {
+		frame, more := frames.Next()
+		fmt.Fprintf(&stack, "%s\n\t%s:%d\n", frame.Function, frame.File, frame.Line)
+		if !more {
+			break
+		}
+	}
+	return stack.String()
+}
+
 func (s *Server) clientIP(r *http.Request) string {
 	if s.Config.RealIPHeader != "" {
 		values := r.Header.Values(s.Config.RealIPHeader)

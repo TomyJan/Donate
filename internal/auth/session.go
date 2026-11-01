@@ -101,9 +101,16 @@ func SafeAvatar(raw string) string {
 }
 
 func (s *Service) LoginIdentity(ctx context.Context, p Identity) (Credentials, error) {
-	return s.loginIdentity(ctx, p, nil)
+	started := time.Now()
+	c, err := s.loginIdentity(ctx, p, nil)
+	if err != nil {
+		s.logAuthFailure(ctx, p.Provider, err, started)
+	}
+	return c, err
 }
-func (s *Service) loginIdentity(ctx context.Context, p Identity, flowID []byte) (Credentials, error) {
+func (s *Service) loginIdentity(ctx context.Context, p Identity, flowID []byte) (result Credentials, failure error) {
+	started := time.Now()
+	defer func() { failure = stageFailure(failure, "session_create") }()
 	var validation error
 	p, validation = s.normalizeIdentity(p)
 	if validation != nil {
@@ -176,7 +183,8 @@ func (s *Service) loginIdentity(ctx context.Context, p Identity, flowID []byte) 
 	}
 	session, err := s.Resolve(ctx, token)
 	if err == nil {
-		s.Log.Info(fmt.Sprintf("用户 %s 通过 %s 登录，创建会话 %s", session.UserID, p.Provider, session.ID), "user_id", session.UserID, "session_id", session.ID, "provider", p.Provider)
+		fields := append(s.avatarLogFields(session), "session_id", session.ID, "provider", p.Provider, "avatar_preserved", p.preserveAvatar && session.AvatarURL != "")
+		s.logAuth(ctx, slog.LevelInfo, p.Provider, "session_create", "completed", started, fields...)
 	}
 	return Credentials{token, session}, err
 }
@@ -199,10 +207,10 @@ func insertIdentity(ctx context.Context, tx *sql.Tx, iid, uid []byte, p Identity
 	return e
 }
 
-func (s *Service) Resolve(ctx context.Context, token string) (Session, error) {
-	var out Session
+func (s *Service) Resolve(ctx context.Context, token string) (out Session, failure error) {
+	defer func() { failure = stageFailure(failure, "session_resolve") }()
 	if len(token) != 43 {
-		return out, ErrUnauthorized
+		return out, authFailure(ErrUnauthorized, "session_resolve", "invalid_session_token")
 	}
 	var sid, uid, iid, family []byte
 	var expires int64
@@ -210,23 +218,26 @@ func (s *Service) Resolve(ctx context.Context, token string) (Session, error) {
 	var revoked sql.NullInt64
 	e := s.Store.DB.QueryRowContext(ctx, "SELECT s.id,s.user_id,s.identity_id,s.expires_at,s.revoked_at,u.status,i.nickname,i.avatar_url,i.provider,s.browser_family_id FROM sessions s JOIN users u ON u.id=s.user_id JOIN identities i ON i.id=s.identity_id WHERE s.token_hash=?", hash(token)).Scan(&sid, &uid, &iid, &expires, &revoked, &status, &out.Nickname, &out.AvatarURL, &out.Provider, &family)
 	if errors.Is(e, sql.ErrNoRows) {
-		return out, ErrUnauthorized
+		return out, authFailure(ErrUnauthorized, "session_resolve", "session_not_found")
 	}
 	if e != nil {
 		return out, e
 	}
 	if status != "active" {
-		return out, ErrBanned
+		return out, authFailure(ErrBanned, "session_resolve", "account_banned")
 	}
-	if revoked.Valid || expires <= s.Now().Unix() {
-		return out, ErrUnauthorized
+	if revoked.Valid {
+		return out, authFailure(ErrUnauthorized, "session_resolve", "session_revoked")
+	}
+	if expires <= s.Now().Unix() {
+		return out, authFailure(ErrUnauthorized, "session_resolve", "session_expired")
 	}
 	current, e := currentBrowserSession(ctx, s.Store.DB, family, sid)
 	if e != nil {
 		return out, e
 	}
 	if !current {
-		return out, ErrUnauthorized
+		return out, authFailure(ErrUnauthorized, "session_resolve", "session_superseded")
 	}
 	root, e := familyRoot(ctx, s.Store.DB, family)
 	if e != nil {
@@ -245,7 +256,9 @@ func (s *Service) Renew(ctx context.Context, token string) (Session, error) {
 }
 
 // RenewIfNeeded reports whether this call extended the session's expiry.
-func (s *Service) RenewIfNeeded(ctx context.Context, token string) (Session, bool, error) {
+func (s *Service) RenewIfNeeded(ctx context.Context, token string) (result Session, didRenew bool, failure error) {
+	started := time.Now()
+	defer func() { failure = stageFailure(failure, "session_renew") }()
 	session, e := s.Resolve(ctx, token)
 	if e != nil {
 		return Session{}, false, e
@@ -294,11 +307,14 @@ func (s *Service) RenewIfNeeded(ctx context.Context, token string) (Session, boo
 	}
 	session, e = s.Resolve(ctx, token)
 	if e == nil && renewed {
-		s.Log.Info(fmt.Sprintf("用户 %s 的会话 %s 已续期至 %s", session.UserID, session.ID, session.ExpiresAt.Format(time.RFC3339)), "user_id", session.UserID, "session_id", session.ID, "expires_at", session.ExpiresAt)
+		d, _ := ctx.Value(diagnosticContextKey{}).(diagnosticContext)
+		s.Log.InfoContext(ctx, fmt.Sprintf("请求 %s，用户 %s 的会话 %s 已续期至 %s", d.requestID, session.UserID, session.ID, session.ExpiresAt.Format(time.RFC3339)), "request_id", d.requestID, "stage", "session_renew", "user_id", session.UserID, "session_id", session.ID, "identity_id", session.IdentityID, "expires_at", session.ExpiresAt, "duration_ms", time.Since(started).Milliseconds())
 	}
 	return session, renewed, e
 }
-func (s *Service) Logout(ctx context.Context, token string) error {
+func (s *Service) Logout(ctx context.Context, token string) (failure error) {
+	started := time.Now()
+	defer func() { failure = stageFailure(failure, "session_logout") }()
 	session, e := s.Resolve(ctx, token)
 	if e != nil {
 		return e
@@ -308,12 +324,14 @@ func (s *Service) Logout(ctx context.Context, token string) error {
 		return e
 	})
 	if e == nil {
-		s.Log.Info(fmt.Sprintf("用户 %s 已退出，会话 %s 已撤销", session.UserID, session.ID), "user_id", session.UserID, "session_id", session.ID)
+		s.logAuth(ctx, slog.LevelInfo, session.Provider, "session_logout", "completed", started, "user_id", session.UserID, "session_id", session.ID, "identity_id", session.IdentityID)
 	}
 	return e
 }
-func (s *Service) Profile(ctx context.Context, session Session) (Profile, error) {
-	out := Profile{ID: session.UserID, Nickname: session.Nickname, AvatarURL: session.AvatarURL, Provider: session.Provider, Admin: session.Admin, CSRF: session.CSRF, ExpiresAt: session.ExpiresAt, Bindings: []Identity{}}
+func (s *Service) Profile(ctx context.Context, session Session) (out Profile, failure error) {
+	started := time.Now()
+	defer func() { failure = stageFailure(failure, "profile_read") }()
+	out = Profile{ID: session.UserID, Nickname: session.Nickname, AvatarURL: session.AvatarURL, Provider: session.Provider, Admin: session.Admin, CSRF: session.CSRF, ExpiresAt: session.ExpiresAt, Bindings: []Identity{}}
 	uid, _ := storage.ParseID(session.UserID)
 	rows, e := s.Store.DB.QueryContext(ctx, "SELECT id,provider,nickname,avatar_url,created_at FROM identities WHERE user_id=? ORDER BY provider", uid)
 	if e != nil {
@@ -331,12 +349,25 @@ func (s *Service) Profile(ctx context.Context, session Session) (Profile, error)
 		p.BoundAt = time.Unix(created, 0).UTC()
 		out.Bindings = append(out.Bindings, p)
 	}
-	return out, rows.Err()
+	if e = rows.Err(); e != nil {
+		return out, e
+	}
+	if s.Log.Enabled(ctx, slog.LevelDebug) {
+		s.logAuth(ctx, slog.LevelDebug, session.Provider, "profile", "read", started, s.avatarLogFields(session)...)
+	}
+	return out, nil
 }
 func (s *Service) BindIdentity(ctx context.Context, sessionID string, p Identity) error {
-	return s.bindIdentity(ctx, sessionID, p, nil)
+	started := time.Now()
+	err := s.bindIdentity(ctx, sessionID, p, nil)
+	if err != nil {
+		s.logAuthFailure(ctx, p.Provider, err, started)
+	}
+	return err
 }
-func (s *Service) bindIdentity(ctx context.Context, sessionID string, p Identity, flowID []byte) error {
+func (s *Service) bindIdentity(ctx context.Context, sessionID string, p Identity, flowID []byte) (failure error) {
+	started := time.Now()
+	defer func() { failure = stageFailure(failure, "identity_bind") }()
 	var validation error
 	p, validation = s.normalizeIdentity(p)
 	if validation != nil {
@@ -347,7 +378,7 @@ func (s *Service) bindIdentity(ctx context.Context, sessionID string, p Identity
 		return ErrUnauthorized
 	}
 	now := s.Now()
-	var uid []byte
+	var uid, identityID []byte
 	e = s.Store.Write(ctx, func(tx *sql.Tx) error {
 		var status string
 		var expires int64
@@ -380,13 +411,16 @@ func (s *Service) bindIdentity(ctx context.Context, sessionID string, p Identity
 			return lookupErr
 		}
 		id := storage.NewID()
+		identityID = id[:]
 		if e = insertIdentity(ctx, tx, id[:], uid, p, now); e != nil {
 			return e
 		}
 		return s.consumeFlowTx(ctx, tx, flowID, false)
 	})
 	if e == nil {
-		s.Log.Info(fmt.Sprintf("用户 %s 在会话 %s 绑定 %s 身份", storage.IDString(uid), sessionID, p.Provider), "user_id", storage.IDString(uid), "session_id", sessionID, "provider", p.Provider)
+		fields := s.avatarLogFields(Session{UserID: storage.IDString(uid), IdentityID: storage.IDString(identityID), Provider: p.Provider, AvatarURL: SafeAvatar(p.AvatarURL)})
+		fields = append(fields, "session_id", sessionID)
+		s.logAuth(ctx, slog.LevelInfo, p.Provider, "identity_bind", "completed", started, fields...)
 	}
 	return e
 }

@@ -41,11 +41,12 @@ func OpenWithOptions(ctx context.Context, path string, options Options) (*Store,
 	var err error
 	options, err = normalizeOptions(path, options)
 	if err != nil {
-		return nil, err
+		return nil, &OperationError{Operation: "open", Phase: "options", Path: path, Err: err}
 	}
+	requestedPath := path
 	path, err = filepath.Abs(path)
 	if err != nil {
-		return nil, err
+		return nil, &OperationError{Operation: "open", Phase: "resolve_path", Path: requestedPath, Err: err}
 	}
 	return openWithOptions(ctx, path, options)
 }
@@ -63,9 +64,16 @@ func normalizeOptions(path string, options Options) (Options, error) {
 	return options, nil
 }
 
-func openWithOptions(ctx context.Context, path string, options Options) (*Store, error) {
+func openWithOptions(ctx context.Context, path string, options Options) (out *Store, retErr error) {
+	phase := "stat"
+	defer func() {
+		if retErr != nil {
+			retErr = &OperationError{Operation: "open", Phase: phase, Path: path, Err: retErr}
+		}
+	}()
 	_, statErr := os.Stat(path)
 	if os.IsNotExist(statErr) {
+		phase = "restore_recovery_check"
 		// Restore replaces the live file with two renames. A crash between them
 		// must not turn a recoverable database into a new empty installation.
 		entries, err := os.ReadDir(filepath.Dir(path))
@@ -88,21 +96,26 @@ func openWithOptions(ctx context.Context, path string, options Options) (*Store,
 	} else if statErr != nil {
 		return nil, statErr
 	}
+	phase = "create_directory"
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return nil, err
 	}
+	phase = "file_open"
 	file, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
 		return nil, err
 	}
+	phase = "file_permissions"
 	if err = file.Chmod(0600); err != nil {
 		file.Close()
 		return nil, err
 	}
+	phase = "file_close"
 	if err = file.Close(); err != nil {
 		return nil, err
 	}
 	for _, suffix := range []string{"-wal", "-shm", "-journal"} {
+		phase = "journal_permissions"
 		if err = os.Chmod(path+suffix, 0600); err != nil && !os.IsNotExist(err) {
 			return nil, err
 		}
@@ -113,24 +126,29 @@ func openWithOptions(ctx context.Context, path string, options Options) (*Store,
 		q.Add("_pragma", pragma)
 	}
 	u.RawQuery = q.Encode()
+	phase = "connect"
 	db, err := sql.Open("sqlite", u.String())
 	if err != nil {
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
 	fail := func(e error) (*Store, error) { db.Close(); return nil, e }
+	phase = "ping"
 	if err = db.PingContext(ctx); err != nil {
 		return fail(err)
 	}
 	if statErr == nil {
+		phase = "migration_backup"
 		if _, err = (&Store{DB: db, options: options}).Backup(ctx, options.BackupDir); err != nil {
 			return fail(fmt.Errorf("迁移前备份失败: %w", err))
 		}
 	}
+	phase = "migration_catalog"
 	migrationFS, err := fs.Sub(migrations, "migrations")
 	if err != nil {
 		return fail(err)
 	}
+	phase = "migration_provider"
 	provider, err := goose.NewProvider(goose.DialectSQLite3, db, migrationFS, goose.WithDisableGlobalRegistry(true))
 	if err != nil {
 		return fail(err)
@@ -138,16 +156,20 @@ func openWithOptions(ctx context.Context, path string, options Options) (*Store,
 
 	// Table rebuilds must not cascade-delete dependent rows. Startup has one
 	// connection and no serving requests; each Goose migration remains atomic.
+	phase = "foreign_keys_suspend"
 	if _, err = db.ExecContext(ctx, "PRAGMA foreign_keys=OFF"); err != nil {
 		return fail(err)
 	}
 	_, migrationErr := provider.Up(ctx)
+	phase = "foreign_keys_enable"
 	if _, err = db.ExecContext(ctx, "PRAGMA foreign_keys=ON"); err != nil {
 		return fail(err)
 	}
 	if migrationErr != nil {
+		phase = "migration_apply"
 		return fail(fmt.Errorf("数据库迁移失败: %w", migrationErr))
 	}
+	phase = "foreign_keys_validate"
 	rows, err := db.QueryContext(ctx, "PRAGMA foreign_key_check")
 	if err != nil {
 		return fail(err)

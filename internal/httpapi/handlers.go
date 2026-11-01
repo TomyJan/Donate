@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/TomyJan/Donate/internal/auth"
+	"github.com/TomyJan/Donate/internal/observability"
 	"github.com/TomyJan/Donate/internal/order"
 	"github.com/TomyJan/Donate/internal/payment"
 	"github.com/TomyJan/Donate/internal/storage"
@@ -56,12 +57,17 @@ func (s *Server) bind(w http.ResponseWriter, r *http.Request)  { s.begin(w, r, "
 func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
 	v, e := payment.ParseValues(r.URL.Query())
 	if e != nil {
+		s.Log.WarnContext(r.Context(), fmt.Sprintf("授权回调请求 %s 的参数校验失败", state(r).ID), "request_id", state(r).ID, "stage", "callback_query", "reason", "invalid_query")
 		s.respond(w, r, 200, "VALIDATION_FAILED", "授权回调参数无效", nil)
 		return
 	}
 	result, e := s.Auth.Callback(r.Context(), chi.URLParam(r, "provider"), v["state"], v["code"], cookie(r, s.cookieName("flow")), state(r).Session)
 	if e != nil {
-		s.Log.Warn(fmt.Sprintf("授权回调请求 %s 未完成，需重新发起登录", state(r).ID), "request_id", state(r).ID)
+		s.logAuthBoundary(r, e)
+		state(r).Code = "AUTHORIZATION_FAILED"
+		if errors.Is(e, auth.ErrUpstream) {
+			state(r).Code = "LOGIN_PROVIDER_UNAVAILABLE"
+		}
 		state(r).Status = 303
 		http.Redirect(w, r, "/auth/complete?error=authorization", http.StatusSeeOther)
 		return
@@ -241,7 +247,7 @@ func (s *Server) paymentReturn(w http.ResponseWriter, r *http.Request) {
 			if e == nil {
 				target += "&order=" + o.ID
 				if _, err := s.Queue.Enqueue(r.Context(), "payment", o.ID, "browser_return", "", state(r).ID); err != nil {
-					s.Log.WarnContext(r.Context(), "订单 "+o.ID+" 支付返回核验任务入队失败", "order_id", o.ID, "request_id", state(r).ID, "error", err)
+					s.Log.WarnContext(r.Context(), fmt.Sprintf("请求 %s，订单 %s 支付返回核验任务入队失败", state(r).ID, o.ID), "order_id", o.ID, "request_id", state(r).ID, "stage", "payment_return_enqueue", "reason", observability.ErrorReason(err))
 				}
 			}
 		}

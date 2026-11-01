@@ -109,21 +109,29 @@ func validReturn(p string) string {
 	}
 	return "/"
 }
-func (s *Service) provider(ctx context.Context) (*oidc.Provider, error) {
+func (s *Service) provider(ctx context.Context) (*oidc.Provider, *upstreamTrace, error) {
 	if s.Config.OIDCissuer == "" {
-		return nil, ErrInvalid
+		return nil, nil, authFailure(ErrInvalid, "oidc_discovery", "provider_disabled")
 	}
-	p, e := oidc.NewProvider(oidc.ClientContext(ctx, s.HTTP), s.Config.OIDCissuer)
+	trace := tracedClient(s.HTTP)
+	p, e := oidc.NewProvider(oidc.ClientContext(ctx, trace.client), s.Config.OIDCissuer)
 	if e != nil {
-		return nil, ErrUpstream
+		return nil, trace, trace.failure(ErrUpstream, "oidc_discovery", "invalid_discovery", e)
 	}
-	return p, nil
+	return p, trace, nil
 }
 func (s *Service) oidcConfig(p *oidc.Provider) oauth2.Config {
 	return oauth2.Config{ClientID: s.Config.OIDCclientID, ClientSecret: s.Config.OIDCsecret, Endpoint: p.Endpoint(), RedirectURL: s.Config.PublicURL + "/api/v1/user/oauth/callback/" + s.Config.OIDCProviderID(), Scopes: []string{oidc.ScopeOpenID, "profile"}}
 }
 
-func (s *Service) BeginFlow(ctx context.Context, provider, intent string, session *Session, returnTo string) (FlowStart, error) {
+func (s *Service) BeginFlow(ctx context.Context, provider, intent string, session *Session, returnTo string) (result FlowStart, err error) {
+	started := time.Now()
+	defer func() {
+		if err != nil {
+			err = stageFailure(err, "flow_start")
+			s.logAuthFailure(ctx, provider, err, started)
+		}
+	}()
 	if provider != "qq" && provider != s.Config.OIDCProviderID() || intent != "login" && intent != "bind" {
 		return FlowStart{}, ErrInvalid
 	}
@@ -132,10 +140,11 @@ func (s *Service) BeginFlow(ctx context.Context, provider, intent string, sessio
 	}
 	state, cookie, nonce := RandomToken(), RandomToken(), RandomToken()
 	id := storage.NewID()
+	ctx = withFlowDiagnostic(ctx, id.String())
 	payload := flowSecret{Verifier: oauth2.GenerateVerifier(), ReturnTo: validReturn(returnTo)}
 	var authURL string
 	if provider == s.Config.OIDCProviderID() {
-		p, e := s.provider(ctx)
+		p, _, e := s.provider(ctx)
 		if e != nil {
 			return FlowStart{}, e
 		}
@@ -179,7 +188,7 @@ func (s *Service) BeginFlow(ctx context.Context, provider, intent string, sessio
 		return e
 	})
 	if e == nil {
-		s.Log.Info(fmt.Sprintf("授权流程 %s 已创建，方式 %s，意图 %s", id.String(), provider, intent), "flow_id", id.String(), "provider", provider, "intent", intent)
+		s.logAuth(ctx, slog.LevelInfo, provider, "flow_start", "created", started, "intent", intent)
 	}
 	return FlowStart{URL: authURL, State: state, Cookie: id.String() + "." + cookie, BrowserFamily: storage.IDString(family.id)}, e
 }
@@ -187,11 +196,11 @@ func (s *Service) readFlow(ctx context.Context, tx *sql.Tx, cookie string) (flow
 	var out flow
 	parts := strings.Split(cookie, ".")
 	if len(parts) != 2 {
-		return out, ErrUnauthorized
+		return out, authFailure(ErrUnauthorized, "flow_read", "invalid_cookie")
 	}
 	id, e := storage.ParseID(parts[0])
 	if e != nil || len(parts[1]) != 43 {
-		return out, ErrUnauthorized
+		return out, authFailure(ErrUnauthorized, "flow_read", "invalid_cookie")
 	}
 	var secret, sid []byte
 	var consumed sql.NullInt64
@@ -204,17 +213,20 @@ func (s *Service) readFlow(ctx context.Context, tx *sql.Tx, cookie string) (flow
 	}
 	e = row.Scan(&out.ID, &out.Provider, &out.Intent, &out.Nonce, &secret, &sid, &out.Stage, &out.Attempts, &out.Expires, &consumed)
 	if errors.Is(e, sql.ErrNoRows) {
-		return out, ErrUnauthorized
+		return out, authFailure(ErrUnauthorized, "flow_read", "flow_not_found")
 	}
 	if e != nil {
-		return out, e
+		return out, stageFailure(e, "flow_read")
 	}
-	if out.Expires <= s.Now().Unix() || consumed.Valid {
-		return out, ErrUnauthorized
+	if out.Expires <= s.Now().Unix() {
+		return out, authFailure(ErrUnauthorized, "flow_read", "flow_expired")
+	}
+	if consumed.Valid {
+		return out, authFailure(ErrUnauthorized, "flow_read", "flow_consumed")
 	}
 	out.SessionID = storage.IDString(sid)
 	out.Secret, e = s.unseal(secret)
-	return out, e
+	return out, stageFailure(e, "flow_decrypt")
 }
 func (s *Service) claimFlow(ctx context.Context, state, cookie string) (flow, error) {
 	var out flow
@@ -225,7 +237,7 @@ func (s *Service) claimFlow(ctx context.Context, state, cookie string) (flow, er
 			return e
 		}
 		if out.Stage != "pending" {
-			return ErrUnauthorized
+			return authFailure(ErrUnauthorized, "flow_claim", "flow_already_claimed")
 		}
 		r, e := tx.ExecContext(ctx, "UPDATE auth_flows SET stage='processing' WHERE id=? AND state_hash=? AND stage='pending'", out.ID, hash(state))
 		if e != nil {
@@ -236,18 +248,38 @@ func (s *Service) claimFlow(ctx context.Context, state, cookie string) (flow, er
 			return e
 		}
 		if n != 1 {
-			return ErrUnauthorized
+			return authFailure(ErrUnauthorized, "flow_claim", "state_mismatch")
 		}
 		return nil
 	})
-	return out, e
+	return out, stageFailure(e, "flow_claim")
 }
 func (s *Service) FlowStatus(ctx context.Context, cookie string) (FlowStatus, error) {
 	f, e := s.readFlow(ctx, nil, cookie)
 	return FlowStatus{f.Stage, f.Provider, f.Secret.ReturnTo}, e
 }
 
-func (s *Service) Callback(ctx context.Context, provider, state, code, cookie string, current *Session) (FlowResult, error) {
+func (s *Service) Callback(ctx context.Context, provider, state, code, cookie string, current *Session) (result FlowResult, err error) {
+	started := time.Now()
+	ctx = withFlowDiagnostic(ctx, cookie)
+	defer func() {
+		if err != nil {
+			err = stageFailure(err, "callback")
+			s.logAuthFailure(ctx, provider, err, started)
+			return
+		}
+		fields := []any{}
+		if result.Credentials != nil {
+			fields = append(fields, "user_id", result.Credentials.Session.UserID, "identity_id", result.Credentials.Session.IdentityID)
+		} else if current != nil {
+			fields = append(fields, "user_id", current.UserID, "identity_id", current.IdentityID)
+		}
+		outcome := "completed"
+		if result.NeedQQ {
+			outcome = "qq_number_required"
+		}
+		s.logAuth(ctx, slog.LevelInfo, provider, "callback", outcome, started, fields...)
+	}()
 	if provider != "qq" && provider != s.Config.OIDCProviderID() {
 		return FlowResult{}, ErrInvalid
 	}
@@ -255,11 +287,14 @@ func (s *Service) Callback(ctx context.Context, provider, state, code, cookie st
 	if e != nil {
 		return FlowResult{}, e
 	}
-	if f.Provider != provider || code == "" {
-		return FlowResult{}, ErrInvalid
+	if f.Provider != provider {
+		return FlowResult{}, authFailure(ErrInvalid, "callback_validate", "provider_mismatch")
+	}
+	if code == "" {
+		return FlowResult{}, authFailure(ErrInvalid, "callback_validate", "authorization_code_missing")
 	}
 	if f.Intent == "bind" && (current == nil || current.ID != f.SessionID) {
-		return FlowResult{}, ErrUnauthorized
+		return FlowResult{}, authFailure(ErrUnauthorized, "callback_validate", "binding_session_mismatch")
 	}
 	var p Identity
 	if provider == s.Config.OIDCProviderID() {
@@ -303,42 +338,52 @@ func (s *Service) Callback(ctx context.Context, provider, state, code, cookie st
 	return s.finishFlow(ctx, f, p)
 }
 func (s *Service) exchangeOIDC(ctx context.Context, code string, f flow) (Identity, error) {
-	p, e := s.provider(ctx)
+	p, trace, e := s.provider(ctx)
 	if e != nil {
 		return Identity{}, e
 	}
 	c := s.oidcConfig(p)
-	ctx = oidc.ClientContext(ctx, s.HTTP)
+	ctx = oidc.ClientContext(ctx, trace.client)
+	trace.reset()
 	token, e := c.Exchange(ctx, code, oauth2.VerifierOption(f.Secret.Verifier))
 	if e != nil {
-		return Identity{}, ErrUpstream
+		return Identity{}, trace.failure(ErrUpstream, "oidc_token", "invalid_token_response", e)
 	}
 	raw, ok := token.Extra("id_token").(string)
 	if !ok {
-		return Identity{}, ErrUnauthorized
+		return Identity{}, authFailure(ErrUnauthorized, "oidc_token", "id_token_missing")
 	}
+	trace.reset()
 	verified, e := p.Verifier(&oidc.Config{ClientID: c.ClientID}).Verify(ctx, raw)
-	if e != nil || verified.Nonce != f.Nonce {
-		return Identity{}, ErrUnauthorized
+	if e != nil {
+		return Identity{}, trace.failure(ErrUnauthorized, "oidc_verify", "token_verification_failed", e)
+	}
+	if verified.Nonce != f.Nonce {
+		return Identity{}, authFailure(ErrUnauthorized, "oidc_verify", "nonce_mismatch")
 	}
 	var claims oidcProfileClaims
 	if e = verified.Claims(&claims); e != nil {
-		return Identity{}, ErrUnauthorized
+		return Identity{}, authFailure(ErrUnauthorized, "oidc_claims", "invalid_claims")
 	}
 	var additional oidcProfileClaims
 	userInfoStatus := "not_needed"
 	tokenPicture, _ := safeOIDCAvatar(claims.Picture)
 	if claims.Name == "" && claims.Preferred == "" || tokenPicture == "" {
+		trace.reset()
+		infoStarted := time.Now()
 		info, err := p.UserInfo(ctx, oauth2.StaticTokenSource(token))
 		switch {
 		case err != nil:
 			userInfoStatus = "unavailable"
+			s.logAuthFailure(ctx, s.Config.OIDCProviderID(), trace.failure(ErrUpstream, "oidc_userinfo", "invalid_userinfo", err), infoStarted)
 		case info.Subject != verified.Subject:
 			userInfoStatus = "subject_mismatch"
+			s.logAuthFailure(ctx, s.Config.OIDCProviderID(), authFailure(ErrUnauthorized, "oidc_userinfo", "subject_mismatch"), infoStarted)
 		default:
 			var enriched oidcProfileClaims
 			if err := info.Claims(&enriched); err != nil {
 				userInfoStatus = "invalid_claims"
+				s.logAuthFailure(ctx, s.Config.OIDCProviderID(), authFailure(ErrUnauthorized, "oidc_userinfo", "invalid_claims"), infoStarted)
 			} else {
 				userInfoStatus, additional = "accepted", enriched
 				// UserInfo only enriches this verified subject; it cannot replace
@@ -374,15 +419,19 @@ func (s *Service) exchangeOIDC(ctx context.Context, code string, f flow) (Identi
 	}
 	// Only fixed diagnostic values and the verified identity are logged, never
 	// upstream errors (which can contain response bodies), tokens, or avatar URLs.
-	s.Log.Log(ctx, level, fmt.Sprintf("OIDC 提供方 %s，已验证 subject %s：头像 %s，来源 %s，原因 %s，拒绝 %s，UserInfo %s", s.Config.OIDCProviderID(), verified.Subject, status, source, reason, rejected, userInfoStatus),
+	unavailable := userInfoStatus != "accepted" && userInfoStatus != "not_needed"
+	_, avatarHost := avatarDiagnostics(avatar)
+	diagnostic, _ := ctx.Value(diagnosticContextKey{}).(diagnosticContext)
+	s.Log.Log(ctx, level, fmt.Sprintf("请求 %s，流程 %s，OIDC 提供方 %s，已验证 subject %s：头像 %s，来源 %s，原因 %s，拒绝 %s，UserInfo %s", diagnostic.requestID, diagnostic.flowID, s.Config.OIDCProviderID(), verified.Subject, status, source, reason, rejected, userInfoStatus),
+		"request_id", diagnostic.requestID, "flow_id", diagnostic.flowID,
 		"provider_id", s.Config.OIDCProviderID(), "subject", verified.Subject,
 		"avatar_status", status, "avatar_source", source, "avatar_reason", reason, "avatar_rejections", rejected, "userinfo_status", userInfoStatus,
+		"avatar_host", avatarHost, "avatar_fallback", avatar != "" && source != "id_token.picture", "avatar_preserve_existing", unavailable && avatar == "",
 		"id_token_picture_present", claims.Picture != "", "id_token_avatar_present", len(claims.Avatar) > 0,
 		"userinfo_picture_present", additional.Picture != "", "userinfo_avatar_present", len(additional.Avatar) > 0)
 	if claims.Name == "" {
 		claims.Name = claims.Preferred
 	}
-	unavailable := userInfoStatus != "accepted" && userInfoStatus != "not_needed"
 	return Identity{
 		Provider: "oidc", Issuer: s.Config.OIDCissuer, Subject: verified.Subject,
 		Nickname: claims.Name, AvatarURL: avatar,
@@ -404,7 +453,7 @@ func (s *Service) finishFlow(ctx context.Context, f flow, p Identity) (FlowResul
 		return nil
 	})
 	if e != nil {
-		return FlowResult{}, e
+		return FlowResult{}, stageFailure(e, "flow_finish")
 	}
 	out := FlowResult{ReturnTo: f.Secret.ReturnTo}
 	if f.Intent == "bind" {
@@ -421,19 +470,36 @@ func (s *Service) finishFlow(ctx context.Context, f flow, p Identity) (FlowResul
 	}
 	return out, e
 }
-func (s *Service) CompleteQQ(ctx context.Context, cookie, number string, current *Session) (FlowResult, error) {
+func (s *Service) CompleteQQ(ctx context.Context, cookie, number string, current *Session) (result FlowResult, err error) {
+	started := time.Now()
+	ctx = withFlowDiagnostic(ctx, cookie)
+	defer func() {
+		if err != nil {
+			err = stageFailure(err, "qq_confirm")
+			s.logAuthFailure(ctx, "qq", err, started)
+			return
+		}
+		fields := []any{}
+		if result.Credentials != nil {
+			fields = append(fields, "user_id", result.Credentials.Session.UserID, "identity_id", result.Credentials.Session.IdentityID)
+		}
+		s.logAuth(ctx, slog.LevelInfo, "qq", "qq_confirm", "completed", started, fields...)
+	}()
 	if !validQQ(number) {
-		return FlowResult{}, ErrInvalid
+		return FlowResult{}, authFailure(ErrInvalid, "qq_confirm", "invalid_number_format")
 	}
 	f, e := s.readFlow(ctx, nil, cookie)
 	if e != nil {
 		return FlowResult{}, e
 	}
-	if f.Stage != "qq_number" || f.Attempts >= 5 {
-		return FlowResult{}, ErrInvalid
+	if f.Stage != "qq_number" {
+		return FlowResult{}, authFailure(ErrInvalid, "qq_confirm", "invalid_flow_stage")
+	}
+	if f.Attempts >= 5 {
+		return FlowResult{}, authFailure(ErrInvalid, "qq_confirm", "attempt_limit")
 	}
 	if f.Intent == "bind" && (current == nil || current.ID != f.SessionID) {
-		return FlowResult{}, ErrUnauthorized
+		return FlowResult{}, authFailure(ErrUnauthorized, "qq_confirm", "binding_session_mismatch")
 	}
 	e = s.Store.Write(ctx, func(tx *sql.Tx) error {
 		r, e := tx.ExecContext(ctx, "UPDATE auth_flows SET attempts=attempts+1 WHERE id=? AND stage='qq_number' AND attempts<5 AND consumed_at IS NULL", f.ID)

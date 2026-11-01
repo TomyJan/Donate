@@ -3,6 +3,7 @@ package httpapi
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -100,7 +101,7 @@ func TestDelayedSuccessfulCookieResponsesPreserveNewLogin(t *testing.T) {
 			if before.Code != 200 || !strings.Contains(before.Body.String(), bob.Session.UserID) {
 				t.Fatalf("new login: %d %s", before.Code, before.Body)
 			}
-			if _, err := a.Resolve(ctx, old.Token); err != auth.ErrUnauthorized {
+			if _, err := a.Resolve(ctx, old.Token); !errors.Is(err, auth.ErrUnauthorized) {
 				t.Fatalf("old token not revoked: %v", err)
 			}
 			// Apply real Secure/HttpOnly/__Host Set-Cookie on HTTPS in delivery order.

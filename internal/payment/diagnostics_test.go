@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/TomyJan/Donate/internal/config"
+	"github.com/TomyJan/Donate/internal/order"
 )
 
 func TestGatewayFailureIdentifiesCauseWithoutLeakingResponse(t *testing.T) {
@@ -64,5 +65,32 @@ func TestGatewayTransportDiagnosticDoesNotExposeV1Key(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), "secret-value") || strings.Contains(err.Error(), "https://") {
 		t.Fatal("request URL leaked")
+	}
+}
+func TestNotificationDiagnosticSeparatesSignatureAndFields(t *testing.T) {
+	g := &Gateway{Config: config.Config{EpayURL: "https://gateway.test", EpayPID: "1001", EpayKey: "private-key"}}
+	o := order.Order{Protocol: "v1", GatewayID: "https://gateway.test", MerchantID: "1001", MerchantOrderNo: "merchant-one"}
+	for _, tc := range []struct{ name, stage string }{{"signature", "signature"}, {"fields", "observation"}} {
+		t.Run(tc.name, func(t *testing.T) {
+			values := map[string]string{"pid": "1001", "out_trade_no": "merchant-one", "trade_no": "trade-one", "type": "alipay", "money": "0.01", "trade_status": "TRADE_SUCCESS", "private": "sensitive-value"}
+			if tc.name == "fields" {
+				values["money"] = "sensitive-value"
+			}
+			if err := g.sign(values, "v1"); err != nil {
+				t.Fatal(err)
+			}
+			if tc.name == "signature" {
+				values["sign"] = "sensitive-value"
+			}
+			_, err := g.Notification(o, values)
+			if !errors.Is(err, ErrProtocol) || !strings.Contains(Diagnostic(err), "stage="+tc.stage) {
+				t.Fatalf("missing notification stage: %v", err)
+			}
+			for _, secret := range []string{"private-key", "sensitive-value", "https://gateway.test"} {
+				if strings.Contains(Diagnostic(err), secret) {
+					t.Fatal("notification diagnostic leaked secret")
+				}
+			}
+		})
 	}
 }

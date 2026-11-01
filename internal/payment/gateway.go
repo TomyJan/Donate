@@ -230,12 +230,16 @@ func (g *Gateway) Query(ctx context.Context, o order.Order) (order.Observation, 
 }
 func (g *Gateway) Notification(o order.Order, v map[string]string) (order.Observation, error) {
 	if e := g.account(o); e != nil {
-		return order.Observation{}, e
+		return order.Observation{}, &gatewayFailure{operation: "notification", stage: "account", code: "missing", reason: "account_unavailable", base: e}
 	}
 	if e := g.verify(v, o.Protocol); e != nil {
-		return order.Observation{}, e
+		return order.Observation{}, &gatewayFailure{operation: "notification", stage: "signature", code: "missing", reason: "notification_signature", base: e}
 	}
-	return g.observation(o, v, true)
+	observation, err := g.observation(o, v, true)
+	if err != nil {
+		return order.Observation{}, &gatewayFailure{operation: "notification", stage: "observation", code: "missing", reason: "notification_fields", base: err}
+	}
+	return observation, nil
 }
 func (g *Gateway) observation(o order.Order, v map[string]string, notify bool) (order.Observation, error) {
 	money, e := ParseMoney(v["money"])

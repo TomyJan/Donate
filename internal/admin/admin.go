@@ -49,6 +49,7 @@ func (s *Service) check(ctx context.Context, tx *sql.Tx, actor string) error {
 	return nil
 }
 func (s *Service) Ban(ctx context.Context, actor, target string, ban bool) error {
+	started, phase := time.Now(), "transaction_begin"
 	tid, e := storage.ParseID(target)
 	if e != nil {
 		return auth.ErrInvalid
@@ -59,12 +60,15 @@ func (s *Service) Ban(ctx context.Context, actor, target string, ban bool) error
 		action, status = "user.ban", "banned"
 	}
 	e = s.Store.Write(ctx, func(tx *sql.Tx) error {
+		phase = "authorization"
 		if e := s.check(ctx, tx, actor); e != nil {
 			return e
 		}
 		if ban && bytes.Equal(aid, tid) {
+			phase = "self_ban_guard"
 			return ErrSelfBan
 		}
+		phase = "user_update"
 		r, e := tx.ExecContext(ctx, "UPDATE users SET status=? WHERE id=?", status, tid)
 		if e != nil {
 			return e
@@ -74,14 +78,22 @@ func (s *Service) Ban(ctx context.Context, actor, target string, ban bool) error
 			return order.ErrNotFound
 		}
 		if ban {
+			phase = "session_revoke"
 			if _, e = tx.ExecContext(ctx, "UPDATE sessions SET revoked_at=? WHERE user_id=? AND revoked_at IS NULL", s.Now().Unix(), tid); e != nil {
 				return e
 			}
 		}
-		return storage.Audit(ctx, tx, aid, action, "user", tid, status, s.Now().Unix())
+		phase = "audit"
+		err := storage.Audit(ctx, tx, aid, action, "user", tid, status, s.Now().Unix())
+		if err == nil {
+			phase = "transaction_commit"
+		}
+		return err
 	})
 	if e == nil {
 		s.Log.Info(fmt.Sprintf("管理员 %s 对用户 %s 执行 %s，全部会话按状态处理", actor, target, action), "actor_id", actor, "user_id", target, "action", action)
+	} else {
+		s.logMutationFailure(phase, action, actor, map[string]string{"user_id": target}, started, e)
 	}
 	return e
 }
@@ -206,6 +218,8 @@ func (s *Service) Operation(ctx context.Context, actor, id string) (Operation, e
 	return out, nil
 }
 func (s *Service) Execute(ctx context.Context, actor, id string) (Operation, error) {
+	started := time.Now()
+	phase, action, currentTarget := "transaction_begin", "operation.execute", ""
 	bid, e := storage.ParseID(id)
 	if e != nil {
 		return Operation{}, auth.ErrInvalid
@@ -213,12 +227,14 @@ func (s *Service) Execute(ctx context.Context, actor, id string) (Operation, err
 	aid, _ := storage.ParseID(actor)
 	now := s.Now()
 	e = s.Store.Write(ctx, func(tx *sql.Tx) error {
+		phase = "authorization"
 		if e := s.check(ctx, tx, actor); e != nil {
 			return e
 		}
-		var action, raw string
+		var raw string
 		var expires int64
 		var done sql.NullInt64
+		phase = "operation_read"
 		if e := tx.QueryRowContext(ctx, "SELECT action,target_ids,expires_at,confirmed_at FROM admin_operations WHERE id=? AND actor_id=?", bid, aid).Scan(&action, &raw, &expires, &done); e != nil {
 			return e
 		}
@@ -226,13 +242,16 @@ func (s *Service) Execute(ctx context.Context, actor, id string) (Operation, err
 			return nil
 		}
 		if expires <= now.Unix() {
+			phase = "operation_expired"
 			return auth.ErrInvalid
 		}
 		var ids []string
+		phase = "operation_decode"
 		if json.Unmarshal([]byte(raw), &ids) != nil {
 			return auth.ErrInvalid
 		}
 		for _, target := range ids {
+			currentTarget, phase = target, "target_read"
 			tid, _ := storage.ParseID(target)
 			o, e := order.Scan(tx.QueryRowContext(ctx, "SELECT "+order.Columns+" FROM orders WHERE id=?", tid))
 			result := "updated"
@@ -247,6 +266,7 @@ func (s *Service) Execute(ctx context.Context, actor, id string) (Operation, err
 					if s.Config.GeoMode == "disabled" {
 						result = "disabled"
 					} else {
+						phase = "geo_enqueue"
 						jid, err := jobs.EnqueueGeoRefreshTx(ctx, tx, tid, aid, id, now)
 						if err != nil {
 							return err
@@ -254,9 +274,11 @@ func (s *Service) Execute(ctx context.Context, actor, id string) (Operation, err
 						job, result = jid, "queued"
 					}
 				case "delete":
+					phase = "order_delete"
 					if _, e = tx.ExecContext(ctx, "DELETE FROM orders WHERE id=?", tid); e != nil {
 						return e
 					}
+					phase = "operation_history_update"
 					if _, e = tx.ExecContext(ctx, "UPDATE admin_operation_items SET result='deleted',job_id=NULL WHERE target_id=?", tid); e != nil {
 						return e
 					}
@@ -265,6 +287,7 @@ func (s *Service) Execute(ctx context.Context, actor, id string) (Operation, err
 					if o.Status != "pending" {
 						result = o.Status + "_skipped"
 					} else {
+						phase = "close_enqueue"
 						var jid []byte
 						e = tx.QueryRowContext(ctx, "SELECT id FROM jobs WHERE kind='close' AND order_id=? AND status IN ('ready','running')", tid).Scan(&jid)
 						if errors.Is(e, sql.ErrNoRows) {
@@ -290,6 +313,7 @@ func (s *Service) Execute(ctx context.Context, actor, id string) (Operation, err
 						result = "unchanged"
 						break
 					}
+					phase = "order_visibility"
 					_, e = tx.ExecContext(ctx, "UPDATE orders SET "+col+"=?,version=version+1 WHERE id=?", hidden, tid)
 					if e != nil {
 						return e
@@ -297,19 +321,26 @@ func (s *Service) Execute(ctx context.Context, actor, id string) (Operation, err
 				case "export":
 					result = "exported"
 				}
+				phase = "audit"
 				if e = storage.Audit(ctx, tx, aid, "order."+action, "order", tid, result, now.Unix()); e != nil {
 					return e
 				}
 			}
 			iid := storage.NewID()
+			phase = "operation_item_persist"
 			if _, e = tx.ExecContext(ctx, "INSERT INTO admin_operation_items(id,operation_id,target_id,result,job_id) VALUES(?,?,?,?,?)", iid[:], bid, tid, result, job); e != nil {
 				return e
 			}
 		}
+		currentTarget, phase = "", "operation_confirm"
 		_, e := tx.ExecContext(ctx, "UPDATE admin_operations SET confirmed_at=? WHERE id=?", now.Unix(), bid)
+		if e == nil {
+			phase = "transaction_commit"
+		}
 		return e
 	})
 	if e != nil {
+		s.logMutationFailure(phase, action, actor, map[string]string{"operation_id": id, "order_id": currentTarget}, started, e)
 		return Operation{}, e
 	}
 	s.Log.Info(fmt.Sprintf("管理员 %s 确认执行管理操作 %s", actor, id), "actor_id", actor, "operation_id", id)
