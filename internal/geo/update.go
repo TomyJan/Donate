@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -17,6 +16,7 @@ import (
 	"time"
 
 	"github.com/TomyJan/Donate/internal/config"
+	"github.com/TomyJan/Donate/internal/observability"
 	"github.com/lionsoul2014/ip2region/binding/golang/xdb"
 	"github.com/oschwald/maxminddb-golang/v2"
 )
@@ -75,79 +75,62 @@ func databaseSources(c config.Config) []databaseSource {
 
 func (u *Updater) enabled() bool { return u.config.GeoMode == "local" && u.config.GeoUpdateDays > 0 }
 
-// Bootstrap downloads only missing explicitly enabled libraries. Existing data
-// remains available immediately; its periodic refresh runs after startup.
-func Bootstrap(ctx context.Context, c config.Config, l *slog.Logger) error {
-	u := NewUpdater(nil, c, l)
+// Due inspects local readiness and age only; network IO belongs to queue workers.
+func (u *Updater) Due(now time.Time) []string {
 	if !u.enabled() {
 		return nil
 	}
-	for _, lib := range databaseSources(c) {
-		if lib.path == "" || lib.url == "" {
-			continue
-		}
-		if _, err := os.Stat(lib.path); err == nil {
-			continue
-		} else if !os.IsNotExist(err) {
-			return fmt.Errorf("检查 %s 库文件失败", lib.kind)
-		}
-		if err := u.update(ctx, lib); err != nil {
-			return fmt.Errorf("首次下载 %s 库失败: %w", lib.kind, err)
-		}
-	}
-	return nil
-}
-
-func (u *Updater) Run(ctx context.Context) {
-	if !u.enabled() {
-		return
-	}
-	_ = u.Check(ctx)
-	ticker := time.NewTicker(time.Hour)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			_ = u.Check(ctx)
-		}
-	}
-}
-
-func (u *Updater) Check(ctx context.Context) error {
-	if !u.enabled() {
-		return nil
-	}
-	u.mu.Lock()
-	defer u.mu.Unlock()
-	var failures []error
-	now := time.Now()
 	cutoff := now.AddDate(0, 0, -u.config.GeoUpdateDays)
+	var due []string
 	for _, lib := range databaseSources(u.config) {
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
 		if lib.path == "" || lib.url == "" {
 			continue
 		}
 		info, err := os.Stat(lib.path)
-		if err == nil && info.ModTime().After(cutoff) && !info.ModTime().After(now) {
-			continue
+		ready := true
+		if u.service != nil {
+			ready = u.service.libraryReady(lib.kind)
 		}
-		if err != nil && !os.IsNotExist(err) {
-			failures = append(failures, fmt.Errorf("检查 %s 库文件失败", lib.kind))
-			continue
-		}
-		if err := u.update(ctx, lib); err != nil {
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			u.log.Warn("属地库 "+lib.kind+" 更新失败，继续使用旧库；目标 "+lib.path, "source", lib.kind, "path", lib.path, "error", err)
-			failures = append(failures, fmt.Errorf("%s 更新失败: %w", lib.kind, err))
+		if err != nil || !ready || !info.Mode().IsRegular() || !info.ModTime().After(cutoff) || info.ModTime().After(now) {
+			due = append(due, lib.kind)
 		}
 	}
-	return errors.Join(failures...)
+	return due
+}
+
+func (s *Service) libraryReady(kind string) bool {
+	s.localMu.RLock()
+	defer s.localMu.RUnlock()
+	if s.closed {
+		return false
+	}
+	switch kind {
+	case "xdb4":
+		return s.xdb4 != nil
+	case "xdb6":
+		return s.xdb6 != nil
+	case "mmdb":
+		return s.local != nil
+	}
+	return false
+}
+
+// Update executes one explicitly configured library job, including validation and hot reload.
+func (u *Updater) Update(ctx context.Context, kind string) error {
+	if !u.enabled() {
+		return ErrDisabled
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	for _, lib := range databaseSources(u.config) {
+		if lib.kind == kind && lib.path != "" && lib.url != "" {
+			return u.update(ctx, lib)
+		}
+	}
+	return ErrDisabled
 }
 
 func (u *Updater) update(parent context.Context, lib databaseSource) error {
@@ -163,12 +146,14 @@ func (u *Updater) update(parent context.Context, lib databaseSource) error {
 	}
 	if u.service == nil {
 		if err = os.Rename(stage, lib.path); err != nil {
-			return errors.New("无法安装首次下载的库文件")
+			return failure("database_install", "replace_"+observability.ErrorReason(err), 0, err)
 		}
 	} else if err = u.service.installDatabase(ctx, lib, stage); err != nil {
 		return err
 	}
-	u.log.Info("属地库 "+lib.kind+" 已校验并更新，文件 "+lib.path, "source", lib.kind, "path", lib.path)
+	prefix, fields := traceFields(parent)
+	fields = append(fields, "source", lib.kind, "path", lib.path)
+	u.log.Info(prefix+"属地库 "+lib.kind+" 已校验并更新，文件 "+lib.path, fields...)
 	return nil
 }
 
@@ -304,17 +289,17 @@ func (s *Service) installDatabase(ctx context.Context, lib databaseSource, stage
 	actual, _ := filepath.Abs(lib.path)
 	want, _ := filepath.Abs(expected)
 	if expected == "" || actual != want {
-		return errors.New("更新目标与当前本地库不一致")
+		return failure("database_install", "target_mismatch", 0, ErrUnavailable)
 	}
 	backup := ""
 	keepBackup := false
 	if info, err := os.Lstat(lib.path); err == nil {
 		if !info.Mode().IsRegular() {
-			return errors.New("库更新目标不是普通文件")
+			return failure("database_install", "target_not_regular", 0, ErrUnavailable)
 		}
 		f, err := os.CreateTemp(filepath.Dir(lib.path), ".ipdb-rollback-*")
 		if err != nil {
-			return errors.New("无法创建库回滚副本")
+			return failure("database_backup", "create_"+observability.ErrorReason(err), 0, err)
 		}
 		backup = f.Name()
 		defer func() {
@@ -325,17 +310,17 @@ func (s *Service) installDatabase(ctx context.Context, lib databaseSource, stage
 		old, err := os.Open(lib.path)
 		if err != nil {
 			f.Close()
-			return errors.New("无法读取原库文件")
+			return failure("database_backup", "read_"+observability.ErrorReason(err), 0, err)
 		}
 		_, copyErr := io.Copy(f, old)
 		readClose := old.Close()
 		syncErr := f.Sync()
 		writeClose := f.Close()
 		if errors.Join(copyErr, readClose, syncErr, writeClose) != nil {
-			return errors.New("无法保存库回滚副本")
+			return failure("database_backup", observability.ErrorReason(errors.Join(copyErr, readClose, syncErr, writeClose)), 0, errors.Join(copyErr, readClose, syncErr, writeClose))
 		}
 	} else if !os.IsNotExist(err) {
-		return errors.New("无法检查原库文件")
+		return failure("database_install", "stat_"+observability.ErrorReason(err), 0, err)
 	}
 	closeReader := func() {
 		switch lib.kind {
@@ -373,26 +358,37 @@ func (s *Service) installDatabase(ctx context.Context, lib databaseSource, stage
 	closeReader()
 	if err := os.Rename(stage, lib.path); err != nil {
 		if reopen := openReader(); reopen != nil {
-			return errors.Join(errors.New("库替换失败且旧库无法重新打开"), reopen)
+			return failure("database_rollback", "reopen_failed", 0, errors.Join(err, reopen))
 		}
-		return errors.New("库替换失败，已继续使用旧库")
+		return failure("database_install", "replace_"+observability.ErrorReason(err), 0, err)
 	}
 	if err := openReader(); err != nil {
 		if backup != "" {
-			if rollback := os.Rename(backup, lib.path); rollback != nil {
+			if rollback := s.rollbackDatabase(ctx, lib, backup); rollback != nil {
 				keepBackup = true
-				return fmt.Errorf("库重载和回滚失败，旧库副本保留在 %s", backup)
+				return rollback
 			}
 			if reopen := openReader(); reopen != nil {
-				return errors.Join(errors.New("库回滚后无法重新打开"), reopen)
+				return failure("database_rollback", "reopen_failed", 0, reopen)
 			}
 		}
-		return errors.New("新库无法重载，已回滚")
+		return failure("database_reload", "open_failed", 0, err)
 	}
 	s.mu.Lock()
 	s.revision++
 	s.generation++
 	s.cache = map[string]cached{}
 	s.mu.Unlock()
+	return nil
+}
+
+func (s *Service) rollbackDatabase(ctx context.Context, lib databaseSource, backup string) error {
+	if err := os.Rename(backup, lib.path); err != nil {
+		prefix, fields := traceFields(ctx)
+		reason := observability.ErrorReason(err)
+		fields = append(fields, "source", lib.kind, "stage", "database_rollback", "path", lib.path, "rollback_path", backup, "reason", reason)
+		s.log.Error(prefix+"属地库 "+lib.kind+" 回滚失败，保留恢复文件 "+backup+"，原因 "+reason, fields...)
+		return failure("database_rollback", "replace_"+observability.ErrorReason(err), 0, err)
+	}
 	return nil
 }

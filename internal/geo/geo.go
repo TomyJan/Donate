@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"math"
@@ -16,6 +17,7 @@ import (
 	"time"
 
 	"github.com/TomyJan/Donate/internal/config"
+	"github.com/TomyJan/Donate/internal/observability"
 	"github.com/oschwald/maxminddb-golang/v2"
 	"golang.org/x/sync/singleflight"
 	"golang.org/x/text/encoding/simplifiedchinese"
@@ -83,10 +85,7 @@ func New(c config.Config, l *slog.Logger) (*Service, error) {
 	s := &Service{config: c, log: l, cache: map[string]cached{}, HTTP: &http.Client{Timeout: 2 * time.Second, CheckRedirect: func(_ *http.Request, _ []*http.Request) error { return http.ErrUseLastResponse }}}
 	s.sources = []*source{{name: "ip9", endpoint: "https://ip9.com.cn/get?ip=", interval: 1200 * time.Millisecond}, {name: "ipyou", endpoint: "https://ipyou.net/", interval: 2 * time.Second}, {name: "i5p", endpoint: "https://www.i5p.com/api/ip?ip=", interval: 3 * time.Second}, {name: "pconline", endpoint: "https://whois.pconline.com.cn/ipJson.jsp?json=true&ip=", interval: 2 * time.Second, v4only: true}}
 	if c.GeoMode == "local" {
-		if err := s.openLocal(); err != nil {
-			s.Close()
-			return nil, err
-		}
+		s.openLocal()
 	}
 	return s, nil
 }
@@ -181,7 +180,7 @@ func (s *Service) lookup(ctx context.Context, ip string, force bool) (Location, 
 			s.mu.Unlock()
 		}
 		remember := func(p Location, err error) Location { return s.remember(ip, p, err, lookupRevision, force) }
-		ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 8*time.Second)
 		defer cancel()
 		out, err := s.resolve(ctx, a)
 		return remember(out, err), err
@@ -240,6 +239,25 @@ func (s *Service) remember(ip string, p Location, e error, revision uint64, forc
 	return p
 }
 func (s *Service) lookupOnline(ctx context.Context, src *source, ip string) (out Location, err error) {
+	started := time.Now()
+	defer func() {
+		if err != nil {
+			level := slog.LevelWarn
+			var f *sourceFailure
+			if errors.Is(err, context.Canceled) || errors.As(err, &f) && f.reason == "circuit_open" {
+				level = slog.LevelDebug
+			}
+			detail := Diagnostic(err)
+			prefix, fields := traceFields(ctx)
+			fields = append(fields, "ip", ip, "source", src.name, "diagnostic", detail, "duration_ms", time.Since(started).Milliseconds())
+			if f != nil {
+				fields = append(fields, "stage", f.stage, "reason", f.reason, "http_status", f.status)
+			}
+			s.log.Log(ctx, level, prefix+fmt.Sprintf("IP %s 的属地来源 %s 查询失败，%s，耗时 %d 毫秒", ip, src.name, detail, time.Since(started).Milliseconds()), fields...)
+		} else {
+			s.log.DebugContext(ctx, fmt.Sprintf("IP %s 的属地来源 %s 返回国家 %s、省份 %s，耗时 %d 毫秒", ip, src.name, out.Country, out.Province, time.Since(started).Milliseconds()), "ip", ip, "source", src.name, "country", out.Country, "province", out.Province, "duration_ms", time.Since(started).Milliseconds())
+		}
+	}()
 	src.mu.Lock()
 	if src.gate == nil {
 		src.gate = make(chan struct{}, 1)
@@ -257,7 +275,7 @@ func (s *Service) lookupOnline(ctx context.Context, src *source, ip string) (out
 	}
 	now := time.Now()
 	if src.blocked.After(now) {
-		return out, ErrUnavailable
+		return out, failure("rate_limit", "circuit_open", 0, ErrUnavailable)
 	}
 	if d := time.Until(src.next); d > 0 {
 		t := time.NewTimer(d)
@@ -285,12 +303,12 @@ func (s *Service) lookupOnline(ctx context.Context, src *source, ip string) (out
 	}()
 	req, e := http.NewRequestWithContext(ctx, "GET", src.endpoint+url.QueryEscape(ip), nil)
 	if e != nil {
-		return out, e
+		return out, failure("request", "request_invalid", 0, e)
 	}
 	req.Header.Set("Accept", "application/json")
 	r, e := s.HTTP.Do(req)
 	if e != nil {
-		return out, ErrUnavailable
+		return out, failure("request", observability.ErrorReason(e), 0, e)
 	}
 	defer r.Body.Close()
 	if r.StatusCode == 429 {
@@ -299,14 +317,17 @@ func (s *Service) lookupOnline(ctx context.Context, src *source, ip string) (out
 		} else if at, e := http.ParseTime(r.Header.Get("Retry-After")); e == nil {
 			src.blocked = at
 		}
-		return out, ErrUnavailable
+		return out, failure("response", "rate_limited", 429, ErrUnavailable)
 	}
 	if r.StatusCode != 200 {
-		return out, ErrUnavailable
+		return out, failure("response", "http_status", r.StatusCode, ErrUnavailable)
 	}
 	b, e := io.ReadAll(io.LimitReader(r.Body, 65537))
-	if e != nil || len(b) > 65536 {
-		return out, ErrUnavailable
+	if e != nil {
+		return out, failure("body", observability.ErrorReason(e), r.StatusCode, e)
+	}
+	if len(b) > 65536 {
+		return out, failure("body", "response_too_large", r.StatusCode, ErrUnavailable)
 	}
 	if src.name == "pconline" {
 		b, _, e = transform.Bytes(simplifiedchinese.GB18030.NewDecoder(), b)
@@ -320,7 +341,7 @@ func (s *Service) lookupOnline(ctx context.Context, src *source, ip string) (out
 func parse(name string, b []byte, ip string) (Location, error) {
 	var root map[string]json.RawMessage
 	if json.Unmarshal(b, &root) != nil {
-		return Location{}, ErrUnavailable
+		return Location{}, failure("decode", "invalid_json", 0, ErrUnavailable)
 	}
 	obj := root
 	if name == "ip9" || name == "i5p" {
@@ -331,7 +352,7 @@ func parse(name string, b []byte, ip string) (Location, error) {
 			key = "code"
 		}
 		if strings.Trim(string(root[key]), `"`) != code {
-			return Location{}, ErrUnavailable
+			return Location{}, failure("provider", "provider_rejected", 0, ErrUnavailable)
 		}
 		if json.Unmarshal(root["data"], &obj) != nil {
 			return Location{}, ErrUnavailable
@@ -348,7 +369,7 @@ func parse(name string, b []byte, ip string) (Location, error) {
 	a, e := netip.ParseAddr(str(obj, "ip"))
 	want, _ := netip.ParseAddr(ip)
 	if e != nil || a.Unmap() != want.Unmap() {
-		return Location{}, ErrUnavailable
+		return Location{}, failure("validate", "ip_mismatch", 0, ErrUnavailable)
 	}
 	if name == "ipyou" {
 		if json.Unmarshal(root["geo"], &obj) != nil {

@@ -88,21 +88,11 @@ func run() error {
 		}
 		return errors.New("仅支持 --version / backup / restore <备份路径>")
 	}
-	if e = geo.Bootstrap(ctx, c, log); e != nil {
-		return e
-	}
 	locator, e := geo.New(c, log)
 	if e != nil {
 		return e
 	}
 	defer locator.Close()
-	updateCtx, cancelUpdates := context.WithCancel(ctx)
-	updatesDone := make(chan struct{})
-	go func() {
-		defer close(updatesDone)
-		geo.NewUpdater(locator, c, log).Run(updateCtx)
-	}()
-	defer func() { cancelUpdates(); <-updatesDone }()
 	gateway, e := payment.NewGateway(c)
 	if e != nil {
 		return e
@@ -119,7 +109,7 @@ func run() error {
 	}
 	api := &httpapi.Server{Config: c, Auth: authentication, Orders: orders, Payments: &payment.Service{Orders: orders, Gateway: gateway}, Admin: admin.New(db, orders, c, log), Queue: queue, Log: log, Assets: assets, Version: httpapi.Version{Version: version, Commit: commit, Tag: tag, BuiltAt: builtAt}, Degraded: degraded}
 	server := &http.Server{Addr: c.Listen, Handler: api.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 60 * time.Second, IdleTimeout: 90 * time.Second, MaxHeaderBytes: 16 * 1024}
-	runner := &jobs.Runner{Queue: queue, Orders: orders, Gateway: gateway, Geo: locator}
+	runner := &jobs.Runner{Queue: queue, Orders: orders, Gateway: gateway, Geo: locator, IPDB: geo.NewUpdater(locator, c, log)}
 	done := make(chan struct{})
 	go func() { defer close(done); runner.Run(ctx) }()
 	go func() {

@@ -101,13 +101,19 @@ func main() {
 	jobProps := orderProps["jobs"].(schema)["items"].(schema)["properties"].(map[string]any)
 	jobProps["source"].(schema)["description"] = "The job's current wakeup source, such as automatic, manual, browser_return or admin_refresh. A geo job with admin_refresh forcibly rechecks current configured sources; automatic jobs must not be presented as manual requests."
 	jobProps["created_at"].(schema)["description"] = "Job creation instant. This is not the timestamp of each manual request when an active job is reused."
+	for _, name := range []string{"TaskItem", "TaskDetail"} {
+		props := schemas[name].(schema)["properties"].(map[string]any)
+		props["resource"].(schema)["description"] = "For geoip_update system jobs: xdb4, xdb6 or mmdb. Empty for order jobs. Download URLs and local paths are never exposed."
+		props["order_id"].(schema)["description"] = "Order UUID for order jobs; empty for geoip_update system jobs."
+	}
 	auditProps := schemas["Audit"].(schema)["properties"].(map[string]any)
 	for field, description := range map[string]string{
 		"actor":             "Current actor nickname, or the stable system key when unavailable.",
 		"target":            "Readable current target summary; empty when the target no longer exists. Never an ID or a retained order snapshot.",
-		"target_type":       "Target kind used to choose the order or user detail view.",
+		"target_type":       "Target kind: order, user, or task for a system-task retry.",
 		"target_exists":     "Whether the target currently exists. Disable target details when false.",
 		"target_nickname":   "Current target user nickname, or the current order owner's nickname when available. Absent for deleted targets.",
+		"target_resource":   "Current system-task library resource: xdb4, xdb6 or mmdb. Absent for other kinds and deleted tasks.",
 		"target_amount_fen": "Current order amount in fen. Absent for user targets and physically deleted orders.",
 	} {
 		auditProps[field].(schema)["description"] = description

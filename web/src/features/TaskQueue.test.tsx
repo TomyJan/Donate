@@ -12,6 +12,7 @@ const taskStyles = readFileSync('src/features/TaskQueue.css', 'utf8');
 const task = {
   id: 'task-one',
   kind: 'payment',
+  resource: '',
   order_id: 'order-one',
   merchant_order_no: 'DONATE-101',
   nickname: 'Alice',
@@ -234,6 +235,55 @@ function ObserveTaskToasts() {
     </div>
   );
 }
+
+it.each([
+  ['xdb4', 'IPv4 XDB'],
+  ['xdb6', 'IPv6 XDB'],
+  ['mmdb', 'City MMDB'],
+])('shows %s updates with a library target and no order action', async (resource, label) => {
+  const systemTask = {
+    ...task,
+    id: `update-${resource}`,
+    kind: 'geoip_update',
+    resource,
+    order_id: '',
+    merchant_order_no: '',
+    nickname: '',
+    result: 'database_update_failed',
+  };
+  const fixtureFetch = globalThis.fetch;
+  vi.stubGlobal('fetch', async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(String(input), 'http://localhost');
+    if (url.pathname.endsWith('/task/list'))
+      return ok({ items: [task, systemTask], total: 2, page: 1, page_size: 20 });
+    if (url.pathname.endsWith('/task/detail') && url.searchParams.get('id') === systemTask.id)
+      return ok({ ...systemTask, request_id: 'update-request', recording_since: task.created_at });
+    if (url.pathname.endsWith('/task/retry')) {
+      retries.push(JSON.parse(String(init?.body)));
+      return ok({ queued: 1, items: [{ id: systemTask.id, result: 'queued' }] });
+    }
+    return fixtureFetch(input, init);
+  });
+  await openTasks();
+  const row = (await screen.findByRole('button', { name: `Task details ${label}` })).closest('tr');
+  if (!row) throw new Error('System task row is missing');
+  expect(within(row).getByText(label)).toBeInTheDocument();
+  expect(within(row).queryByRole('button', { name: label })).not.toBeInTheDocument();
+  fireEvent.click(within(row).getByRole('button', { name: `Task details ${label}` }));
+  const detail = await screen.findByRole('dialog', { name: 'Task details' });
+  await within(detail).findByText('update-request');
+  expect(within(detail).getByText(label)).toBeInTheDocument();
+  expect(within(detail).queryByText('Order ID')).not.toBeInTheDocument();
+  expect(within(detail).queryByRole('button', { name: label })).not.toBeInTheDocument();
+  fireEvent.click(within(detail).getByRole('button', { name: 'Retry' }));
+  const confirm = await screen.findByRole('dialog', { name: 'Retry task' });
+  fireEvent.click(within(confirm).getByRole('button', { name: 'Confirm' }));
+  const results = await screen.findByRole('dialog', { name: 'Results' });
+  expect(
+    within(results).getByText(`IP database update · ${label} · ${systemTask.id.slice(-8)}`),
+  ).toBeInTheDocument();
+  expect(retries).toEqual([{ ids: [systemTask.id], idempotency_key: expect.any(String) }]);
+});
 
 it.each([false, true].flatMap((detail) => [200, 401, 403].map((status) => ({ detail, status }))))(
   'revokes retry HTTP $status before replacement credentials render (detail=$detail)',

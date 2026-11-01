@@ -84,7 +84,7 @@ func (x *xdbReader) lookup(a netip.Addr) (Location, error) {
 	return parseXDB(region, x.version, x.legacy)
 }
 
-func (s *Service) openLocal() (err error) {
+func (s *Service) openLocal() {
 	for _, db := range []struct {
 		path, name, kind string
 		version          *xdb.Version
@@ -96,24 +96,30 @@ func (s *Service) openLocal() (err error) {
 		if db.path == "" {
 			continue
 		}
-		err = validateDatabase(db.path, db.kind)
+		err := validateDatabase(db.path, db.kind)
 		if err == nil {
 			*db.target, err = openXDB(db.path, db.version)
 		}
 		if err != nil {
-			return fmt.Errorf("加载 %s 的 XDB 文件 %q 失败: %w", db.name, db.path, err)
+			s.log.Warn(fmt.Sprintf("属地库 %s 未就绪，文件 %s；保留其他可用库，缺少本地覆盖时临时在线查询", db.kind, db.path), "source", db.kind, "path", db.path, "error", err)
 		}
 	}
 	if s.config.GeoPath != "" {
-		err = validateDatabase(s.config.GeoPath, "mmdb")
+		err := validateDatabase(s.config.GeoPath, "mmdb")
 		if err == nil {
 			s.local, err = maxminddb.Open(s.config.GeoPath)
 		}
 		if err != nil {
-			return fmt.Errorf("加载 GEO_DATABASE 的 MMDB 文件 %q 失败: %w", s.config.GeoPath, err)
+			s.log.Warn(fmt.Sprintf("属地库 mmdb 未就绪，文件 %s；保留其他可用库，缺少本地覆盖时临时在线查询", s.config.GeoPath), "source", "mmdb", "path", s.config.GeoPath, "error", err)
 		}
 	}
-	return nil
+}
+
+// Readiness is protocol-specific: a healthy IPv4 reader cannot serve IPv6.
+func (s *Service) localReady(a netip.Addr) bool {
+	s.localMu.RLock()
+	defer s.localMu.RUnlock()
+	return !s.closed && (s.local != nil && (a.Is4() || s.local.Metadata.IPVersion == 6) || a.Is4() && s.xdb4 != nil || a.Is6() && s.xdb6 != nil)
 }
 
 func (s *Service) lookupLocal(a netip.Addr) (Location, error) {

@@ -24,7 +24,8 @@ export function taskLabel(t: (key: string) => string, group: string, code: strin
   const translated = t(key);
   return translated === key ? code : translated;
 }
-export function taskTarget(task: TaskItem) {
+export function taskTarget(task: TaskItem, t: (key: string) => string) {
+  if (task.kind === 'geoip_update') return taskLabel(t, 'resource', task.resource);
   return task.merchant_order_no || task.nickname || task.order_id.slice(0, 8);
 }
 export function TaskQueue() {
@@ -120,7 +121,7 @@ export function TaskQueue() {
           rows.find((row) => row.id === id) ??
           client.getQueryData<TaskDetail>(['admin-tasks', scope, 'detail', id]);
         const label = item
-          ? `${taskLabel(t, 'kind', item.kind)} · ${taskTarget(item)}`
+          ? `${taskLabel(t, 'kind', item.kind)} · ${taskTarget(item, t)}`
           : t('taskItemNumber').replace('{number}', String(index + 1));
         return [id, `${label} · ${id.slice(-8)}`];
       }),
@@ -308,7 +309,7 @@ export function TaskQueue() {
                         <input
                           className="custom-check"
                           type="checkbox"
-                          aria-label={`${t('taskSelect')} ${taskTarget(task)}`}
+                          aria-label={`${t('taskSelect')} ${taskTarget(task, t)}`}
                           disabled={list.isPlaceholderData}
                           checked={selection.has(task.id)}
                           onChange={() => toggle(task.id)}
@@ -324,14 +325,18 @@ export function TaskQueue() {
                       <small className="a-sub">{taskLabel(t, 'source', task.source)}</small>
                     </td>
                     <td data-field="order_id" data-label={t('target')}>
-                      <button
-                        type="button"
-                        className="text-button task-target"
-                        onClick={() => setOrderID(task.order_id)}
-                      >
-                        {task.nickname || t('orderTarget')}
-                        <small>{task.merchant_order_no || task.order_id.slice(0, 8)}</small>
-                      </button>
+                      {task.kind === 'geoip_update' ? (
+                        <span className="task-target">{taskTarget(task, t)}</span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="text-button task-target"
+                          onClick={() => setOrderID(task.order_id)}
+                        >
+                          {task.nickname || t('orderTarget')}
+                          <small>{task.merchant_order_no || task.order_id.slice(0, 8)}</small>
+                        </button>
+                      )}
                     </td>
                     <td data-field="status" data-label={t('status')}>
                       <span className={`a-badge task-${task.status}`}>
@@ -362,13 +367,13 @@ export function TaskQueue() {
                         {task.retryable &&
                           retryButton(
                             [task.id],
-                            `${t(task.status === 'ready' ? 'taskRunNow' : 'taskRetryAction')} ${taskTarget(task)}`,
+                            `${t(task.status === 'ready' ? 'taskRunNow' : 'taskRetryAction')} ${taskTarget(task, t)}`,
                             true,
                             task.status === 'ready',
                           )}
                         <Button
                           className="d-ghost a-icon"
-                          aria-label={`${t('taskDetails')} ${taskTarget(task)}`}
+                          aria-label={`${t('taskDetails')} ${taskTarget(task, t)}`}
                           onClick={() => setDetailID(task.id)}
                         >
                           <Ellipsis />

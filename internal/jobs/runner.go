@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/TomyJan/Donate/internal/geo"
+	"github.com/TomyJan/Donate/internal/observability"
 	"github.com/TomyJan/Donate/internal/order"
 	"github.com/TomyJan/Donate/internal/payment"
 	"github.com/TomyJan/Donate/internal/storage"
@@ -30,6 +31,7 @@ type Runner struct {
 	Orders        *order.Service
 	Gateway       Gateway
 	Geo           Locator
+	IPDB          LibraryUpdater
 	mu            sync.Mutex
 	next, blocked time.Time
 	failures      int
@@ -52,11 +54,15 @@ func (r *Runner) Run(ctx context.Context) {
 		wg.Go(func() { r.loop(ctx, []string{"close", "payment"}) })
 	}
 	wg.Go(func() { r.loop(ctx, []string{"geo"}) })
+	wg.Go(func() { r.loop(ctx, []string{"geoip_update"}) })
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 	for {
+		if e := r.ScheduleIPDB(ctx); e != nil && ctx.Err() == nil {
+			r.Queue.Log.Error("属地库更新调度失败，原因 "+observability.ErrorReason(e)+"，将在 30 秒后重试", "stage", "library_schedule", "reason", observability.ErrorReason(e))
+		}
 		if e := r.Orders.Expire(ctx); e != nil && ctx.Err() == nil {
-			r.Queue.Log.Error("到期扫描未完成，将于下一周期重试", "error", e)
+			r.Queue.Log.Error("订单到期扫描失败，原因 "+observability.ErrorReason(e)+"，将在 30 秒后重试", "stage", "order_expiry_scan", "reason", observability.ErrorReason(e))
 		}
 		select {
 		case <-ctx.Done():
@@ -79,7 +85,7 @@ func (r *Runner) loop(ctx context.Context, kinds []string) {
 			continue
 		}
 		if !errors.Is(e, sql.ErrNoRows) && ctx.Err() == nil {
-			r.Queue.Log.Error("任务领取失败，将重试", "error", e)
+			r.Queue.Log.Error(fmt.Sprintf("任务类型 %s 领取失败，原因 %s，将于下一秒重试", strings.Join(kinds, ","), observability.ErrorReason(e)), "kinds", kinds, "stage", "claim", "reason", observability.ErrorReason(e))
 		}
 		select {
 		case <-ctx.Done():
@@ -130,6 +136,10 @@ func (r *Runner) health(err error) {
 	}
 }
 func (r *Runner) Execute(parent context.Context, j Job) {
+	if j.Kind == "geoip_update" {
+		r.updateLibrary(parent, j)
+		return
+	}
 	ctx, cancel := context.WithTimeout(parent, 50*time.Second)
 	defer cancel()
 	o, e := r.Orders.Get(ctx, j.OrderID)
@@ -223,9 +233,13 @@ func taskDiagnostic(err error) string {
 	case errors.Is(err, geo.ErrDisabled):
 		return "geo_disabled"
 	case errors.Is(err, geo.ErrUnavailable):
-		return "geo_source_unavailable"
+		return geo.Diagnostic(err)
 	default:
-		return payment.Diagnostic(err)
+		reason := payment.Diagnostic(err)
+		if reason == "transport_unknown" {
+			return observability.ErrorReason(err)
+		}
+		return reason
 	}
 }
 func (r *Runner) finish(ctx context.Context, j Job, status, result string, next time.Time, causes ...error) {
@@ -241,7 +255,7 @@ func (r *Runner) finish(ctx context.Context, j Job, status, result string, next 
 	}
 	ok, e := r.Queue.Finish(ctx, j, status, result, next)
 	if e != nil {
-		r.Queue.Log.Error(fmt.Sprintf("订单 %s 的任务 %s 保存执行结果失败", j.OrderID, j.ID), "order_id", j.OrderID, "job_id", j.ID, "error", e)
+		r.Queue.Log.Error(fmt.Sprintf("订单 %s 的任务 %s 保存执行结果失败", j.OrderID, j.ID), "order_id", j.OrderID, "job_id", j.ID, "stage", "finish", "reason", observability.ErrorReason(e))
 	} else if ok {
 		level := slog.LevelInfo
 		if status == "failed" {
@@ -404,6 +418,7 @@ func (r *Runner) persistClose(ctx context.Context, j Job, o order.Order, remote 
 	return e
 }
 func (r *Runner) geolocate(ctx context.Context, j Job, o order.Order) {
+	ctx = geo.WithTask(ctx, j.ID, o.ID, j.RequestID)
 	refresh := j.Source == GeoRefreshSource
 	if r.Geo == nil {
 		status := "done"

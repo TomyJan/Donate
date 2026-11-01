@@ -96,7 +96,7 @@ func TestUpdaterReloadsMMDBAndStopsOnCancellation(t *testing.T) {
 	defer server.Close()
 	path := filepath.Join(t.TempDir(), "City.mmdb")
 	c := config.Config{Development: true, GeoMode: "local", GeoPath: path, GeoMMDBURL: server.URL, GeoUpdateDays: 7}
-	if err := Bootstrap(context.Background(), c, slog.Default()); err != nil {
+	if err := downloadInitialForTest(context.Background(), c, slog.Default()); err != nil {
 		t.Fatal(err)
 	}
 	s, err := New(c, slog.Default())
@@ -113,7 +113,7 @@ func TestUpdaterReloadsMMDBAndStopsOnCancellation(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	finished := make(chan struct{})
-	go func() { defer close(finished); u.Run(ctx) }()
+	go func() { defer close(finished); _ = u.Update(ctx, "mmdb") }()
 	cancel()
 	select {
 	case <-finished:
@@ -255,7 +255,7 @@ func TestUpdaterBootstrapsAndHotReloadsWithoutOldCache(t *testing.T) {
 	c := config.Config{Development: true, GeoMode: "local", GeoXDBv4: path, GeoXDBv4URL: server.URL + "?key=must-not-leak", GeoUpdateDays: 7}
 	var logs bytes.Buffer
 	l := slog.New(slog.NewTextHandler(&logs, nil))
-	if err := Bootstrap(context.Background(), c, l); err != nil {
+	if err := downloadInitialForTest(context.Background(), c, l); err != nil {
 		t.Fatal(err)
 	}
 	s, err := New(c, l)
@@ -268,7 +268,7 @@ func TestUpdaterBootstrapsAndHotReloadsWithoutOldCache(t *testing.T) {
 		t.Fatal(p, err)
 	}
 	u := NewUpdater(s, c, l)
-	if err := u.Check(context.Background()); err != nil || calls.Load() != 1 {
+	if err := checkDueUpdates(u, context.Background()); err != nil || calls.Load() != 1 {
 		t.Fatal("fresh file downloaded again", calls.Load(), err)
 	}
 	data.Store(newer)
@@ -276,7 +276,7 @@ func TestUpdaterBootstrapsAndHotReloadsWithoutOldCache(t *testing.T) {
 	if err := os.Chtimes(path, at, at); err != nil {
 		t.Fatal(err)
 	}
-	if err := u.Check(context.Background()); err != nil {
+	if err := checkDueUpdates(u, context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	p, err = s.Lookup(context.Background(), "1.1.1.1")
@@ -287,7 +287,7 @@ func TestUpdaterBootstrapsAndHotReloadsWithoutOldCache(t *testing.T) {
 	if err := os.Chtimes(path, at, at); err != nil {
 		t.Fatal(err)
 	}
-	if err := u.Check(context.Background()); err == nil {
+	if err := checkDueUpdates(u, context.Background()); err == nil {
 		t.Fatal("failed download reported success")
 	}
 	p, err = s.Refresh(context.Background(), "1.1.1.1")
@@ -305,7 +305,7 @@ func TestDisabledUpdatesNeverDownload(t *testing.T) {
 		{GeoMode: "disabled", GeoXDBv4URL: "https://invalid.example/key", GeoUpdateDays: 7},
 		{GeoMode: "local", GeoXDBv4URL: "https://invalid.example/key", GeoUpdateDays: 0},
 	} {
-		if err := Bootstrap(context.Background(), c, slog.Default()); err != nil {
+		if err := downloadInitialForTest(context.Background(), c, slog.Default()); err != nil {
 			t.Fatal(err)
 		}
 		u := NewUpdater(nil, c, slog.Default())
@@ -313,7 +313,7 @@ func TestDisabledUpdatesNeverDownload(t *testing.T) {
 			t.Error("disabled update used network")
 			return nil, ErrUnavailable
 		})
-		if err := u.Check(context.Background()); err != nil {
+		if err := checkDueUpdates(u, context.Background()); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -332,7 +332,7 @@ func TestInvalidUpdateKeepsUsableReaderAndOriginalFile(t *testing.T) {
 	defer s.Close()
 	at := time.Now().AddDate(0, 0, -2)
 	_ = os.Chtimes(path, at, at)
-	if err := NewUpdater(s, c, slog.Default()).Check(context.Background()); err == nil {
+	if err := checkDueUpdates(NewUpdater(s, c, slog.Default()), context.Background()); err == nil {
 		t.Fatal("HTML accepted as XDB")
 	}
 	after, _ := os.ReadFile(path)
@@ -340,4 +340,18 @@ func TestInvalidUpdateKeepsUsableReaderAndOriginalFile(t *testing.T) {
 	if !bytes.Equal(before, after) || err != nil || p.Province != "广东" {
 		t.Fatal("invalid download changed live file", p, err)
 	}
+}
+
+// Test orchestration drives the same due/update interface used by queue workers.
+func checkDueUpdates(u *Updater, ctx context.Context) error {
+	var failures []error
+	for _, kind := range u.Due(time.Now()) {
+		if err := u.Update(ctx, kind); err != nil {
+			failures = append(failures, err)
+		}
+	}
+	return errors.Join(failures...)
+}
+func downloadInitialForTest(ctx context.Context, c config.Config, l *slog.Logger) error {
+	return checkDueUpdates(NewUpdater(nil, c, l), ctx)
 }

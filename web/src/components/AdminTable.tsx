@@ -100,23 +100,33 @@ export function AdminTable({
       cell(
         'target',
         'target',
-        <button
-          type="button"
-          className="text-button audit-target"
-          disabled={!a.target_exists}
-          onClick={() => onTarget(a.target_type, a.target_id)}
-        >
-          {a.target_exists ? (
-            <>
-              <span>{a.target_nickname || t(a.target_type === 'order' ? 'orderTarget' : 'userTarget')}</span>
-              {a.target_type === 'order' && a.target_amount_fen != null && (
-                <small>¥{money(a.target_amount_fen)}</small>
-              )}
-            </>
-          ) : (
-            t(a.target_type === 'order' ? 'deletedOrder' : 'deletedUser')
-          )}
-        </button>,
+        a.target_type === 'task' ? (
+          <span className="audit-target">
+            {a.target_exists
+              ? `${t('taskTarget')} · ${t(`task_resource_${a.target_resource}`)}`
+              : t('deletedTask')}
+          </span>
+        ) : (
+          <button
+            type="button"
+            className="text-button audit-target"
+            disabled={!a.target_exists}
+            onClick={() => onTarget(a.target_type, a.target_id)}
+          >
+            {a.target_exists ? (
+              <>
+                <span>
+                  {a.target_nickname || t(a.target_type === 'order' ? 'orderTarget' : 'userTarget')}
+                </span>
+                {a.target_type === 'order' && a.target_amount_fen != null && (
+                  <small>¥{money(a.target_amount_fen)}</small>
+                )}
+              </>
+            ) : (
+              t(a.target_type === 'order' ? 'deletedOrder' : 'deletedUser')
+            )}
+          </button>
+        ),
       ),
       cell(
         'result',

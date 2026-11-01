@@ -42,7 +42,12 @@ export function TaskQueueFilters({
   }, []);
   const visible = width >= 920 ? 3 : width >= 780 ? 2 : width >= 640 ? 1 : 0;
   const basic = [
-    { key: 'kind' as const, label: 'taskKind', all: 'taskAllKinds', options: ['payment', 'geo', 'close'] },
+    {
+      key: 'kind' as const,
+      label: 'taskKind',
+      all: 'taskAllKinds',
+      options: ['payment', 'geo', 'close', 'geoip_update'],
+    },
     {
       key: 'status' as const,
       label: 'status',

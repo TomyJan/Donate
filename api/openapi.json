@@ -44,8 +44,12 @@
             "description": "Current target user nickname, or the current order owner's nickname when available. Absent for deleted targets.",
             "type": "string"
           },
+          "target_resource": {
+            "description": "Current system-task library resource: xdb4, xdb6 or mmdb. Absent for other kinds and deleted tasks.",
+            "type": "string"
+          },
           "target_type": {
-            "description": "Target kind used to choose the order or user detail view.",
+            "description": "Target kind: order, user, or task for a system-task retry.",
             "type": "string"
           }
         },
@@ -102,6 +106,9 @@
                   "type": "string"
                 },
                 "target_nickname": {
+                  "type": "string"
+                },
+                "target_resource": {
                   "type": "string"
                 },
                 "target_type": {
@@ -1533,6 +1540,7 @@
             "type": "string"
           },
           "order_id": {
+            "description": "Order UUID for order jobs; empty for geoip_update system jobs.",
             "type": "string"
           },
           "recording_since": {
@@ -1540,6 +1548,10 @@
             "type": "string"
           },
           "request_id": {
+            "type": "string"
+          },
+          "resource": {
+            "description": "For geoip_update system jobs: xdb4, xdb6 or mmdb. Empty for order jobs. Download URLs and local paths are never exposed.",
             "type": "string"
           },
           "result": {
@@ -1577,6 +1589,7 @@
           "order_id",
           "recording_since",
           "request_id",
+          "resource",
           "result",
           "retryable",
           "run_at",
@@ -1761,6 +1774,11 @@
             "type": "string"
           },
           "order_id": {
+            "description": "Order UUID for order jobs; empty for geoip_update system jobs.",
+            "type": "string"
+          },
+          "resource": {
+            "description": "For geoip_update system jobs: xdb4, xdb6 or mmdb. Empty for order jobs. Download URLs and local paths are never exposed.",
             "type": "string"
           },
           "result": {
@@ -1796,6 +1814,7 @@
           "merchant_order_no",
           "nickname",
           "order_id",
+          "resource",
           "result",
           "retryable",
           "run_at",
@@ -1949,6 +1968,9 @@
                 "order_id": {
                   "type": "string"
                 },
+                "resource": {
+                  "type": "string"
+                },
                 "result": {
                   "type": "string"
                 },
@@ -1982,6 +2004,7 @@
                 "merchant_order_no",
                 "nickname",
                 "order_id",
+                "resource",
                 "result",
                 "retryable",
                 "run_at",

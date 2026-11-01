@@ -7,7 +7,6 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -56,13 +55,26 @@ func TestExistingLocalDatabasesRequireFullStartupValidation(t *testing.T) {
 			if err := os.WriteFile(path, data, 0600); err != nil {
 				t.Fatal(err)
 			}
-			s, err := New(c, slog.Default())
-			if err == nil {
-				s.Close()
-				t.Fatal("startup accepted an unusable local database")
+			var logs bytes.Buffer
+			s, err := New(c, slog.New(slog.NewTextHandler(&logs, nil)))
+			if err != nil {
+				t.Fatalf("bad library should degrade, not block startup: %v", err)
 			}
-			if !strings.Contains(err.Error(), name) || !strings.Contains(err.Error(), strconv.Quote(path)) || !strings.Contains(err.Error(), reason) {
-				t.Fatalf("startup error lacks file/config/integrity context: %v", err)
+			defer s.Close()
+			kind := "mmdb"
+			if name == "GEO_XDB_IPV4" {
+				kind = "xdb4"
+			} else if name == "GEO_XDB_IPV6" {
+				kind = "xdb6"
+			}
+			if s.libraryReady(kind) {
+				t.Fatal("unusable local database was activated")
+			}
+			if !strings.Contains(logs.String(), reason) || !strings.Contains(logs.String(), filepath.Base(path)) {
+				t.Fatalf("missing degradation diagnostic: %s", logs.String())
+			}
+			if err := validateDatabase(path, kind); err == nil {
+				t.Fatal("invalid database passed integrity validation")
 			}
 			if got := mustReadDatabase(t, path); !bytes.Equal(got, data) {
 				t.Fatal("startup validation changed the existing database")

@@ -105,9 +105,21 @@ func TestXDBRejectsInvalidFiles(t *testing.T) {
 		{GeoMode: "local", GeoXDBv4: v4, GeoPath: short},
 	} {
 		s, e := New(tc, slog.Default())
-		if e == nil {
-			s.Close()
-			t.Fatal("invalid configured source silently ignored")
+		if e != nil {
+			t.Fatal("invalid file blocked degraded startup", e)
+		}
+		invalid := 0
+		for _, lib := range databaseSources(tc) {
+			if lib.path != "" && validateDatabase(lib.path, lib.kind) != nil {
+				invalid++
+				if s.libraryReady(lib.kind) {
+					t.Fatal("invalid file was activated", lib.kind)
+				}
+			}
+		}
+		s.Close()
+		if invalid == 0 {
+			t.Fatal("expected an invalid configured library")
 		}
 	}
 }

@@ -2,6 +2,7 @@ package geo
 
 import (
 	"context"
+	"errors"
 	"net/netip"
 	"time"
 )
@@ -61,6 +62,7 @@ func (s *Service) resolve(ctx context.Context, a netip.Addr) (Location, error) {
 	ip := a.String()
 	var primary, partial Location
 	var observations []Evidence
+	var lastFailure error
 	if s.config.GeoMode == "local" {
 		local, err := s.lookupLocal(a)
 		observations = append(observations, local.Evidence...)
@@ -69,7 +71,7 @@ func (s *Service) resolve(ctx context.Context, a netip.Addr) (Location, error) {
 		} else if local.Country != "" && err == nil {
 			partial = local
 		}
-		if !s.config.GeoOnlineFallback {
+		if !s.config.GeoOnlineFallback && s.localReady(a) {
 			if local.Country == "" && err == nil {
 				err = ErrUnavailable
 			}
@@ -89,7 +91,7 @@ func (s *Service) resolve(ctx context.Context, a netip.Addr) (Location, error) {
 		out, err := s.lookupOnline(ctx, src, ip)
 		observations = append(observations, evidence(out, src.name, err))
 		if err != nil {
-			s.log.Debug("IP "+ip+" 的属地来源 "+src.name+" 不可用，继续回退", "ip", ip, "source", src.name)
+			lastFailure = err
 			continue
 		}
 		if !complete(out) {
@@ -132,5 +134,5 @@ func (s *Service) resolve(ctx context.Context, a netip.Addr) (Location, error) {
 		s.log.Warn("IP "+ip+" 的属地来源均未取得省级信息，保留 "+partial.Source+" 的部分结果", "ip", ip, "source", partial.Source)
 		return decision(partial, "incomplete", false, observations), nil
 	}
-	return decision(Location{Source: "unknown", QueriedAt: time.Now().UTC()}, "unavailable", false, observations), ErrUnavailable
+	return decision(Location{Source: "unknown", QueriedAt: time.Now().UTC()}, "unavailable", false, observations), errors.Join(ErrUnavailable, lastFailure)
 }

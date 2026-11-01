@@ -6,6 +6,27 @@ import { AdminTable } from './AdminTable';
 
 vi.mock('../app/context', () => ({ useApp: () => ({ t: (key: string) => translate(key, 'en') }) }));
 afterEach(cleanup);
+
+it.each([true, false])('labels a system task audit without an order or user action (exists=%s)', (exists) => {
+  const audit = {
+    id: 'audit-task',
+    created_at: '2026-10-30T00:00:00Z',
+    action: 'task.retry',
+    actor: 'Admin',
+    actor_id: 'admin',
+    result: 'queued',
+    target: exists ? 'xdb4' : '',
+    target_exists: exists,
+    target_id: 'update-task',
+    target_type: 'task',
+    ...(exists ? { target_resource: 'xdb4' } : {}),
+  };
+  render(<AdminTable {...options} kind="audit" rows={[audit]} onSort={() => {}} />);
+  const target = document.querySelector('td[data-field=target]');
+  expect(target).toHaveTextContent(exists ? 'Task · IPv4 XDB' : 'Task no longer exists');
+  expect(target?.querySelector('button')).toBeNull();
+  expect(target).not.toHaveTextContent('User no longer exists');
+});
 const options = {
   sort: { key: 'created_at', direction: 'desc' as const },
   selection: new Set<string>(),

@@ -115,6 +115,7 @@ type Job struct {
 	RetryGeneration int64
 	EventSource     string
 	EventRequestID  string
+	Resource        string
 }
 
 type Order struct {

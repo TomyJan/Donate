@@ -122,19 +122,23 @@ function TaskDetailContent({
             <div>
               <dt>{t('target')}</dt>
               <dd>
-                <button
-                  type="button"
-                  className="text-button task-target"
-                  onClick={() => onOrder(task.order_id)}
-                >
-                  {task.nickname || t('orderTarget')}
-                  <small>{taskTarget(task)}</small>
-                </button>
+                {task.kind === 'geoip_update' ? (
+                  <span className="task-target">{taskTarget(task, t)}</span>
+                ) : (
+                  <button
+                    type="button"
+                    className="text-button task-target"
+                    onClick={() => onOrder(task.order_id)}
+                  >
+                    {task.nickname || t('orderTarget')}
+                    <small>{taskTarget(task, t)}</small>
+                  </button>
+                )}
               </dd>
             </div>
             {[
               ['taskID', task.id],
-              ['taskOrderID', task.order_id],
+              ...(task.kind === 'geoip_update' ? [] : [['taskOrderID', task.order_id]]),
               ['taskSource', taskLabel(t, 'source', task.source)],
               ['result', taskLabel(t, 'result', task.result)],
               ['taskAttempts', String(task.total_attempts)],

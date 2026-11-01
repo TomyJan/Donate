@@ -3,6 +3,10 @@ import { translate } from '../lib/i18n';
 import { taskLabel } from './TaskQueue';
 
 it.each([
+  ['database_updated', '属地库已更新', 'IP database updated'],
+  ['database_update_failed', '属地库更新失败', 'IP database update failed'],
+  ['database_update_interrupted', '属地库更新已中断', 'IP database update interrupted'],
+  ['disabled', '任务已禁用', 'Task disabled'],
   ['located_mmdb', '属地已更新', 'Location updated'],
   ['located_xdb', '属地已更新（XDB）', 'Location updated (XDB)'],
   ['located_ip9', '属地已更新（ip9）', 'Location updated (ip9)'],

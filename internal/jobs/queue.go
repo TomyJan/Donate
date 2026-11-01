@@ -24,6 +24,7 @@ func NewQueue(s *storage.Store, l *slog.Logger) *Queue { return &Queue{s, l, tim
 type Job struct {
 	ID         string    `json:"id"`
 	Kind       string    `json:"kind"`
+	Resource   string    `json:"resource"`
 	OrderID    string    `json:"order_id"`
 	Status     string    `json:"status"`
 	Attempts   int       `json:"attempts"`
@@ -115,14 +116,14 @@ func (q *Queue) enqueue(ctx context.Context, kind, orderID, source, actor, reque
 	return storage.IDString(result), e
 }
 
-const columns = "id,kind,order_id,status,attempts,source,actor_id,request_id,last_result,lease_token,run_at"
+const columns = "id,kind,order_id,status,attempts,source,actor_id,request_id,last_result,lease_token,run_at,resource"
 
 func scan(row interface{ Scan(...any) error }) (Job, error) {
 	var j Job
 	var id, oid, aid []byte
 	var lease sql.NullString
 	var run int64
-	e := row.Scan(&id, &j.Kind, &oid, &j.Status, &j.Attempts, &j.Source, &aid, &j.RequestID, &j.Result, &lease, &run)
+	e := row.Scan(&id, &j.Kind, &oid, &j.Status, &j.Attempts, &j.Source, &aid, &j.RequestID, &j.Result, &lease, &run, &j.Resource)
 	j.ID, j.OrderID, j.ActorID, j.LeaseToken = storage.IDString(id), storage.IDString(oid), storage.IDString(aid), lease.String
 	j.RunAt = time.Unix(run, 0).UTC()
 	return j, e
@@ -146,7 +147,11 @@ func (q *Queue) Claim(ctx context.Context, kinds []string) (Job, error) {
 		}
 		id, _ := storage.ParseID(j.ID)
 		lease := storage.NewID().String()
-		_, e = tx.ExecContext(ctx, "UPDATE jobs SET status='running',attempts=attempts+1,last_error='',event_source='',event_request_id='',lease_token=?,lease_until=?,rerun=CASE WHEN kind='geo' THEN 0 ELSE rerun END,updated_at=? WHERE id=?", lease, now.Add(time.Minute).Unix(), now.Unix(), id)
+		duration := time.Minute
+		if j.Kind == "geoip_update" {
+			duration = 3 * time.Minute
+		}
+		_, e = tx.ExecContext(ctx, "UPDATE jobs SET status='running',attempts=attempts+1,last_error='',event_source='',event_request_id='',lease_token=?,lease_until=?,rerun=CASE WHEN kind='geo' THEN 0 ELSE rerun END,updated_at=? WHERE id=?", lease, now.Add(duration).Unix(), now.Unix(), id)
 		j.Status = "running"
 		j.LeaseToken = lease
 		j.Attempts++
@@ -154,7 +159,11 @@ func (q *Queue) Claim(ctx context.Context, kinds []string) (Job, error) {
 		return e
 	})
 	if e == nil {
-		q.Log.Info(fmt.Sprintf("任务 %s 开始执行订单 %s，尝试 %d", out.ID, out.OrderID, out.Attempts), "job_id", out.ID, "order_id", out.OrderID, "attempt", out.Attempts)
+		if out.Kind == "geoip_update" {
+			q.Log.Info(fmt.Sprintf("属地库 %s 的任务 %s 开始执行，尝试 %d", out.Resource, out.ID, out.Attempts), "job_id", out.ID, "resource", out.Resource, "attempt", out.Attempts)
+		} else {
+			q.Log.Info(fmt.Sprintf("任务 %s 开始执行订单 %s，尝试 %d", out.ID, out.OrderID, out.Attempts), "job_id", out.ID, "order_id", out.OrderID, "attempt", out.Attempts)
+		}
 	}
 	return out, e
 }

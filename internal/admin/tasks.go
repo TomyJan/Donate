@@ -15,6 +15,7 @@ import (
 type TaskItem struct {
 	ID              string     `json:"id"`
 	Kind            string     `json:"kind"`
+	Resource        string     `json:"resource"`
 	OrderID         string     `json:"order_id"`
 	MerchantOrderNo string     `json:"merchant_order_no"`
 	Nickname        string     `json:"nickname"`
@@ -128,7 +129,7 @@ func taskWhere(f TaskFilter) (string, []any, error) {
 	for _, p := range []struct {
 		v, col string
 		ok     bool
-	}{{f.Status, "j.status", f.Status == "ready" || f.Status == "running" || f.Status == "done" || f.Status == "failed"}, {f.Kind, "j.kind", f.Kind == "payment" || f.Kind == "geo" || f.Kind == "close"}, {f.Source, "j.source", taskSources[f.Source]}} {
+	}{{f.Status, "j.status", f.Status == "ready" || f.Status == "running" || f.Status == "done" || f.Status == "failed"}, {f.Kind, "j.kind", f.Kind == "payment" || f.Kind == "geo" || f.Kind == "close" || f.Kind == "geoip_update"}, {f.Source, "j.source", taskSources[f.Source]}} {
 		if p.v != "" {
 			if !p.ok {
 				return "", nil, auth.ErrInvalid
@@ -160,8 +161,8 @@ func taskWhere(f TaskFilter) (string, []any, error) {
 		q := strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(f.Search)
 		lowerq := strings.ToLower(q)
 		hexq := strings.ReplaceAll(lowerq, "-", "")
-		where += " AND (lower(hex(j.id)) LIKE ? ESCAPE '\\' OR lower(hex(j.order_id)) LIKE ? ESCAPE '\\' OR lower(o.merchant_order_no) LIKE ? ESCAPE '\\' OR lower(COALESCE(NULLIF(trim(o.donor_nickname),''),i.nickname,'')) LIKE ? ESCAPE '\\')"
-		args = append(args, "%"+hexq+"%", "%"+hexq+"%", "%"+lowerq+"%", "%"+q+"%")
+		where += " AND (lower(hex(j.id)) LIKE ? ESCAPE '\\' OR lower(hex(j.order_id)) LIKE ? ESCAPE '\\' OR lower(o.merchant_order_no) LIKE ? ESCAPE '\\' OR lower(COALESCE(NULLIF(trim(o.donor_nickname),''),i.nickname,'')) LIKE ? ESCAPE '\\' OR lower(j.resource) LIKE ? ESCAPE '\\')"
+		args = append(args, "%"+hexq+"%", "%"+hexq+"%", "%"+lowerq+"%", "%"+q+"%", "%"+lowerq+"%")
 	}
 	return where, args, nil
 }
@@ -173,8 +174,8 @@ func taskSecond(at time.Time) int64 {
 	return v
 }
 
-const taskJoins = " FROM jobs j JOIN orders o ON o.id=j.order_id LEFT JOIN users u ON u.id=o.user_id LEFT JOIN identities i ON i.id=u.public_identity_id LEFT JOIN users actor ON actor.id=j.actor_id LEFT JOIN identities ai ON ai.id=actor.public_identity_id "
-const taskColumns = "j.id,j.kind,j.order_id,o.merchant_order_no,COALESCE(NULLIF(trim(o.donor_nickname),''),i.nickname,'捐赠者') AS nickname,j.status,j.attempts,j.total_attempts,j.source,j.last_result,j.created_at,j.updated_at,j.run_at,j.lease_until,j.actor_id,COALESCE(ai.nickname,''),j.request_id,j.recording_since,o.status"
+const taskJoins = " FROM jobs j LEFT JOIN orders o ON o.id=j.order_id LEFT JOIN users u ON u.id=o.user_id LEFT JOIN identities i ON i.id=u.public_identity_id LEFT JOIN users actor ON actor.id=j.actor_id LEFT JOIN identities ai ON ai.id=actor.public_identity_id "
+const taskColumns = "j.id,j.kind,j.resource,j.order_id,COALESCE(o.merchant_order_no,''),CASE WHEN o.id IS NULL THEN '' ELSE COALESCE(NULLIF(trim(o.donor_nickname),''),i.nickname,'捐赠者') END AS nickname,j.status,j.attempts,j.total_attempts,j.source,j.last_result,j.created_at,j.updated_at,j.run_at,j.lease_until,j.actor_id,COALESCE(ai.nickname,''),j.request_id,j.recording_since,COALESCE(o.status,'')"
 
 func scanTask(row interface{ Scan(...any) error }) (TaskDetail, error) {
 	var out TaskDetail
@@ -182,7 +183,7 @@ func scanTask(row interface{ Scan(...any) error }) (TaskDetail, error) {
 	var created, updated, run, recording int64
 	var lease sql.NullInt64
 	var orderStatus string
-	err := row.Scan(&id, &out.Kind, &oid, &out.MerchantOrderNo, &out.Nickname, &out.Status, &out.Attempts, &out.TotalAttempts, &out.Source, &out.Result, &created, &updated, &run, &lease, &aid, &out.ActorName, &out.RequestID, &recording, &orderStatus)
+	err := row.Scan(&id, &out.Kind, &out.Resource, &oid, &out.MerchantOrderNo, &out.Nickname, &out.Status, &out.Attempts, &out.TotalAttempts, &out.Source, &out.Result, &created, &updated, &run, &lease, &aid, &out.ActorName, &out.RequestID, &recording, &orderStatus)
 	out.ID = storage.IDString(id)
 	out.OrderID = storage.IDString(oid)
 	out.ActorID = storage.IDString(aid)
@@ -198,6 +199,31 @@ func scanTask(row interface{ Scan(...any) error }) (TaskDetail, error) {
 	out.Retryable = (out.Status == "failed" || out.Status == "ready") && (out.Kind == "geo" || orderStatus != "paid")
 	return out, err
 }
+
+func (s *Service) taskConfigured(kind, resource string) bool {
+	if kind == "geo" {
+		return s.Config.GeoMode != "disabled"
+	}
+	if kind != "geoip_update" {
+		return true
+	}
+	if s.Config.GeoMode != "local" || s.Config.GeoUpdateDays <= 0 {
+		return false
+	}
+	var path, url string
+	switch resource {
+	case "xdb4":
+		path, url = s.Config.GeoXDBv4, s.Config.GeoXDBv4URL
+	case "xdb6":
+		path, url = s.Config.GeoXDBv6, s.Config.GeoXDBv6URL
+	case "mmdb":
+		path, url = s.Config.GeoPath, s.Config.GeoMMDBURL
+	default:
+		return false
+	}
+	return strings.TrimSpace(path) != "" && strings.TrimSpace(url) != ""
+}
+
 func (s *Service) Tasks(ctx context.Context, f TaskFilter) (Page[TaskItem], error) {
 	out := Page[TaskItem]{Items: []TaskItem{}, Page: max(1, f.Page), Size: f.Size}
 	if out.Size == 0 {
@@ -233,7 +259,7 @@ func (s *Service) Tasks(ctx context.Context, f TaskFilter) (Page[TaskItem], erro
 			rows.Close()
 			return out, e
 		}
-		if v.Kind == "geo" && s.Config.GeoMode == "disabled" {
+		if !s.taskConfigured(v.Kind, v.Resource) {
 			v.Retryable = false
 		}
 		out.Items = append(out.Items, v.TaskItem)
@@ -251,7 +277,7 @@ func (s *Service) Task(ctx context.Context, id string) (TaskDetail, error) {
 		return TaskDetail{}, auth.ErrInvalid
 	}
 	out, err := scanTask(s.Store.DB.QueryRowContext(ctx, "SELECT "+taskColumns+taskJoins+" WHERE j.id=?", bid))
-	if out.Kind == "geo" && s.Config.GeoMode == "disabled" {
+	if !s.taskConfigured(out.Kind, out.Resource) {
 		out.Retryable = false
 	}
 	if errors.Is(err, sql.ErrNoRows) {

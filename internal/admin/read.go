@@ -551,6 +551,7 @@ type Audit struct {
 	Target          string    `json:"target"`
 	TargetExists    bool      `json:"target_exists"`
 	TargetNickname  string    `json:"target_nickname,omitempty"`
+	TargetResource  string    `json:"target_resource,omitempty"`
 	TargetAmountFen *int64    `json:"target_amount_fen,omitempty"`
 	Result          string    `json:"result"`
 	CreatedAt       time.Time `json:"created_at"`
@@ -576,7 +577,7 @@ func (s *Service) Audit(ctx context.Context, f Filter) (Page[Audit], error) {
 	if f.Direction == "asc" {
 		dir = " ASC"
 	}
-	rows, e := s.Store.DB.QueryContext(ctx, "SELECT a.id,a.actor_id,COALESCE(NULLIF(i.nickname,''),'system'),a.action,a.target_type,a.target_id,CASE WHEN a.target_type='order' THEN o.id IS NOT NULL WHEN a.target_type='user' THEN tu.id IS NOT NULL ELSE 0 END,CASE WHEN a.target_type='order' THEN COALESCE(NULLIF(trim(o.donor_nickname, ' '||char(9)||char(10)||char(13)||char(12288)),''),oi.nickname,'') ELSE COALESCE(ti.nickname,'') END,o.amount_fen,a.result,a.created_at FROM audit_events a LEFT JOIN users u ON u.id=a.actor_id LEFT JOIN identities i ON i.id=u.public_identity_id LEFT JOIN orders o ON a.target_type='order' AND o.id=a.target_id LEFT JOIN users ou ON ou.id=o.user_id LEFT JOIN identities oi ON oi.id=ou.public_identity_id LEFT JOIN users tu ON a.target_type='user' AND tu.id=a.target_id LEFT JOIN identities ti ON ti.id=tu.public_identity_id WHERE "+where+" ORDER BY "+col+dir+",a.id"+dir+" LIMIT ? OFFSET ?", append(args, size, (page-1)*size)...)
+	rows, e := s.Store.DB.QueryContext(ctx, "SELECT a.id,a.actor_id,COALESCE(NULLIF(i.nickname,''),'system'),a.action,a.target_type,a.target_id,CASE WHEN a.target_type='order' THEN o.id IS NOT NULL WHEN a.target_type='user' THEN tu.id IS NOT NULL WHEN a.target_type='task' THEN j.id IS NOT NULL ELSE 0 END,CASE WHEN a.target_type='order' THEN COALESCE(NULLIF(trim(o.donor_nickname, ' '||char(9)||char(10)||char(13)||char(12288)),''),oi.nickname,'') ELSE COALESCE(ti.nickname,'') END,COALESCE(j.resource,''),o.amount_fen,a.result,a.created_at FROM audit_events a LEFT JOIN users u ON u.id=a.actor_id LEFT JOIN identities i ON i.id=u.public_identity_id LEFT JOIN orders o ON a.target_type='order' AND o.id=a.target_id LEFT JOIN users ou ON ou.id=o.user_id LEFT JOIN identities oi ON oi.id=ou.public_identity_id LEFT JOIN jobs j ON a.target_type='task' AND j.id=a.target_id LEFT JOIN users tu ON a.target_type='user' AND tu.id=a.target_id LEFT JOIN identities ti ON ti.id=tu.public_identity_id WHERE "+where+" ORDER BY "+col+dir+",a.id"+dir+" LIMIT ? OFFSET ?", append(args, size, (page-1)*size)...)
 	if e != nil {
 		return out, e
 	}
@@ -586,11 +587,14 @@ func (s *Service) Audit(ctx context.Context, f Filter) (Page[Audit], error) {
 		var id, actor, target []byte
 		var at int64
 		var amount sql.NullInt64
-		if e = rows.Scan(&id, &actor, &a.Actor, &a.Action, &a.TargetType, &target, &a.TargetExists, &a.TargetNickname, &amount, &a.Result, &at); e != nil {
+		if e = rows.Scan(&id, &actor, &a.Actor, &a.Action, &a.TargetType, &target, &a.TargetExists, &a.TargetNickname, &a.TargetResource, &amount, &a.Result, &at); e != nil {
 			return out, e
 		}
 		if a.TargetExists {
 			a.Target = a.TargetNickname
+			if a.TargetType == "task" {
+				a.Target = a.TargetResource
+			}
 			if a.TargetType == "order" && amount.Valid {
 				a.TargetAmountFen = &amount.Int64
 				price := fmt.Sprintf("¥%d.%02d", amount.Int64/100, amount.Int64%100)

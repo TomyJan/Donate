@@ -26,10 +26,8 @@ func TestXDBRejectsOutOfBoundsIndex(t *testing.T) {
 	if err = os.WriteFile(path, raw, 0600); err != nil {
 		t.Fatal(err)
 	}
-	s, err := New(config.Config{GeoMode: "local", GeoXDBv4: path}, slog.Default())
-	if err == nil {
-		s.Close()
-		t.Fatal("invalid index accepted at startup")
+	if err := validateDatabase(path, "xdb4"); err == nil {
+		t.Fatal("invalid index accepted")
 	}
 }
 
@@ -104,9 +102,11 @@ func TestXDBRejectsOtherExclusiveVectorBounds(t *testing.T) {
 				if err = os.WriteFile(path, raw, 0600); err != nil {
 					t.Fatal(err)
 				}
-				s, err := New(c, slog.Default())
-				if err == nil {
-					s.Close()
+				kind := "xdb4"
+				if a.Is6() {
+					kind = "xdb6"
+				}
+				if err := validateDatabase(path, kind); err == nil {
 					t.Fatal("out-of-bounds vector accepted")
 				}
 			})
@@ -134,11 +134,10 @@ func TestXDBLegacyFileAndMissingIPFamily(t *testing.T) {
 		t.Fatal(p, err)
 	}
 	s.HTTP.Transport = transport(func(*http.Request) (*http.Response, error) {
-		t.Error("offline IPv6 leaked to API")
-		return nil, ErrUnavailable
+		return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader("{\"ret\":200,\"data\":{\"ip\":\"240e::1\",\"country\":\"中国\",\"prov\":\"江苏\"}}"))}, nil
 	})
-	if _, err = s.Lookup(context.Background(), "240e::1"); !errors.Is(err, ErrUnavailable) {
-		t.Fatalf("missing family reported success: %v", err)
+	if p, err := s.Lookup(context.Background(), "240e::1"); err != nil || p.Source != "ip9" || p.Province != "江苏" {
+		t.Fatalf("missing IP family did not degrade online: %+v %v", p, err)
 	}
 	s.Close()
 	if _, err = s.Lookup(context.Background(), "1.1.1.1"); !errors.Is(err, ErrUnavailable) {

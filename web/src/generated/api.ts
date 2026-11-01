@@ -652,7 +652,9 @@ export interface components {
             target_id: string;
             /** @description Current target user nickname, or the current order owner's nickname when available. Absent for deleted targets. */
             target_nickname?: string;
-            /** @description Target kind used to choose the order or user detail view. */
+            /** @description Current system-task library resource: xdb4, xdb6 or mmdb. Absent for other kinds and deleted tasks. */
+            target_resource?: string;
+            /** @description Target kind: order, user, or task for a system-task retry. */
             target_type: string;
         };
         AuditPage: {
@@ -670,6 +672,7 @@ export interface components {
                 target_exists: boolean;
                 target_id: string;
                 target_nickname?: string;
+                target_resource?: string;
                 target_type: string;
             }[];
             /** Format: int64 */
@@ -1089,10 +1092,13 @@ export interface components {
             lease_until?: string | null;
             merchant_order_no: string;
             nickname: string;
+            /** @description Order UUID for order jobs; empty for geoip_update system jobs. */
             order_id: string;
             /** Format: date-time */
             recording_since: string;
             request_id: string;
+            /** @description For geoip_update system jobs: xdb4, xdb6 or mmdb. Empty for order jobs. Download URLs and local paths are never exposed. */
+            resource: string;
             result: string;
             retryable: boolean;
             /** Format: date-time */
@@ -1161,7 +1167,10 @@ export interface components {
             lease_until?: string | null;
             merchant_order_no: string;
             nickname: string;
+            /** @description Order UUID for order jobs; empty for geoip_update system jobs. */
             order_id: string;
+            /** @description For geoip_update system jobs: xdb4, xdb6 or mmdb. Empty for order jobs. Download URLs and local paths are never exposed. */
+            resource: string;
             result: string;
             retryable: boolean;
             /** Format: date-time */
@@ -1225,6 +1234,7 @@ export interface components {
                 merchant_order_no: string;
                 nickname: string;
                 order_id: string;
+                resource: string;
                 result: string;
                 retryable: boolean;
                 /** Format: date-time */
