@@ -224,12 +224,25 @@ export function AppProvider({ children }: { children: ReactNode }) {
     }
   };
   const logout = async () => {
+    let valid = true;
+    const sameSession = () => {
+      const live = client.getQueryData<Profile | null>(['profile']);
+      return !!current && live?.id === current.id && live.csrf_token === current.csrf_token;
+    };
+    const isCurrent = () => valid && sameSession();
+    const unsubscribe = client.getQueryCache().subscribe((event) => {
+      if (event.query.queryKey[0] === 'profile' && !sameSession()) valid = false;
+    });
     try {
-      await api('user/logout', {});
+      if (!isCurrent()) return;
+      await api('user/logout', {}, undefined, isCurrent);
+      if (!isCurrent()) return;
       clearSession();
       await refresh();
     } catch (e) {
-      report(e);
+      if (isCurrent()) report(e);
+    } finally {
+      unsubscribe();
     }
   };
   return (

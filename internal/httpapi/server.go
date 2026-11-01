@@ -109,7 +109,7 @@ func (s *Server) respond(w http.ResponseWriter, r *http.Request, status int, cod
 			return
 		}
 		if renewed {
-			s.setCookie(w, s.sessionName(), st.Token, session.ExpiresAt)
+			s.writeSessionCookie(w, r, st.Token, session)
 		}
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
@@ -297,16 +297,11 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 			w.Header().Set("Strict-Transport-Security", "max-age=31536000")
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, 64*1024)
-		st.Token = cookie(r, s.sessionName())
-		if st.Token != "" {
-			session, e := s.Auth.Resolve(r.Context(), st.Token)
-			if e == nil {
-				st.Session = &session
-			} else {
-				st.AuthError = e
-				// A response for old credentials may arrive after a newer login.
-				// Do not overwrite that login's cookie when rejecting this token.
-			}
+		var cookieError error
+		r, cookieError = s.resolveSessionCookies(w, r)
+		if cookieError != nil {
+			s.respond(w, r, http.StatusRequestHeaderFieldsTooLarge, "VALIDATION_FAILED", "会话凭证过多，请清理本站 Cookie", nil)
+			return
 		}
 		if !s.limits.allow(s.clientIP(r)+":http", 600, time.Minute) {
 			s.respond(w, r, 429, "RATE_LIMITED", "请稍后重试", nil)

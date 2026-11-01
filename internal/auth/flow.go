@@ -21,9 +21,10 @@ import (
 )
 
 type FlowStart struct {
-	URL    string `json:"authorization_url"`
-	State  string `json:"-"`
-	Cookie string `json:"-"`
+	URL           string `json:"authorization_url"`
+	State         string `json:"-"`
+	Cookie        string `json:"-"`
+	BrowserFamily string `json:"-"`
 }
 type flowSecret struct {
 	Verifier string
@@ -159,14 +160,28 @@ func (s *Service) BeginFlow(ctx context.Context, provider, intent string, sessio
 		sid, _ = storage.ParseID(session.ID)
 	}
 	now := s.Now()
+	var family browserFamily
 	e = s.Store.Write(ctx, func(tx *sql.Tx) error {
-		_, e := tx.ExecContext(ctx, "INSERT INTO auth_flows(id,state_hash,cookie_hash,provider,intent,user_id,session_id,nonce,secret,created_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)", id[:], hash(state), hash(cookie), provider, intent, uid, sid, nonce, b, now.Unix(), now.Add(10*time.Minute).Unix())
+		families := browserFamilies(ctx)
+		if sid != nil {
+			var existing []byte
+			if err := tx.QueryRowContext(ctx, "SELECT browser_family_id FROM sessions WHERE id=?", sid).Scan(&existing); err != nil {
+				return err
+			}
+			families = append(families, storage.IDString(existing))
+		}
+		var err error
+		family, err = s.mergeFamiliesTx(ctx, tx, families, true)
+		if err != nil {
+			return err
+		}
+		_, e := tx.ExecContext(ctx, "INSERT INTO auth_flows(id,state_hash,cookie_hash,provider,intent,user_id,session_id,nonce,secret,created_at,expires_at,browser_family_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", id[:], hash(state), hash(cookie), provider, intent, uid, sid, nonce, b, now.Unix(), now.Add(10*time.Minute).Unix(), family.id)
 		return e
 	})
 	if e == nil {
 		s.Log.Info(fmt.Sprintf("授权流程 %s 已创建，方式 %s，意图 %s", id.String(), provider, intent), "flow_id", id.String(), "provider", provider, "intent", intent)
 	}
-	return FlowStart{authURL, state, id.String() + "." + cookie}, e
+	return FlowStart{URL: authURL, State: state, Cookie: id.String() + "." + cookie, BrowserFamily: storage.IDString(family.id)}, e
 }
 func (s *Service) readFlow(ctx context.Context, tx *sql.Tx, cookie string) (flow, error) {
 	var out flow

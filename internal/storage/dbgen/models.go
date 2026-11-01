@@ -37,20 +37,33 @@ type AuditEvent struct {
 }
 
 type AuthFlow struct {
-	ID         []byte
-	StateHash  []byte
-	CookieHash []byte
-	Provider   string
-	Intent     string
-	UserID     []byte
-	SessionID  []byte
-	Nonce      string
-	Secret     []byte
-	Stage      string
-	Attempts   int64
-	CreatedAt  int64
-	ExpiresAt  int64
-	ConsumedAt sql.NullInt64
+	ID              []byte
+	StateHash       []byte
+	CookieHash      []byte
+	Provider        string
+	Intent          string
+	UserID          []byte
+	SessionID       []byte
+	Nonce           string
+	Secret          []byte
+	Stage           string
+	Attempts        int64
+	CreatedAt       int64
+	ExpiresAt       int64
+	ConsumedAt      sql.NullInt64
+	BrowserFamilyID []byte
+}
+
+type BrowserFamily struct {
+	ID                 []byte
+	ParentID           []byte
+	CurrentSessionID   []byte
+	CurrentIssuedOrder int64
+}
+
+type BrowserSessionSequence struct {
+	ID          int64
+	IssuedOrder int64
 }
 
 type IdempotencyRecord struct {
@@ -176,15 +189,17 @@ type PaymentObservation struct {
 }
 
 type Session struct {
-	ID         []byte
-	UserID     []byte
-	IdentityID []byte
-	TokenHash  []byte
-	CsrfHash   []byte
-	CreatedAt  int64
-	RenewedAt  int64
-	ExpiresAt  int64
-	RevokedAt  sql.NullInt64
+	ID              []byte
+	UserID          []byte
+	IdentityID      []byte
+	TokenHash       []byte
+	CsrfHash        []byte
+	CreatedAt       int64
+	RenewedAt       int64
+	ExpiresAt       int64
+	RevokedAt       sql.NullInt64
+	BrowserFamilyID []byte
+	IssuedOrder     int64
 }
 
 type TaskEvent struct {

@@ -33,7 +33,7 @@ func TestSessionRenewSetsCookieOnlyWhenExpiryChanges(t *testing.T) {
 		r := httptest.NewRequest("POST", "/api/v1/user/session/renew", strings.NewReader("{}"))
 		r.Header.Set("Origin", s.Config.PublicURL)
 		r.Header.Set("X-CSRF-Token", c.Session.CSRF)
-		r.AddCookie(&http.Cookie{Name: s.sessionName(), Value: c.Token})
+		r.AddCookie(&http.Cookie{Name: s.sessionCookieName(c.Session.ID), Value: c.Token})
 		w := httptest.NewRecorder()
 		h.ServeHTTP(w, r)
 		if w.Code != 200 {
@@ -41,7 +41,7 @@ func TestSessionRenewSetsCookieOnlyWhenExpiryChanges(t *testing.T) {
 		}
 		var count int
 		for _, cookie := range w.Result().Cookies() {
-			if cookie.Name == s.sessionName() {
+			if cookie.Name == s.sessionCookieName(c.Session.ID) {
 				count++
 				if cookie.Value != c.Token {
 					t.Fatal("credential rotated")
@@ -83,7 +83,7 @@ func TestConcurrentSuccessfulPostsSetOneRenewalCookie(t *testing.T) {
 				t.Errorf("business response changed: %d %s", w.Code, w.Body.String())
 			}
 			for _, cookie := range w.Result().Cookies() {
-				if cookie.Name == s.sessionName() {
+				if cookie.Name == s.sessionCookieName(c.Session.ID) {
 					cookies.Add(1)
 				}
 			}

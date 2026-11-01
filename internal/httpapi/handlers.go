@@ -48,6 +48,7 @@ func (s *Server) begin(w http.ResponseWriter, r *http.Request, intent string) {
 		return
 	}
 	s.setCookie(w, s.cookieName("flow"), v.Cookie, time.Now().Add(10*time.Minute))
+	s.setBrowserCookie(w, v.BrowserFamily, s.Auth.Now().Add(auth.IdleTTL))
 	s.ok(w, r, v)
 }
 func (s *Server) login(w http.ResponseWriter, r *http.Request) { s.begin(w, r, "login") }
@@ -69,7 +70,7 @@ func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) finishFlow(w http.ResponseWriter, r *http.Request, result auth.FlowResult) {
 	if result.Credentials != nil {
-		s.setCookie(w, s.sessionName(), result.Credentials.Token, result.Credentials.Session.ExpiresAt)
+		s.writeSessionCookie(w, r, result.Credentials.Token, result.Credentials.Session)
 	}
 	if result.NeedQQ {
 		http.Redirect(w, r, "/auth/complete", 303)
@@ -104,7 +105,7 @@ func (s *Server) completeQQ(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if v.Credentials != nil {
-		s.setCookie(w, s.sessionName(), v.Credentials.Token, v.Credentials.Session.ExpiresAt)
+		s.writeSessionCookie(w, r, v.Credentials.Token, v.Credentials.Session)
 		// The login transaction revoked the old token. Renew the newly issued session.
 		state(r).Token = v.Credentials.Token
 		state(r).Session = &v.Credentials.Session
@@ -125,7 +126,7 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 		s.failure(w, r, e)
 		return
 	}
-	s.setCookie(w, s.sessionName(), "", time.Unix(0, 0))
+	s.expireSessionCookie(w, r)
 	s.ok(w, r, nil)
 }
 func (s *Server) list(w http.ResponseWriter, r *http.Request) {
@@ -396,7 +397,7 @@ func (s *Server) unbindIdentity(w http.ResponseWriter, r *http.Request) {
 		// The mutation already removed this credential. Do not turn its success
 		// into a renewal error or issue the revoked cookie again.
 		st.SessionRevoked = true
-		s.setCookie(w, s.sessionName(), "", time.Unix(0, 0))
+		s.expireSessionCookie(w, r)
 	}
 	s.ok(w, r, nil)
 }

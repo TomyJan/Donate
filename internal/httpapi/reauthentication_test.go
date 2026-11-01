@@ -9,7 +9,9 @@ import (
 	"image/png"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 )
@@ -60,10 +62,12 @@ func TestRegressionQQReauthenticationReturnsSuccess(t *testing.T) {
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, req)
 	newValid := false
+	var completed auth.Session
 	for _, c := range w.Result().Cookies() {
-		if c.Name == s.sessionName() {
-			if _, e := a.Resolve(ctx, c.Value); e == nil {
+		if strings.HasPrefix(c.Name, s.sessionName()+"_") && c.Value != "" {
+			if session, e := a.Resolve(ctx, c.Value); e == nil {
 				newValid = true
+				completed = session
 			}
 		}
 	}
@@ -73,5 +77,24 @@ func TestRegressionQQReauthenticationReturnsSuccess(t *testing.T) {
 	}
 	if _, e = a.Resolve(ctx, old.Token); !errors.Is(e, auth.ErrUnauthorized) {
 		t.Fatal("old credential remains usable", e)
+	}
+	newest, e := a.LoginIdentity(auth.WithBrowserFamilies(ctx, []string{completed.BrowserFamily}), auth.Identity{Provider: "qq", Issuer: "123", Subject: "new-qq", QQNumber: "12345"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	origin, _ := url.Parse(s.Config.PublicURL)
+	jar, _ := cookiejar.New(nil)
+	issued := httptest.NewRecorder()
+	s.writeSessionCookie(issued, httptest.NewRequest("GET", "/", nil), newest.Token, newest.Session)
+	jar.SetCookies(origin, issued.Result().Cookies())
+	jar.SetCookies(origin, w.Result().Cookies())
+	profile := httptest.NewRequest("GET", "/api/v1/user/profile", nil)
+	for _, c := range jar.Cookies(origin) {
+		profile.AddCookie(c)
+	}
+	current := httptest.NewRecorder()
+	h.ServeHTTP(current, profile)
+	if current.Code != 200 || !strings.Contains(current.Body.String(), newest.Session.CSRF) {
+		t.Fatalf("late successful QQ completion replaced current session: %d %s", current.Code, current.Body)
 	}
 }

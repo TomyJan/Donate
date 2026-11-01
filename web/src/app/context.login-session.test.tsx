@@ -34,6 +34,9 @@ function Controls() {
       <button type="button" onClick={() => void app.login('oidc')}>
         Sign in
       </button>
+      <button type="button" onClick={() => void app.logout()}>
+        Log out
+      </button>
       <output data-testid="toasts">{JSON.stringify(app.toasts)}</output>
     </>
   );
@@ -54,7 +57,7 @@ afterEach(() => {
   localStorage.clear();
   history.replaceState(null, '', '/');
 });
-async function fixture(initial: Profile | null, pauseBeforePost = false) {
+async function fixture(initial: Profile | null, pauseBeforePost = false, logout = false) {
   let serverProfile = initial;
   let finish: (response: Response) => void = () => {
     throw new Error('request not started');
@@ -69,7 +72,7 @@ async function fixture(initial: Profile | null, pauseBeforePost = false) {
   if (pauseBeforePost) history.replaceState(null, '', '/auth/complete');
   vi.stubGlobal('fetch', (path: string, init?: RequestInit) => {
     requests.push(path);
-    if (path.endsWith(pauseBeforePost ? 'user/login/status' : 'user/login')) {
+    if (path.endsWith(pauseBeforePost ? 'user/login/status' : logout ? 'user/logout' : 'user/login')) {
       signal = init?.signal;
       startedAt = performance.now();
       startedDate = Date.now();
@@ -118,9 +121,11 @@ async function fixture(initial: Profile | null, pauseBeforePost = false) {
   await act(async () => {});
   // Only the already-loaded page ages; no request is pending during this advance.
   vi.setSystemTime(Date.now() + 16000);
-  fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+  fireEvent.click(screen.getByRole('button', { name: logout ? 'Log out' : 'Sign in' }));
   await waitFor(() =>
-    expect(requests).toContain(`/api/v1/${pauseBeforePost ? 'user/login/status' : 'user/login'}`),
+    expect(requests).toContain(
+      `/api/v1/${pauseBeforePost ? 'user/login/status' : logout ? 'user/logout' : 'user/login'}`,
+    ),
   );
   return {
     client,
@@ -216,4 +221,42 @@ it.each([null, alice])('allows a current explicitly initiated normal login (%s)'
   f.assertLiveRequest();
   await act(async () => f.finish(ok({ authorization_url: '#authorized' })));
   await waitFor(() => expect(location.hash).toBe('#authorized'));
+});
+
+it.each(
+  ['different-user', 'same-id-new-csrf', 'aba'].flatMap((replacement) =>
+    ['success', '401', '403', 'network'].map((outcome) => ({ replacement, outcome })),
+  ),
+)('ignores an old logout $outcome after $replacement replacement', async ({ replacement, outcome }) => {
+  const f = await fixture(alice, false, true);
+  const next =
+    replacement === 'same-id-new-csrf'
+      ? { ...alice, nickname: 'Replacement', csrf_token: 'new-alice-csrf' }
+      : bob;
+  if (replacement === 'aba') {
+    act(() => {
+      f.client.setQueryData(['profile'], next);
+      f.client.setQueryData(['profile'], alice);
+    });
+  } else await f.reconnect(next);
+  const expected = replacement === 'aba' ? alice : next;
+  f.client.setQueryData(['order-detail', false, 'current-private'], { message: 'current-private' });
+  f.assertLiveRequest();
+  await act(async () => {
+    if (outcome === 'network') f.fail(new TypeError('temporary failure'));
+    else
+      f.finish(
+        outcome === 'success'
+          ? ok(null)
+          : Response.json(
+              { code: outcome === '401' ? 'UNAUTHORIZED' : 'FORBIDDEN', data: null },
+              { status: Number(outcome) },
+            ),
+      );
+  });
+  expect(f.client.getQueryData(['profile'])).toEqual(expected);
+  expect(f.client.getQueryData(['order-detail', false, 'current-private'])).toEqual({
+    message: 'current-private',
+  });
+  expect(screen.getByTestId('toasts')).toHaveTextContent('[]');
 });

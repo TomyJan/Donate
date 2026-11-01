@@ -52,6 +52,7 @@ type Session struct {
 	ID, UserID, IdentityID, Nickname, AvatarURL, Provider, CSRF string
 	ExpiresAt                                                   time.Time
 	Admin                                                       bool
+	BrowserFamily                                               string
 }
 type Credentials struct {
 	Token   string
@@ -113,6 +114,24 @@ func (s *Service) loginIdentity(ctx context.Context, p Identity, flowID []byte) 
 	token := RandomToken()
 	var uid, iid []byte
 	err := s.Store.Write(ctx, func(tx *sql.Tx) error {
+		families := browserFamilies(ctx)
+		if len(flowID) != 0 {
+			var family []byte
+			if e := tx.QueryRowContext(ctx, "SELECT browser_family_id FROM auth_flows WHERE id=?", flowID).Scan(&family); e != nil {
+				return e
+			}
+			if len(family) != 0 {
+				families = append(families, storage.IDString(family))
+			}
+		}
+		family, e := s.mergeFamiliesTx(ctx, tx, families, true)
+		if e != nil {
+			return e
+		}
+		var issued int64
+		if e := tx.QueryRowContext(ctx, "UPDATE browser_session_sequence SET issued_order=issued_order+1 WHERE id=1 RETURNING issued_order").Scan(&issued); e != nil {
+			return e
+		}
 		matched, e := lookupIdentity(ctx, tx, p)
 		iid, uid = matched.id, matched.userID
 		if e == nil && matched.status != "active" {
@@ -140,8 +159,14 @@ func (s *Service) loginIdentity(ctx context.Context, p Identity, flowID []byte) 
 		if _, e = tx.ExecContext(ctx, "UPDATE users SET public_identity_id=?,last_login_at=? WHERE id=?", iid, now.Unix(), uid); e != nil {
 			return e
 		}
-		_, e = tx.ExecContext(ctx, "INSERT INTO sessions(id,user_id,identity_id,token_hash,csrf_hash,created_at,renewed_at,expires_at) VALUES(?,?,?,?,?,?,?,?)", sid[:], uid, iid, hash(token), hash(csrf(token)), now.Unix(), now.Unix(), now.Add(IdleTTL).Unix())
+		_, e = tx.ExecContext(ctx, "INSERT INTO sessions(id,user_id,identity_id,token_hash,csrf_hash,created_at,renewed_at,expires_at,browser_family_id,issued_order) VALUES(?,?,?,?,?,?,?,?,?,?)", sid[:], uid, iid, hash(token), hash(csrf(token)), now.Unix(), now.Unix(), now.Add(IdleTTL).Unix(), family.id, issued)
 		if e != nil {
+			return e
+		}
+		if _, e = tx.ExecContext(ctx, "UPDATE browser_families SET current_session_id=?,current_issued_order=? WHERE id=?", sid[:], issued, family.id); e != nil {
+			return e
+		}
+		if _, e = tx.ExecContext(ctx, "UPDATE sessions SET revoked_at=COALESCE(revoked_at,?) WHERE browser_family_id=? AND id<>?", now.Unix(), family.id, sid[:]); e != nil {
 			return e
 		}
 		return s.consumeFlowTx(ctx, tx, flowID, true)
@@ -179,11 +204,11 @@ func (s *Service) Resolve(ctx context.Context, token string) (Session, error) {
 	if len(token) != 43 {
 		return out, ErrUnauthorized
 	}
-	var sid, uid, iid []byte
+	var sid, uid, iid, family []byte
 	var expires int64
 	var status string
 	var revoked sql.NullInt64
-	e := s.Store.DB.QueryRowContext(ctx, "SELECT s.id,s.user_id,s.identity_id,s.expires_at,s.revoked_at,u.status,i.nickname,i.avatar_url,i.provider FROM sessions s JOIN users u ON u.id=s.user_id JOIN identities i ON i.id=s.identity_id WHERE s.token_hash=?", hash(token)).Scan(&sid, &uid, &iid, &expires, &revoked, &status, &out.Nickname, &out.AvatarURL, &out.Provider)
+	e := s.Store.DB.QueryRowContext(ctx, "SELECT s.id,s.user_id,s.identity_id,s.expires_at,s.revoked_at,u.status,i.nickname,i.avatar_url,i.provider,s.browser_family_id FROM sessions s JOIN users u ON u.id=s.user_id JOIN identities i ON i.id=s.identity_id WHERE s.token_hash=?", hash(token)).Scan(&sid, &uid, &iid, &expires, &revoked, &status, &out.Nickname, &out.AvatarURL, &out.Provider, &family)
 	if errors.Is(e, sql.ErrNoRows) {
 		return out, ErrUnauthorized
 	}
@@ -196,6 +221,18 @@ func (s *Service) Resolve(ctx context.Context, token string) (Session, error) {
 	if revoked.Valid || expires <= s.Now().Unix() {
 		return out, ErrUnauthorized
 	}
+	current, e := currentBrowserSession(ctx, s.Store.DB, family, sid)
+	if e != nil {
+		return out, e
+	}
+	if !current {
+		return out, ErrUnauthorized
+	}
+	root, e := familyRoot(ctx, s.Store.DB, family)
+	if e != nil {
+		return out, e
+	}
+	out.BrowserFamily = storage.IDString(root.id)
 	out.ID, out.UserID, out.IdentityID = storage.IDString(sid), storage.IDString(uid), storage.IDString(iid)
 	out.ExpiresAt = time.Unix(expires, 0).UTC()
 	out.CSRF = csrf(token)
@@ -220,11 +257,11 @@ func (s *Service) RenewIfNeeded(ctx context.Context, token string) (Session, boo
 	var sid []byte
 	e = s.Store.Write(ctx, func(tx *sql.Tx) error {
 		now := s.Now().UTC()
-		var uid []byte
+		var uid, family []byte
 		var expires int64
 		var revoked sql.NullInt64
 		var status string
-		e := tx.QueryRowContext(ctx, "SELECT s.id,s.user_id,s.expires_at,s.revoked_at,u.status FROM sessions s JOIN users u ON u.id=s.user_id WHERE token_hash=?", hash(token)).Scan(&sid, &uid, &expires, &revoked, &status)
+		e := tx.QueryRowContext(ctx, "SELECT s.id,s.user_id,s.expires_at,s.revoked_at,u.status,s.browser_family_id FROM sessions s JOIN users u ON u.id=s.user_id WHERE token_hash=?", hash(token)).Scan(&sid, &uid, &expires, &revoked, &status, &family)
 		if errors.Is(e, sql.ErrNoRows) {
 			return ErrUnauthorized
 		}
@@ -235,6 +272,13 @@ func (s *Service) RenewIfNeeded(ctx context.Context, token string) (Session, boo
 			return ErrBanned
 		}
 		if revoked.Valid || expires <= now.Unix() {
+			return ErrUnauthorized
+		}
+		current, e := currentBrowserSession(ctx, tx, family, sid)
+		if e != nil {
+			return e
+		}
+		if !current {
 			return ErrUnauthorized
 		}
 		// Another request may already have renewed while this transaction waited.
@@ -308,7 +352,8 @@ func (s *Service) bindIdentity(ctx context.Context, sessionID string, p Identity
 		var status string
 		var expires int64
 		var revoked sql.NullInt64
-		e := tx.QueryRowContext(ctx, "SELECT s.user_id,s.expires_at,s.revoked_at,u.status FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=?", sid).Scan(&uid, &expires, &revoked, &status)
+		var family []byte
+		e := tx.QueryRowContext(ctx, "SELECT s.user_id,s.expires_at,s.revoked_at,u.status,s.browser_family_id FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id=?", sid).Scan(&uid, &expires, &revoked, &status, &family)
 		if errors.Is(e, sql.ErrNoRows) {
 			return ErrUnauthorized
 		}
@@ -319,6 +364,13 @@ func (s *Service) bindIdentity(ctx context.Context, sessionID string, p Identity
 			return ErrBanned
 		}
 		if revoked.Valid || expires <= now.Unix() {
+			return ErrUnauthorized
+		}
+		current, e := currentBrowserSession(ctx, tx, family, sid)
+		if e != nil {
+			return e
+		}
+		if !current {
 			return ErrUnauthorized
 		}
 		if _, lookupErr := lookupIdentity(ctx, tx, p); !errors.Is(lookupErr, sql.ErrNoRows) {
