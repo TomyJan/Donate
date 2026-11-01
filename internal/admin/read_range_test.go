@@ -1,12 +1,16 @@
 package admin
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -110,6 +114,77 @@ func TestOrdersListSortsMessage(t *testing.T) {
 	}
 	if len(got.Items) != 2 || got.Items[0].ID != a.ID || got.Items[1].ID != z.ID {
 		t.Fatalf("message order=%+v", got.Items)
+	}
+}
+
+func TestOrdersListAndSelectedExportPreserveExactTimeBounds(t *testing.T) {
+	s, user := readFixture(t)
+	ctx := context.Background()
+	ids := []string{}
+	for i, at := range []string{"2026-10-30T09:59:57Z", "2026-10-30T09:59:58Z", "2026-10-30T09:59:59Z"} {
+		o := addReadOrder(t, s, user, at, "closed", at, "", "alipay", "", int64(i+1), false)
+		ids = append(ids, o.ID)
+	}
+	for _, tc := range []struct {
+		name, from, to string
+		want           []string
+	}{
+		{"from-only", "2026-10-30T09:59:57.5Z", "", ids[1:]},
+		{"to-only", "", "2026-10-30T09:59:58.5Z", ids[:2]},
+		{"fractional-half-open", "2026-10-30T09:59:57.5Z", "2026-10-30T09:59:58.5Z", ids[1:2]},
+		{"whole-second-half-open", "2026-10-30T09:59:58Z", "2026-10-30T09:59:59Z", ids[1:2]},
+		{"nanosecond-bounds", "2026-10-30T09:59:57.000000001Z", "2026-10-30T09:59:58.000000001Z", ids[1:2]},
+		{"offset-timezone", "2026-10-30T17:59:57.5+08:00", "2026-10-30T17:59:58.5+08:00", ids[1:2]},
+		{"valid-subsecond-empty-range", "2026-10-30T09:59:57.25Z", "2026-10-30T09:59:57.75Z", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			page, err := s.OrdersList(ctx, Filter{From: tc.from, To: tc.to, Sort: "created_at", Direction: "asc", Size: 20})
+			if err != nil {
+				t.Fatal(err)
+			}
+			selected := []string{}
+			for _, item := range page.Items {
+				selected = append(selected, item.ID)
+			}
+			if page.Total != len(tc.want) || !slices.Equal(selected, tc.want) {
+				t.Fatalf("range [%s,%s): got %v (total %d), want %v", tc.from, tc.to, selected, page.Total, tc.want)
+			}
+			if len(selected) == 0 {
+				return
+			}
+			// The UI exports the selected filtered IDs through the ordinary confirmed
+			// operation protocol; CSV must contain exactly that filtered selection.
+			op, err := s.Preview(ctx, user, "export", selected)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = s.Execute(ctx, user, op.ID); err != nil {
+				t.Fatal(err)
+			}
+			var output bytes.Buffer
+			if err = s.Export(ctx, user, op.ID, &output); err != nil {
+				t.Fatal(err)
+			}
+			rows, err := csv.NewReader(&output).ReadAll()
+			if err != nil {
+				t.Fatal(err)
+			}
+			exported := []string{}
+			for _, row := range rows[1:] {
+				exported = append(exported, row[0])
+			}
+			want := slices.Clone(tc.want)
+			slices.Sort(want)
+			slices.Sort(exported)
+			if !slices.Equal(exported, want) {
+				t.Fatalf("CSV IDs %v, want %v", exported, want)
+			}
+		})
+	}
+	for _, to := range []string{"2026-10-30T09:59:57.5Z", "2026-10-30T09:59:57.25Z"} {
+		if _, err := s.OrdersList(ctx, Filter{From: "2026-10-30T09:59:57.5Z", To: to}); !errors.Is(err, auth.ErrInvalid) {
+			t.Fatalf("non-increasing exact bounds accepted: to=%s err=%v", to, err)
+		}
 	}
 }
 

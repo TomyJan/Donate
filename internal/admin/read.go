@@ -156,7 +156,13 @@ func orderWhere(f Filter) (string, []any, error) {
 			}
 			*p.target = at
 			where += " AND o.created_at" + p.operator + "?"
-			args = append(args, at.Unix())
+			// Stored seconds satisfy exact >=from and <to bounds when both
+			// fractional RFC3339 instants are rounded up to the next second.
+			second := at.Unix()
+			if at.Nanosecond() != 0 {
+				second++
+			}
+			args = append(args, second)
 		}
 	}
 	if !from.IsZero() && !to.IsZero() && !from.Before(to) {
