@@ -113,9 +113,17 @@ func TestOIDCHTTPAvatarUpgradeFailure(t *testing.T) {
 				}
 				return &http.Response{StatusCode: tt.status, Header: http.Header{"Location": {"http://127.0.0.1/private"}}, Body: io.NopCloser(strings.NewReader(tt.body))}, nil
 			})}
+			previous, err := s.LoginIdentity(context.Background(), Identity{Provider: "oidc", Issuer: s.Config.OIDCissuer, Subject: "user-one", Nickname: "old", AvatarURL: "https://old.example/avatar.png"})
+			if err != nil {
+				t.Fatal(err)
+			}
 			result, err := s.Callback(context.Background(), "moeauth", start.State, "code", start.Cookie, nil)
-			if err != nil || result.Credentials == nil || result.Credentials.Session.AvatarURL != fallback {
+			if err != nil || result.Credentials == nil || result.Credentials.Session.AvatarURL != fallback || result.Credentials.Session.UserID != previous.Session.UserID {
 				t.Fatalf("failed probe broke fallback/login: %+v %v", result, err)
+			}
+			var stored string
+			if err := s.Store.DB.QueryRow("SELECT avatar_url FROM identities").Scan(&stored); err != nil || stored != fallback {
+				t.Fatalf("stored avatar=%q, want fallback %q: %v", stored, fallback, err)
 			}
 			if calls != 1 || !strings.Contains(logs.String(), "https_upgrade_"+tt.reason) {
 				t.Fatalf("probe failure not diagnosed: calls=%d log=%s", calls, logs.String())
@@ -131,15 +139,52 @@ func TestOIDCHTTPAvatarUpgradeFailure(t *testing.T) {
 
 func TestOIDCHTTPAvatarUpgradePreservesExistingAndDeduplicates(t *testing.T) {
 	const old = "https://old.example/avatar.png"
-	s, start := startOIDCFixture(t, oidcFixture{claims: map[string]any{"name": "name", "picture": "http://cdn.test/avatar.png", "avatar": "http://cdn.test/avatar.png"}, noUserInfo: true})
-	previous, err := s.LoginIdentity(context.Background(), Identity{Provider: "oidc", Issuer: s.Config.OIDCissuer, Subject: "user-one", Nickname: "old", AvatarURL: old})
+	for _, tt := range []struct {
+		name     string
+		userInfo string
+		tokenURL string
+	}{
+		{"no UserInfo endpoint", "", "http://cdn.test/avatar.png"},
+		{"accepted UserInfo without avatar", `{"sub":"user-one"}`, "http://cdn.test/avatar.png"},
+		{"accepted UserInfo with the same avatar", `{"sub":"user-one","picture":"http://cdn.test/avatar.png"}`, "http://cdn.test/avatar.png"},
+		{"accepted UserInfo supplies the only avatar", `{"sub":"user-one","avatar":"http://cdn.test/avatar.png"}`, ""},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			s, start := startOIDCFixture(t, oidcFixture{claims: map[string]any{"name": "name", "picture": tt.tokenURL, "avatar": tt.tokenURL}, userInfo: tt.userInfo, noUserInfo: tt.userInfo == ""})
+			previous, err := s.LoginIdentity(context.Background(), Identity{Provider: "oidc", Issuer: s.Config.OIDCissuer, Subject: "user-one", Nickname: "old", AvatarURL: old})
+			if err != nil {
+				t.Fatal(err)
+			}
+			calls := 0
+			s.avatarHTTP = &http.Client{Transport: qqTransport(func(*http.Request) (*http.Response, error) { calls++; return nil, context.DeadlineExceeded })}
+			result, err := s.Callback(context.Background(), "moeauth", start.State, "code", start.Cookie, nil)
+			if err != nil || result.Credentials == nil || result.Credentials.Session.AvatarURL != old || result.Credentials.Session.UserID != previous.Session.UserID || calls != 1 {
+				t.Fatalf("existing avatar not preserved or duplicate probes: %+v calls=%d err=%v", result, calls, err)
+			}
+			var stored string
+			if err := s.Store.DB.QueryRow("SELECT avatar_url FROM identities").Scan(&stored); err != nil || stored != old {
+				t.Fatalf("stored avatar=%q, want %q: %v", stored, old, err)
+			}
+			profile, err := s.Profile(context.Background(), result.Credentials.Session)
+			if err != nil || profile.AvatarURL != old || len(profile.Bindings) != 1 || profile.Bindings[0].AvatarURL != old {
+				t.Fatalf("preserved avatar missing from profile or bindings: %+v %v", profile, err)
+			}
+		})
+	}
+}
+
+func TestOIDCEmptyAvatarClaimsClearExistingAvatar(t *testing.T) {
+	s, start := startOIDCFixture(t, oidcFixture{claims: map[string]any{"name": "name"}, userInfo: `{"sub":"user-one"}`})
+	_, err := s.LoginIdentity(context.Background(), Identity{Provider: "oidc", Issuer: s.Config.OIDCissuer, Subject: "user-one", Nickname: "old", AvatarURL: "https://old.example/avatar.png"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	calls := 0
-	s.avatarHTTP = &http.Client{Transport: qqTransport(func(*http.Request) (*http.Response, error) { calls++; return nil, context.DeadlineExceeded })}
 	result, err := s.Callback(context.Background(), "moeauth", start.State, "code", start.Cookie, nil)
-	if err != nil || result.Credentials == nil || result.Credentials.Session.AvatarURL != old || result.Credentials.Session.UserID != previous.Session.UserID || calls != 1 {
-		t.Fatalf("existing avatar not preserved or duplicate probes: %+v calls=%d err=%v", result, calls, err)
+	if err != nil || result.Credentials == nil || result.Credentials.Session.AvatarURL != "" {
+		t.Fatalf("explicitly missing avatar was not cleared: %+v %v", result, err)
+	}
+	var stored string
+	if err := s.Store.DB.QueryRow("SELECT avatar_url FROM identities").Scan(&stored); err != nil || stored != "" {
+		t.Fatalf("stored avatar=%q, want empty: %v", stored, err)
 	}
 }

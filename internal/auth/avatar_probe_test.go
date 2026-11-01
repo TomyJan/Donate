@@ -143,7 +143,7 @@ func TestOIDCAvatarUpgradeKeepsHTTPSAndRejectsLocalURLsWithoutProbing(t *testing
 	})}
 	const fallback = "https://public.example/avatar.png"
 	for _, raw := range []string{"http://127.0.0.1/a", "http://127.1/a", "http://10.0.0.1/a", "http://[::1]/a", "http://localhost/a", "http://１２７.０.０.１/a", "http://user:password@public.example/a", "//public.example/a", "/avatar.png"} {
-		avatar, _, _ := s.selectOIDCAvatar(context.Background(), oidcAvatarClaim{source: "id_token.picture", value: raw}, oidcAvatarClaim{source: "id_token.avatar", value: fallback})
+		avatar, _, _, _ := s.selectOIDCAvatar(context.Background(), oidcAvatarClaim{source: "id_token.picture", value: raw}, oidcAvatarClaim{source: "id_token.avatar", value: fallback})
 		if avatar != fallback {
 			t.Fatalf("unsafe URL poisoned fallback: %s => %s", raw, avatar)
 		}
@@ -165,7 +165,7 @@ func TestAvatarUpgradeSharesOneDeadlineAcrossCandidates(t *testing.T) {
 		}
 		return nil, context.DeadlineExceeded
 	})}
-	avatar, _, _ := s.selectOIDCAvatar(context.Background(), oidcAvatarClaim{source: "id_token.picture", value: "http://public.example/a"}, oidcAvatarClaim{source: "id_token.avatar", value: "http://public.example/b"}, oidcAvatarClaim{source: "userinfo.avatar", value: "https://public.example/c"})
+	avatar, _, _, _ := s.selectOIDCAvatar(context.Background(), oidcAvatarClaim{source: "id_token.picture", value: "http://public.example/a"}, oidcAvatarClaim{source: "id_token.avatar", value: "http://public.example/b"}, oidcAvatarClaim{source: "userinfo.avatar", value: "https://public.example/c"})
 	if avatar != "https://public.example/c" {
 		t.Fatalf("timeout lost safe fallback: %q", avatar)
 	}

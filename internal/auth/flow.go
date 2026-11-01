@@ -395,7 +395,7 @@ func (s *Service) exchangeOIDC(ctx context.Context, code string, f flow) (Identi
 		}
 	}
 	// Prefer usable standard picture claims before the Casdoor avatar alias.
-	avatar, source, rejected := s.selectOIDCAvatar(ctx,
+	avatar, source, rejected, probeFailed := s.selectOIDCAvatar(ctx,
 		oidcAvatarClaim{source: "id_token.picture", value: claims.Picture},
 		oidcAvatarClaim{source: "userinfo.picture", value: additional.Picture},
 		claims.avatarClaim("id_token"), additional.avatarClaim("userinfo"),
@@ -420,13 +420,16 @@ func (s *Service) exchangeOIDC(ctx context.Context, code string, f flow) (Identi
 	// Only fixed diagnostic values and the verified identity are logged, never
 	// upstream errors (which can contain response bodies), tokens, or avatar URLs.
 	unavailable := userInfoStatus != "accepted" && userInfoStatus != "not_needed"
+	// A failed image probe is enrichment failure, not an instruction to remove
+	// the saved avatar. A usable fallback must still replace the previous value.
+	preserveAvatar := avatar == "" && (unavailable || probeFailed)
 	_, avatarHost := avatarDiagnostics(avatar)
 	diagnostic, _ := ctx.Value(diagnosticContextKey{}).(diagnosticContext)
 	s.Log.Log(ctx, level, fmt.Sprintf("请求 %s，流程 %s，OIDC 提供方 %s，已验证 subject %s：头像 %s，来源 %s，原因 %s，拒绝 %s，UserInfo %s", diagnostic.requestID, diagnostic.flowID, s.Config.OIDCProviderID(), verified.Subject, status, source, reason, rejected, userInfoStatus),
 		"request_id", diagnostic.requestID, "flow_id", diagnostic.flowID,
 		"provider_id", s.Config.OIDCProviderID(), "subject", verified.Subject,
 		"avatar_status", status, "avatar_source", source, "avatar_reason", reason, "avatar_rejections", rejected, "userinfo_status", userInfoStatus,
-		"avatar_host", avatarHost, "avatar_fallback", avatar != "" && source != "id_token.picture", "avatar_preserve_existing", unavailable && avatar == "",
+		"avatar_host", avatarHost, "avatar_fallback", avatar != "" && source != "id_token.picture", "avatar_preserve_existing", preserveAvatar,
 		"id_token_picture_present", claims.Picture != "", "id_token_avatar_present", len(claims.Avatar) > 0,
 		"userinfo_picture_present", additional.Picture != "", "userinfo_avatar_present", len(additional.Avatar) > 0)
 	if claims.Name == "" {
@@ -436,7 +439,7 @@ func (s *Service) exchangeOIDC(ctx context.Context, code string, f flow) (Identi
 		Provider: "oidc", Issuer: s.Config.OIDCissuer, Subject: verified.Subject,
 		Nickname: claims.Name, AvatarURL: avatar,
 		preserveNickname: unavailable && claims.Name == "",
-		preserveAvatar:   unavailable && avatar == "",
+		preserveAvatar:   preserveAvatar,
 	}, nil
 }
 func (s *Service) finishFlow(ctx context.Context, f flow, p Identity) (FlowResult, error) {

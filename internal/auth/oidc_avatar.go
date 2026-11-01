@@ -77,7 +77,7 @@ func safeOIDCAvatar(raw string) (string, string) {
 	return SafeAvatar(u.String()), ""
 }
 
-func (s *Service) selectOIDCAvatar(ctx context.Context, candidates ...oidcAvatarClaim) (avatar, source, rejected string) {
+func (s *Service) selectOIDCAvatar(ctx context.Context, candidates ...oidcAvatarClaim) (avatar, source, rejected string, probeFailed bool) {
 	ctx, cancel := context.WithTimeout(ctx, avatarProbeTimeout)
 	defer cancel()
 	client := s.avatarHTTP
@@ -114,16 +114,17 @@ func (s *Service) selectOIDCAvatar(ctx context.Context, candidates ...oidcAvatar
 						"avatar_source", candidate.source, "avatar_host", host, "reason", reason, "http_status", status)
 				}
 				if reason != "" {
+					probeFailed = true
 					avatar, reason = "", "https_upgrade_"+reason
 				}
 			}
 		}
 		if avatar != "" {
-			return avatar, candidate.source, strings.Join(reasons, ",")
+			return avatar, candidate.source, strings.Join(reasons, ","), probeFailed
 		}
 		if reason != "" {
 			reasons = append(reasons, candidate.source+":"+reason)
 		}
 	}
-	return "", "none", strings.Join(reasons, ",")
+	return "", "none", strings.Join(reasons, ","), probeFailed
 }
