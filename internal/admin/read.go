@@ -319,8 +319,9 @@ func (s *Service) Users(ctx context.Context, f Filter) (Page[User], error) {
 		if len(f.Search) > 128 {
 			return out, auth.ErrInvalid
 		}
-		where += " AND (i.nickname LIKE ? OR lower(hex(u.id)) LIKE ?)"
-		args = append(args, "%"+f.Search+"%", "%"+strings.ReplaceAll(strings.ToLower(f.Search), "-", "")+"%")
+		q := strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(f.Search)
+		where += " AND (i.nickname LIKE ? ESCAPE '\\' OR lower(hex(u.id)) LIKE ? ESCAPE '\\')"
+		args = append(args, "%"+q+"%", "%"+strings.ReplaceAll(strings.ToLower(q), "-", "")+"%")
 	}
 	if f.Status != "" {
 		if f.Status != "active" && f.Status != "banned" {

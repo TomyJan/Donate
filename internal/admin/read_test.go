@@ -3,6 +3,7 @@ package admin
 import (
 	"bytes"
 	"context"
+	"errors"
 	"github.com/TomyJan/Donate/internal/auth"
 	"github.com/TomyJan/Donate/internal/config"
 	"github.com/TomyJan/Donate/internal/order"
@@ -101,5 +102,59 @@ func TestOrderSearchFindsUserID(t *testing.T) {
 	page, err := s.OrdersList(ctx, Filter{Search: owner.Session.UserID})
 	if err != nil || page.Total != 1 || len(page.Items) != 1 || page.Items[0].ID != want.ID {
 		t.Fatalf("user ID search returned %+v, error %v", page, err)
+	}
+}
+
+func TestUsersSearchTreatsNicknamePatternsAsLiteral(t *testing.T) {
+	for _, tc := range []struct{ name, target, other, search string }{
+		{"underscore-nickname", "Tomy_Jan", "TomyXJan", "Tomy_Jan"},
+		{"percent-nickname", "Tomy%Jan", "TomyExtraJan", "Tomy%Jan"},
+		{"literal-underscore", "Tomy_Jan", "TomyXJan", "_"},
+		{"literal-percent", "Tomy%Jan", "TomyExtraJan", "%"},
+		{"backslash", `Tomy\Jan`, "TomyJan", `\`},
+		{"trailing-backslash", `TomyJan\`, "TomyJan", `Jan\`},
+		{"combined-literals", `Tomy\_%Jan`, `Tomy\XXJan`, `\_%`},
+		{"ordinary-substring", "PrefixNeedleSuffix", "Unrelated", "Needle"},
+		{"ascii-case-insensitive", "PrefixNeedleSuffix", "Unrelated", "nEeDlE"},
+		{"existing-unicode-literal", "Änne", "Different", "Änne"},
+		{"unicode-wildcard-literal", "Élodie_%", "ÉlodieXextra", "Élodie_%"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, _ := readFixture(t)
+			ctx := context.Background()
+			login := auth.New(s.Store, config.Config{}, s.Log)
+			target, err := login.LoginIdentity(ctx, auth.Identity{Provider: "oidc", Issuer: "search", Subject: "target", Nickname: tc.target})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err = login.LoginIdentity(ctx, auth.Identity{Provider: "oidc", Issuer: "search", Subject: "other", Nickname: tc.other}); err != nil {
+				t.Fatal(err)
+			}
+			page, err := s.Users(ctx, Filter{Search: tc.search, Size: 20})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if page.Total != 1 || len(page.Items) != 1 || page.Items[0].ID != target.Session.UserID {
+				t.Fatalf("literal search %q: total=%d items=%+v; want only %s", tc.search, page.Total, page.Items, target.Session.UserID)
+			}
+		})
+	}
+}
+
+func TestUsersLiteralSearchPreservesUUIDAndLengthRules(t *testing.T) {
+	s, user := readFixture(t)
+	ctx := context.Background()
+	for _, search := range []string{user, strings.ToUpper(user), user[19:], strings.ReplaceAll(user, "-", "")[16:]} {
+		page, err := s.Users(ctx, Filter{Search: search, Size: 20})
+		if err != nil || page.Total != 1 || len(page.Items) != 1 || page.Items[0].ID != user {
+			t.Fatalf("UUID search %q: %+v err=%v", search, page, err)
+		}
+	}
+	if _, err := s.Users(ctx, Filter{Search: strings.Repeat("%", 129)}); !errors.Is(err, auth.ErrInvalid) {
+		t.Fatalf("overlong search accepted: %v", err)
+	}
+	page, err := s.Users(ctx, Filter{Search: strings.Repeat("%", 128)})
+	if err != nil || page.Total != 0 || len(page.Items) != 0 {
+		t.Fatalf("maximum-length literal search: %+v err=%v", page, err)
 	}
 }
