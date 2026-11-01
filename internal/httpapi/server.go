@@ -415,7 +415,11 @@ func (s *Server) static(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	}
 	if strings.HasPrefix(p, "assets/") {
-		w.Header().Set("Cache-Control", "public,max-age=31536000,immutable")
+		if len(w.Header().Values("Set-Cookie")) > 0 {
+			w.Header().Set("Cache-Control", "private,no-store")
+		} else {
+			w.Header().Set("Cache-Control", "public,max-age=31536000,immutable")
+		}
 	}
 	_, _ = w.Write(b)
 }
