@@ -17,6 +17,7 @@ import (
 	"github.com/TomyJan/Donate/internal/payment"
 	"github.com/TomyJan/Donate/internal/storage"
 	"github.com/go-chi/chi/v5"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -274,6 +275,8 @@ func (s *Server) Handler() http.Handler {
 }
 func (s *Server) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := chimiddleware.NewWrapResponseWriter(w, r.ProtoMajor)
+		w = response
 		st := &requestState{ID: storage.NewID().String(), Code: "OK", Status: 200}
 		r = r.WithContext(auth.WithRequestID(context.WithValue(r.Context(), stateKey{}, st), st.ID))
 		started := time.Now()
@@ -288,6 +291,15 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 				// identify the failing code without serializing the panic value.
 				s.Log.ErrorContext(r.Context(), fmt.Sprintf("请求 %s %s %s 发生未处理异常，类型 %T，原因 %s", st.ID, r.Method, pattern, v, reason), "request_id", st.ID, "method", r.Method, "route", pattern, "stage", "http_panic", "panic_type", fmt.Sprintf("%T", v), "reason", reason, "duration_ms", time.Since(started).Milliseconds(), "stack", panicCallsites())
 				s.respond(w, r, 500, "INTERNAL_ERROR", "请求未完成", nil)
+			}
+			// Router and static handlers can write outside respond(). Log the
+			// status actually sent, including implicitly successful responses.
+			st.Status = response.Status()
+			if st.Status == 0 {
+				st.Status = http.StatusOK
+			}
+			if st.Status >= http.StatusBadRequest && st.Code == "OK" {
+				st.Code = "HTTP_ERROR"
 			}
 			uid := ""
 			if st.Session != nil {
