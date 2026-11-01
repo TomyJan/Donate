@@ -94,6 +94,46 @@ async function prepare(page: Page, options: { status?: string; error?: string; s
   };
 }
 
+async function expectRoundedPayment(page: Page) {
+  const geometry = await page.locator('.r-write .r-pay').evaluate((element) => {
+    const primary = element.querySelector<HTMLButtonElement>('.r-primary');
+    const channel = element.querySelector<HTMLButtonElement>('.r-channel');
+    if (!primary || !channel) throw new Error('Payment controls are missing');
+    const groupStyle = getComputedStyle(element);
+    const primaryStyle = getComputedStyle(primary);
+    const channelStyle = getComputedStyle(channel);
+    const group = element.getBoundingClientRect();
+    const main = primary.getBoundingClientRect();
+    const menu = channel.getBoundingClientRect();
+    return {
+      radius: Number.parseFloat(groupStyle.borderTopRightRadius),
+      primaryTopRight: Number.parseFloat(primaryStyle.borderTopRightRadius),
+      primaryBottomRight: Number.parseFloat(primaryStyle.borderBottomRightRadius),
+      channelTopRight: Number.parseFloat(channelStyle.borderTopRightRadius),
+      channelBottomRight: Number.parseFloat(channelStyle.borderBottomRightRadius),
+      overflow: groupStyle.overflow,
+      mainWidth: main.width,
+      groupWidth: group.width,
+      // Filing transforms the whole paper; its inactive controls keep their layout hit boxes.
+      channelWidth: channel.offsetWidth,
+      channelHeight: channel.offsetHeight,
+      right: menu.right,
+      groupRight: group.right,
+    };
+  });
+  expect(geometry.radius).toBeGreaterThan(0);
+  // The primary paints the entire background beneath the absolute menu trigger.
+  expect(geometry.primaryTopRight).toBe(geometry.radius);
+  expect(geometry.primaryBottomRight).toBe(geometry.radius);
+  expect(geometry.channelTopRight).toBe(geometry.radius);
+  expect(geometry.channelBottomRight).toBe(geometry.radius);
+  expect(geometry.mainWidth).toBeCloseTo(geometry.groupWidth, 1);
+  expect(geometry.right).toBeCloseTo(geometry.groupRight, 1);
+  expect(geometry.channelWidth).toBeGreaterThanOrEqual(44);
+  expect(geometry.channelHeight).toBeGreaterThanOrEqual(44);
+  expect(geometry.overflow).toBe('visible');
+}
+
 test('payment labels center on the entire split button at every width and return state', async ({ page }) => {
   await prepare(page, { error: 'UNAVAILABLE' });
   await page.emulateMedia({ reducedMotion: 'reduce' });
@@ -103,6 +143,7 @@ test('payment labels center on the entire split button at every width and return
     if (callback) await expect(ticket).toHaveAttribute('data-payment-phase', 'error');
     for (const width of [320, 390, 768, 1280]) {
       await page.setViewportSize({ width, height: 900 });
+      await expectRoundedPayment(page);
       await expect
         .poll(async () =>
           page.locator('.r-pay').evaluate((element) => {
@@ -125,6 +166,74 @@ test('payment labels center on the entire split button at every width and return
       expect(bounds.labelRight).toBeLessThanOrEqual(bounds.menuLeft);
       if (callback) await expect(ticket.locator('.r-channel')).toBeDisabled();
     }
+  }
+});
+
+test('rounded payment controls retain focus rings, hit areas and disabled menu behavior', async ({
+  page,
+}) => {
+  await prepare(page);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.goto('/');
+  const primary = page.locator('.r-pay > .r-primary');
+  const channel = page.locator('.r-pay > .r-channel');
+  const amount = page.getByRole('textbox', { name: '金额（元）', exact: true });
+  await expect(primary).toBeEnabled();
+  for (const width of [320, 390, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    await expectRoundedPayment(page);
+    await primary.focus();
+    await page.keyboard.press('Tab');
+    await expect(channel).toBeFocused();
+    await expect(channel).toHaveCSS('outline-style', 'solid');
+    await expect(channel).toHaveCSS('outline-width', '2px');
+    const target = await channel.boundingBox();
+    if (!target) throw new Error('Payment channel has no hit area');
+    await page.mouse.click(target.x + target.width - 3, target.y + target.height / 2);
+    await expect(page.getByRole('menu')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await amount.fill('');
+    await expect(primary).toBeDisabled();
+    await expect(channel).toBeDisabled();
+    await expectRoundedPayment(page);
+    await channel.dispatchEvent('pointerdown', { button: 0, ctrlKey: false });
+    await channel.dispatchEvent('keydown', { key: 'ArrowDown' });
+    await expect(page.getByRole('menu')).toHaveCount(0);
+    await amount.fill('8.88');
+  }
+});
+
+test('rounded payment backgrounds survive every callback phase', async ({ page }, info) => {
+  await prepare(page, { status: 'pending' });
+  const ticket = page.locator('.r-write .r-ticket');
+  for (const state of [
+    { phase: 'login', code: 'UNAUTHORIZED' },
+    { phase: 'pending', code: 'OK' },
+    { phase: 'error', code: 'UNAVAILABLE' },
+  ]) {
+    await page.route('**/api/v1/order/detail?**', (route) =>
+      route.fulfill({
+        json: { code: state.code, data: state.code === 'OK' ? { ...paidOrder, status: 'closed' } : null },
+      }),
+    );
+    await page.goto(`/?payment=returned&order=${orderID}`);
+    await expect(ticket).toHaveAttribute('data-payment-phase', state.phase);
+    for (const width of [320, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expectRoundedPayment(page);
+      await expect(ticket.locator('.r-channel')).toBeDisabled();
+    }
+  }
+  await page.route('**/api/v1/order/detail?**', (route) =>
+    route.fulfill({ json: { code: 'OK', data: paidOrder } }),
+  );
+  await page.goto(`/?payment=returned&order=${orderID}`);
+  for (const phase of ['checking', 'confirmed', 'filing', 'complete']) {
+    await expect(ticket).toHaveAttribute('data-payment-phase', phase);
+    await expectRoundedPayment(page);
+    if (phase === 'complete') await expect(ticket.locator('.r-channel')).toBeEnabled();
+    else await expect(ticket.locator('.r-channel')).toBeDisabled();
+    if (phase === 'confirmed') await page.screenshot({ path: info.outputPath('rounded-confirmed.png') });
   }
 });
 

@@ -56,7 +56,7 @@
   #receipt-refinement .r-message:focus-visible { outline:none; }
   #receipt-refinement input::placeholder, #receipt-refinement textarea::placeholder { color:var(--r-muted); opacity:1; }
   #receipt-refinement .r-pay { display:flex; width:100%; border-radius:var(--r-control-radius); background:var(--r-accent); }
-  #receipt-refinement .r-pay .r-primary { border-radius:var(--r-control-radius) 0 0 var(--r-control-radius); flex:1; min-width:0; }
+  #receipt-refinement .r-pay .r-primary { border-radius:var(--r-control-radius); flex:1; min-width:0; }
   #receipt-refinement .r-pay .r-channel { border-radius:0 var(--r-control-radius) var(--r-control-radius) 0; border:0; border-left:1px solid color-mix(in srgb,var(--r-on) 25%,transparent); background:transparent; color:var(--r-on); flex:0 0 46px; }
   #receipt-refinement .r-pay:has(> .r-primary:disabled) { background:var(--r-soft); }
   #receipt-refinement .r-pay:has(> .r-primary:disabled) .r-channel { color:var(--r-muted); border-left-color:var(--r-line); }
