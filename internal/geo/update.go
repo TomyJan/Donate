@@ -181,7 +181,7 @@ func validateDatabaseContext(ctx context.Context, path, kind string) error {
 		switch strings.ToLower(r.Metadata.DatabaseType) {
 		case "geoip2-city", "geolite2-city", "geoip2-enterprise",
 			"dbip-city-lite", "dbip-city", "dbip-location", "dbip-location-isp", "dbip-full":
-			return nil
+			return verifyMMDBRecords(ctx, path, r)
 		default:
 			return errors.New("需要兼容的 City MMDB，不能使用 Country / ASN / 独立 ISP 等库")
 		}

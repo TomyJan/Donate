@@ -415,25 +415,7 @@ func parse(name string, b []byte, ip string) (Location, error) {
 	return normalize(p), nil
 }
 func (s *Service) lookupMMDB(ip netip.Addr) (Location, error) {
-	var d struct {
-		Country struct {
-			Names map[string]string `maxminddb:"names"`
-		} `maxminddb:"country"`
-		Subdivisions []struct {
-			Names map[string]string `maxminddb:"names"`
-		} `maxminddb:"subdivisions"`
-		City struct {
-			Names map[string]string `maxminddb:"names"`
-		} `maxminddb:"city"`
-		Location struct {
-			Latitude  *float64 `maxminddb:"latitude"`
-			Longitude *float64 `maxminddb:"longitude"`
-			Accuracy  *uint16  `maxminddb:"accuracy_radius"`
-		} `maxminddb:"location"`
-		ISP          string `maxminddb:"isp"`
-		Organization string `maxminddb:"autonomous_system_organization"`
-		ASN          uint   `maxminddb:"autonomous_system_number"`
-	}
+	var d mmdbRecord
 	r := s.local.Lookup(ip)
 	if !r.Found() {
 		return Location{}, nil
