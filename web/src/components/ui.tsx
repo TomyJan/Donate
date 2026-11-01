@@ -13,6 +13,9 @@ export function Button({ className = '', ...props }: ButtonHTMLAttributes<HTMLBu
 }
 export function Avatar({ name = '', src }: { name?: string; src?: string }) {
   const [failed, setFailed] = useState<string>();
+  useEffect(() => {
+    setFailed((previous) => (previous === src ? previous : undefined));
+  }, [src]);
   return (
     <span className="d-avatar">
       {src && failed !== src ? (

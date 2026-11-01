@@ -11,3 +11,17 @@ it('loads a new identity avatar after the previous image failed', () => {
   view.rerender(<Avatar name="B" src="https://example.com/new.png" />);
   expect(view.container.querySelector('img')).toHaveAttribute('src', 'https://example.com/new.png');
 });
+
+it.each(['https://example.com/other.png', undefined])(
+  'retries an earlier avatar after the source changes through %s',
+  (intermediate) => {
+    const view = render(<Avatar name="A" src="https://example.com/avatar.png" />);
+    fireEvent.error(view.container.querySelector('img') as HTMLImageElement);
+    expect(view.container.querySelector('img')).toBeNull();
+
+    view.rerender(<Avatar name="B" src={intermediate} />);
+    view.rerender(<Avatar name="A" src="https://example.com/avatar.png" />);
+
+    expect(view.container.querySelector('img')).toHaveAttribute('src', 'https://example.com/avatar.png');
+  },
+);
