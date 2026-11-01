@@ -236,6 +236,13 @@ func main() {
 		if r.path == "admin/task/retry" {
 			operation["description"] = "Retries original failed tasks, resetting their current retry budget, or advances scheduled ready tasks without resetting it. Running and completed tasks are never replayed. A persistent caller-scoped idempotency key returns the original response; changed IDs conflict. At most 100 IDs. Permission is rechecked and order-target task.retry audit is written in the transaction."
 		}
+		if r.method == "get" && r.path != "site/info" && r.path != "user/profile" && r.path != "user/login/status" {
+			params, _ := operation["parameters"].([]any)
+			scope := parameter("header", "X-Session-Scope", false, schema{"type": "string"})
+			scope["description"] = "Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access."
+			operation["parameters"] = append(params, scope)
+			operation["responses"].(schema)["403"].(schema)["headers"] = schema{"X-Session-Mismatch": schema{"description": "Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session.", "schema": schema{"type": "string", "enum": []string{"1"}}}}
+		}
 		paths["/api/v1/"+r.path] = schema{r.method: operation}
 	}
 	textResponse := func(description, contentType string) schema {

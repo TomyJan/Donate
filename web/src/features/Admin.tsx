@@ -466,21 +466,24 @@ function OverviewSection({
   period: OverviewPeriod;
   onChange: (value: OverviewPeriod) => void;
 }) {
-  const { t, report } = useApp();
-  const [lastSuccess, setLastSuccess] = useState<Overview>();
+  const { t, report, profile } = useApp();
+  const { scopeKey, scope, isCurrent } = useRequestScope('admin-overview', true);
+  const [lastSuccess, setLastSuccess] = useState<{ scope: typeof scope; data: Overview }>();
   const overview = useQuery({
-    queryKey: ['overview', period],
-    queryFn: () => api<Overview>(`admin/overview?${query(period)}`),
-    placeholderData: (previous) => previous,
+    queryKey: ['overview', period, scopeKey],
+    queryFn: ({ signal }) => api<Overview>(`admin/overview?${query(period)}`, undefined, signal, isCurrent),
+    enabled: !!profile?.admin,
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[2] === scopeKey ? previous : undefined,
     retry: false,
   });
   useEffect(() => {
-    if (overview.isSuccess && !overview.isPlaceholderData) setLastSuccess(overview.data);
-  }, [overview.data, overview.isSuccess, overview.isPlaceholderData]);
+    if (overview.isSuccess && !overview.isPlaceholderData) setLastSuccess({ scope, data: overview.data });
+  }, [overview.data, overview.isSuccess, overview.isPlaceholderData, scope]);
   useEffect(() => {
     if (overview.error) report(overview.error);
   }, [overview.error, report]);
-  const displayed = overview.data ?? lastSuccess;
+  const displayed = overview.data ?? (lastSuccess?.scope === scope ? lastSuccess.data : undefined);
   return (
     <>
       <AdminHeading title={t('overview')}>

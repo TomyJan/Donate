@@ -10,11 +10,18 @@ export class APIError extends Error {
   }
 }
 let csrf = '';
+let sessionScope = 'guest';
+let credentialIdentity = '';
 let credentialGeneration = 0;
-export function setCSRF(v: string) {
-  if (csrf !== v) credentialGeneration += 1;
+export function setCSRF(v: string, authenticated = true, identity = '') {
+  const nextScope = authenticated && v ? v : 'guest';
+  if (csrf !== v || sessionScope !== nextScope || credentialIdentity !== identity) credentialGeneration += 1;
   csrf = v;
+  sessionScope = nextScope;
+  credentialIdentity = identity;
 }
+const discovery = (path: string) =>
+  ['site/info', 'user/profile', 'user/login/status', 'user/login/qq/complete'].includes(path.split('?')[0]);
 function signalAccessFailure(path: string, status: number, code: string, isCurrent?: () => boolean) {
   if (isCurrent && !isCurrent()) return;
   // These public endpoints authenticate the OAuth flow cookie. Its expiration
@@ -49,13 +56,19 @@ async function request<T>(
   body: unknown,
   read: (response: Response) => Promise<T>,
   signal?: AbortSignal,
+  expectedScope?: string,
 ) {
   try {
     const timeout = AbortSignal.timeout(15000);
     const response = await fetch(`/api/v1/${path}`, {
       method: body === undefined ? 'GET' : 'POST',
       credentials: 'same-origin',
-      headers: body === undefined ? {} : { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+      headers:
+        body === undefined
+          ? expectedScope === undefined
+            ? {}
+            : { 'X-Session-Scope': expectedScope }
+          : { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     });
@@ -102,16 +115,21 @@ export async function api<T>(
   isCurrent?: () => boolean,
 ): Promise<T> {
   const generation = credentialGeneration;
+  const scopedRead = body === undefined && !discovery(path);
+  const active = () => generation === credentialGeneration && !signal?.aborted && (isCurrent?.() ?? true);
+  if (scopedRead && !active()) throw new APIError('SESSION_CHANGED', '', 0, '', path);
   return request(
     path,
     body,
-    (response) =>
-      envelope<T>(
-        path,
-        response,
-        () => generation === credentialGeneration && !signal?.aborted && (isCurrent?.() ?? true),
-      ),
+    async (response) => {
+      if (scopedRead && active() && response.headers.get('X-Session-Mismatch') === '1')
+        window.dispatchEvent(new Event('session-changed'));
+      const data = await envelope<T>(path, response, active);
+      if (scopedRead && !active()) throw new APIError('SESSION_CHANGED', '', 0, '', path);
+      return data;
+    },
     signal,
+    scopedRead ? sessionScope : undefined,
   );
 }
 export async function downloadExport(id: string, isCurrent?: () => boolean) {

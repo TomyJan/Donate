@@ -3,32 +3,43 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, ChevronDown, Search } from 'lucide-react';
 import { useId, useState } from 'react';
 import { useApp } from '../app/context';
+import { useRequestScope } from '../app/useRequestScope';
 import { api, query } from '../lib/api';
 import type { Page, User } from '../lib/types';
 import { RequestError } from './RequestError';
 import { Button, Empty, portal } from './ui';
 
 export function AdminUserFilter({ value, onValue }: { value: string; onValue: (id: string) => void }) {
-  const { t } = useApp();
+  const { t, profile } = useApp();
+  const { scopeKey, isCurrent } = useRequestScope('admin-user-filter', true);
   const client = useQueryClient();
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
   const listId = useId();
   const selected = useQuery({
-    queryKey: ['admin-user', value],
-    queryFn: () => api<User>(`admin/user/detail?${query({ id: value })}`),
-    enabled: !!value,
+    queryKey: ['admin-user', value, scopeKey],
+    queryFn: ({ signal }) =>
+      api<User>(`admin/user/detail?${query({ id: value })}`, undefined, signal, isCurrent),
+    enabled: !!value && !!profile?.admin,
     retry: false,
   });
   const users = useQuery({
-    queryKey: ['admin-user-options', search],
-    queryFn: () => api<Page<User>>(`admin/user/list?${query({ search, page: 1, page_size: 20 })}`),
-    enabled: open,
-    placeholderData: (previous) => previous,
+    queryKey: ['admin-user-options', search, scopeKey],
+    queryFn: ({ signal }) =>
+      api<Page<User>>(
+        `admin/user/list?${query({ search, page: 1, page_size: 20 })}`,
+        undefined,
+        signal,
+        isCurrent,
+      ),
+    enabled: open && !!profile?.admin,
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[2] === scopeKey ? previous : undefined,
     retry: false,
   });
   const choose = (user?: User) => {
-    if (user) client.setQueryData(['admin-user', user.id], user);
+    if (!isCurrent()) return;
+    if (user) client.setQueryData(['admin-user', user.id, scopeKey], user);
     onValue(user?.id ?? '');
     setOpen(false);
   };

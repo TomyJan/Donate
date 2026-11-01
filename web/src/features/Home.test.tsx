@@ -72,6 +72,12 @@ const paid: RecordItem = {
   date: order.paid_at ?? order.created_at,
 };
 const response = (data: unknown) => Response.json({ code: 'OK', data });
+const recordKey = (owner: string, mine: boolean) => [
+  'records',
+  owner,
+  mine,
+  JSON.stringify([owner, undefined, undefined]),
+];
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => {
@@ -132,7 +138,7 @@ function renderHome(
   clients.push(client);
   client.setQueryData(['profile'], app.profile);
   const seed = (owner: string, mine: boolean, items: RecordItem[] = []) =>
-    client.setQueryData(['records', owner, mine], {
+    client.setQueryData(recordKey(owner, mine), {
       pages: [{ items, next_cursor: '' }],
       pageParams: [''],
     });
@@ -216,10 +222,10 @@ it('keeps the paid receipt when the landing refresh is paused offline until a re
   const view = renderHome(() => refresh.promise);
   await confirm();
   expect(view.listRequests).toEqual([]);
-  expect(view.client.getQueryState(['records', order.user_id, false])?.fetchStatus).toBe('idle');
+  expect(view.client.getQueryState(recordKey(order.user_id, false))?.fetchStatus).toBe('idle');
   onlineManager.setOnline(false);
   await land();
-  expect(view.client.getQueryState(['records', order.user_id, false])).toMatchObject({
+  expect(view.client.getQueryState(recordKey(order.user_id, false))).toMatchObject({
     status: 'success',
     fetchStatus: 'paused',
   });
@@ -284,7 +290,7 @@ it('uses a later successful retry after a failed landing refresh as authority', 
   expectConfirmed(view.container);
   fail = false;
   await act(async () => {
-    await view.client.refetchQueries({ queryKey: ['records', order.user_id, false], exact: true });
+    await view.client.refetchQueries({ queryKey: recordKey(order.user_id, false), exact: true });
   });
   await advance();
   expect(receipt(view.container)).toBeNull();
@@ -350,7 +356,7 @@ it('does not retire the bridge when a next-page success cancels the paused landi
       ? next.promise
       : Promise.resolve(response({ items: [], next_cursor: '' })),
   );
-  view.client.setQueryData(['records', order.user_id, false], {
+  view.client.setQueryData(recordKey(order.user_id, false), {
     pages: [{ items: [], next_cursor: 'page-two' }],
     pageParams: [''],
   });
@@ -366,7 +372,7 @@ it('does not retire the bridge when a next-page success cancels the paused landi
   expectConfirmed(view.container);
   expect(receipt(view.container)).toBe(paper);
   await act(async () => {
-    await view.client.refetchQueries({ queryKey: ['records', order.user_id, false], exact: true });
+    await view.client.refetchQueries({ queryKey: recordKey(order.user_id, false), exact: true });
   });
   await advance();
   expect(receipt(view.container)).toBeNull();
@@ -449,7 +455,7 @@ it('keeps the uncached paid snapshot after the post-landing refresh fails and an
   expectConfirmed(view.container);
   expect(receipt(view.container)).toBe(paper);
   await act(async () => {
-    await view.client.refetchQueries({ queryKey: ['records', order.user_id, false], exact: true });
+    await view.client.refetchQueries({ queryKey: recordKey(order.user_id, false), exact: true });
   });
   await advance();
   expect(receipt(view.container)).toBeNull();
@@ -484,5 +490,5 @@ it('does not start the uncached post-landing refresh after leaving before cancel
   expect(view.listRequests).toHaveLength(1);
   await act(async () => initial.resolve(response({ items: [pending], next_cursor: '' })));
   await advance();
-  expect(view.client.getQueryData(['records', order.user_id, false])).toBeUndefined();
+  expect(view.client.getQueryData(recordKey(order.user_id, false))).toBeUndefined();
 });

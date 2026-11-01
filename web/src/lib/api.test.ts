@@ -28,6 +28,100 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+it.each(['changed', 'ABA', 'canceled'])(
+  'rejects a successful private read whose initiating session was revoked: %s',
+  async (kind) => {
+    let finish: ((response: Response) => void) | undefined;
+    vi.stubGlobal(
+      'fetch',
+      () =>
+        new Promise<Response>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    setCSRF('alice');
+    const controller = new AbortController();
+    const pending = api('order/list?only_mine=true', undefined, controller.signal);
+    if (kind === 'canceled') controller.abort();
+    else {
+      setCSRF('bob');
+      if (kind === 'ABA') setCSRF('alice');
+    }
+    finish?.(Response.json({ code: 'OK', data: { private: 'old-session' } }));
+    await expect(pending).rejects.toMatchObject({ code: 'SESSION_CHANGED' });
+  },
+);
+
+it.each(['site/info', 'user/profile', 'user/login/status'])(
+  'allows independent discovery responses across credential installation: %s',
+  async (path) => {
+    let finish: ((response: Response) => void) | undefined;
+    vi.stubGlobal('fetch', (_path: string, init?: RequestInit) => {
+      expect(new Headers(init?.headers).has('X-Session-Scope')).toBe(false);
+      return new Promise<Response>((resolve) => {
+        finish = resolve;
+      });
+    });
+    const pending = api(path);
+    setCSRF('installed-profile');
+    finish?.(Response.json({ code: 'OK', data: 'discovery' }));
+    await expect(pending).resolves.toBe('discovery');
+  },
+);
+
+it('binds private GETs to the expected session without changing POST CSRF semantics', async () => {
+  const fetcher = vi.fn().mockResolvedValue(Response.json({ code: 'OK', data: [] }));
+  vi.stubGlobal('fetch', fetcher);
+  setCSRF('alice');
+  await api('admin/user/list');
+  expect(new Headers(fetcher.mock.calls[0][1].headers).get('X-Session-Scope')).toBe('alice');
+});
+
+it('distinguishes anonymous reads from authenticated reads while retaining anonymous POST CSRF', async () => {
+  const fetcher = vi.fn().mockImplementation(() => Promise.resolve(Response.json({ code: 'OK', data: [] })));
+  vi.stubGlobal('fetch', fetcher);
+  setCSRF('anonymous-nonce-proof', false);
+  await api('order/list');
+  await api('user/login', { provider: 'qq' });
+  expect(new Headers(fetcher.mock.calls[0][1].headers).get('X-Session-Scope')).toBe('guest');
+  expect(new Headers(fetcher.mock.calls[1][1].headers).get('X-CSRF-Token')).toBe('anonymous-nonce-proof');
+});
+
+it.each([false, true])(
+  'revalidates a current scope mismatch without invalidating its replacement (stale=%s)',
+  async (stale) => {
+    let finish: ((response: Response) => void) | undefined;
+    vi.stubGlobal(
+      'fetch',
+      () =>
+        new Promise<Response>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const mismatch = vi.fn(),
+      invalid = vi.fn();
+    window.addEventListener('session-changed', mismatch);
+    window.addEventListener('session-invalid', invalid);
+    try {
+      setCSRF('alice');
+      const pending = api('order/list?only_mine=true');
+      if (stale) setCSRF('bob');
+      finish?.(
+        Response.json(
+          { code: 'CSRF_FAILED', data: null },
+          { status: 403, headers: { 'X-Session-Mismatch': '1' } },
+        ),
+      );
+      await expect(pending).rejects.toMatchObject({ code: 'CSRF_FAILED' });
+      expect(mismatch).toHaveBeenCalledTimes(stale ? 0 : 1);
+      expect(invalid).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener('session-changed', mismatch);
+      window.removeEventListener('session-invalid', invalid);
+    }
+  },
+);
+
 it.each(
   ['user/login/status', 'user/login/qq/complete'].flatMap((path) =>
     ['json', 'text'].map((format) => ({ path, format })),

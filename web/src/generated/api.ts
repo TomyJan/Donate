@@ -1359,7 +1359,10 @@ export interface operations {
                 minimum?: number;
                 maximum?: number;
             };
-            header?: never;
+            header?: {
+                /** @description Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access. */
+                "X-Session-Scope"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1389,6 +1392,8 @@ export interface operations {
             /** @description Forbidden, banned, or CSRF refused */
             403: {
                 headers: {
+                    /** @description Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session. */
+                    "X-Session-Mismatch"?: "1";
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -1407,7 +1412,10 @@ export interface operations {
             query: {
                 id: string;
             };
-            header?: never;
+            header?: {
+                /** @description Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access. */
+                "X-Session-Scope"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1437,6 +1445,8 @@ export interface operations {
             /** @description Forbidden, banned, or CSRF refused */
             403: {
                 headers: {
+                    /** @description Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session. */
+                    "X-Session-Mismatch"?: "1";
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -1559,7 +1569,10 @@ export interface operations {
             query: {
                 id: string;
             };
-            header?: never;
+            header?: {
+                /** @description Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access. */
+                "X-Session-Scope"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1589,6 +1602,8 @@ export interface operations {
             /** @description Forbidden, banned, or CSRF refused */
             403: {
                 headers: {
+                    /** @description Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session. */
+                    "X-Session-Mismatch"?: "1";
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -1661,7 +1676,10 @@ export interface operations {
                 minimum?: number;
                 maximum?: number;
             };
-            header?: never;
+            header?: {
+                /** @description Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access. */
+                "X-Session-Scope"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1691,6 +1709,8 @@ export interface operations {
             /** @description Forbidden, banned, or CSRF refused */
             403: {
                 headers: {
+                    /** @description Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session. */
+                    "X-Session-Mismatch"?: "1";
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -1769,7 +1789,10 @@ export interface operations {
                 /** @description Exclusive RFC3339 instant, required only for custom, later than from, and forbidden for other ranges. */
                 to?: string;
             };
-            header?: never;
+            header?: {
+                /** @description Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access. */
+                "X-Session-Scope"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1799,6 +1822,8 @@ export interface operations {
             /** @description Forbidden, banned, or CSRF refused */
             403: {
                 headers: {
+                    /** @description Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session. */
+                    "X-Session-Mismatch"?: "1";
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -1817,7 +1842,10 @@ export interface operations {
             query: {
                 id: string;
             };
-            header?: never;
+            header?: {
+                /** @description Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access. */
+                "X-Session-Scope"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1847,6 +1875,8 @@ export interface operations {
             /** @description Forbidden, banned, or CSRF refused */
             403: {
                 headers: {
+                    /** @description Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session. */
+                    "X-Session-Mismatch"?: "1";
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -1867,7 +1897,10 @@ export interface operations {
                 page?: number;
                 page_size?: number;
             };
-            header?: never;
+            header?: {
+                /** @description Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access. */
+                "X-Session-Scope"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1897,6 +1930,8 @@ export interface operations {
             /** @description Forbidden, banned, or CSRF refused */
             403: {
                 headers: {
+                    /** @description Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session. */
+                    "X-Session-Mismatch"?: "1";
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -1924,7 +1959,10 @@ export interface operations {
                 page?: number;
                 page_size?: number;
             };
-            header?: never;
+            header?: {
+                /** @description Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access. */
+                "X-Session-Scope"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -1954,6 +1992,8 @@ export interface operations {
             /** @description Forbidden, banned, or CSRF refused */
             403: {
                 headers: {
+                    /** @description Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session. */
+                    "X-Session-Mismatch"?: "1";
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -1974,7 +2014,10 @@ export interface operations {
                 from?: string;
                 to?: string;
             };
-            header?: never;
+            header?: {
+                /** @description Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access. */
+                "X-Session-Scope"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2004,6 +2047,8 @@ export interface operations {
             /** @description Forbidden, banned, or CSRF refused */
             403: {
                 headers: {
+                    /** @description Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session. */
+                    "X-Session-Mismatch"?: "1";
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -2126,7 +2171,10 @@ export interface operations {
             query: {
                 id: string;
             };
-            header?: never;
+            header?: {
+                /** @description Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access. */
+                "X-Session-Scope"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2156,6 +2204,8 @@ export interface operations {
             /** @description Forbidden, banned, or CSRF refused */
             403: {
                 headers: {
+                    /** @description Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session. */
+                    "X-Session-Mismatch"?: "1";
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -2240,7 +2290,10 @@ export interface operations {
                 minimum?: number;
                 maximum?: number;
             };
-            header?: never;
+            header?: {
+                /** @description Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access. */
+                "X-Session-Scope"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2270,6 +2323,8 @@ export interface operations {
             /** @description Forbidden, banned, or CSRF refused */
             403: {
                 headers: {
+                    /** @description Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session. */
+                    "X-Session-Mismatch"?: "1";
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -2392,7 +2447,10 @@ export interface operations {
             query: {
                 id: string;
             };
-            header?: never;
+            header?: {
+                /** @description Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access. */
+                "X-Session-Scope"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2422,6 +2480,8 @@ export interface operations {
             /** @description Forbidden, banned, or CSRF refused */
             403: {
                 headers: {
+                    /** @description Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session. */
+                    "X-Session-Mismatch"?: "1";
                     [name: string]: unknown;
                 };
                 content?: never;
@@ -2441,7 +2501,10 @@ export interface operations {
                 only_mine?: boolean;
                 cursor?: string;
             };
-            header?: never;
+            header?: {
+                /** @description Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access. */
+                "X-Session-Scope"?: string;
+            };
             path?: never;
             cookie?: never;
         };
@@ -2471,6 +2534,8 @@ export interface operations {
             /** @description Forbidden, banned, or CSRF refused */
             403: {
                 headers: {
+                    /** @description Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session. */
+                    "X-Session-Mismatch"?: "1";
                     [name: string]: unknown;
                 };
                 content?: never;

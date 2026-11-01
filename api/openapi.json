@@ -2453,6 +2453,15 @@
               "minimum": 0,
               "type": "integer"
             }
+          },
+          {
+            "description": "Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access.",
+            "in": "header",
+            "name": "X-Session-Scope",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2490,7 +2499,18 @@
             "description": "Missing or invalid session"
           },
           "403": {
-            "description": "Forbidden, banned, or CSRF refused"
+            "description": "Forbidden, banned, or CSRF refused",
+            "headers": {
+              "X-Session-Mismatch": {
+                "description": "Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session.",
+                "schema": {
+                  "enum": [
+                    "1"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
           },
           "500": {
             "description": "Infrastructure failure"
@@ -2514,6 +2534,15 @@
             "required": true,
             "schema": {
               "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access.",
+            "in": "header",
+            "name": "X-Session-Scope",
+            "required": false,
+            "schema": {
               "type": "string"
             }
           }
@@ -2553,7 +2582,18 @@
             "description": "Missing or invalid session"
           },
           "403": {
-            "description": "Forbidden, banned, or CSRF refused"
+            "description": "Forbidden, banned, or CSRF refused",
+            "headers": {
+              "X-Session-Mismatch": {
+                "description": "Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session.",
+                "schema": {
+                  "enum": [
+                    "1"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
           },
           "500": {
             "description": "Infrastructure failure"
@@ -2723,6 +2763,15 @@
               "format": "uuid",
               "type": "string"
             }
+          },
+          {
+            "description": "Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access.",
+            "in": "header",
+            "name": "X-Session-Scope",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2760,7 +2809,18 @@
             "description": "Missing or invalid session"
           },
           "403": {
-            "description": "Forbidden, banned, or CSRF refused"
+            "description": "Forbidden, banned, or CSRF refused",
+            "headers": {
+              "X-Session-Mismatch": {
+                "description": "Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session.",
+                "schema": {
+                  "enum": [
+                    "1"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
           },
           "500": {
             "description": "Infrastructure failure"
@@ -2961,6 +3021,15 @@
               "minimum": 0,
               "type": "integer"
             }
+          },
+          {
+            "description": "Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access.",
+            "in": "header",
+            "name": "X-Session-Scope",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -2998,7 +3067,18 @@
             "description": "Missing or invalid session"
           },
           "403": {
-            "description": "Forbidden, banned, or CSRF refused"
+            "description": "Forbidden, banned, or CSRF refused",
+            "headers": {
+              "X-Session-Mismatch": {
+                "description": "Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session.",
+                "schema": {
+                  "enum": [
+                    "1"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
           },
           "500": {
             "description": "Infrastructure failure"
@@ -3136,6 +3216,15 @@
               "format": "date-time",
               "type": "string"
             }
+          },
+          {
+            "description": "Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access.",
+            "in": "header",
+            "name": "X-Session-Scope",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -3173,7 +3262,18 @@
             "description": "Missing or invalid session"
           },
           "403": {
-            "description": "Forbidden, banned, or CSRF refused"
+            "description": "Forbidden, banned, or CSRF refused",
+            "headers": {
+              "X-Session-Mismatch": {
+                "description": "Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session.",
+                "schema": {
+                  "enum": [
+                    "1"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
           },
           "500": {
             "description": "Infrastructure failure"
@@ -3197,6 +3297,15 @@
             "required": true,
             "schema": {
               "format": "uuid",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access.",
+            "in": "header",
+            "name": "X-Session-Scope",
+            "required": false,
+            "schema": {
               "type": "string"
             }
           }
@@ -3236,7 +3345,18 @@
             "description": "Missing or invalid session"
           },
           "403": {
-            "description": "Forbidden, banned, or CSRF refused"
+            "description": "Forbidden, banned, or CSRF refused",
+            "headers": {
+              "X-Session-Mismatch": {
+                "description": "Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session.",
+                "schema": {
+                  "enum": [
+                    "1"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
           },
           "500": {
             "description": "Infrastructure failure"
@@ -3283,6 +3403,15 @@
               "minimum": 1,
               "type": "integer"
             }
+          },
+          {
+            "description": "Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access.",
+            "in": "header",
+            "name": "X-Session-Scope",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -3320,7 +3449,18 @@
             "description": "Missing or invalid session"
           },
           "403": {
-            "description": "Forbidden, banned, or CSRF refused"
+            "description": "Forbidden, banned, or CSRF refused",
+            "headers": {
+              "X-Session-Mismatch": {
+                "description": "Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session.",
+                "schema": {
+                  "enum": [
+                    "1"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
           },
           "500": {
             "description": "Infrastructure failure"
@@ -3424,6 +3564,15 @@
               "minimum": 1,
               "type": "integer"
             }
+          },
+          {
+            "description": "Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access.",
+            "in": "header",
+            "name": "X-Session-Scope",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -3461,7 +3610,18 @@
             "description": "Missing or invalid session"
           },
           "403": {
-            "description": "Forbidden, banned, or CSRF refused"
+            "description": "Forbidden, banned, or CSRF refused",
+            "headers": {
+              "X-Session-Mismatch": {
+                "description": "Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session.",
+                "schema": {
+                  "enum": [
+                    "1"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
           },
           "500": {
             "description": "Infrastructure failure"
@@ -3515,6 +3675,15 @@
               "format": "date-time",
               "type": "string"
             }
+          },
+          {
+            "description": "Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access.",
+            "in": "header",
+            "name": "X-Session-Scope",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -3552,7 +3721,18 @@
             "description": "Missing or invalid session"
           },
           "403": {
-            "description": "Forbidden, banned, or CSRF refused"
+            "description": "Forbidden, banned, or CSRF refused",
+            "headers": {
+              "X-Session-Mismatch": {
+                "description": "Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session.",
+                "schema": {
+                  "enum": [
+                    "1"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
           },
           "500": {
             "description": "Infrastructure failure"
@@ -3721,6 +3901,15 @@
               "format": "uuid",
               "type": "string"
             }
+          },
+          {
+            "description": "Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access.",
+            "in": "header",
+            "name": "X-Session-Scope",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -3758,7 +3947,18 @@
             "description": "Missing or invalid session"
           },
           "403": {
-            "description": "Forbidden, banned, or CSRF refused"
+            "description": "Forbidden, banned, or CSRF refused",
+            "headers": {
+              "X-Session-Mismatch": {
+                "description": "Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session.",
+                "schema": {
+                  "enum": [
+                    "1"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
           },
           "500": {
             "description": "Infrastructure failure"
@@ -3969,6 +4169,15 @@
               "minimum": 0,
               "type": "integer"
             }
+          },
+          {
+            "description": "Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access.",
+            "in": "header",
+            "name": "X-Session-Scope",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -4006,7 +4215,18 @@
             "description": "Missing or invalid session"
           },
           "403": {
-            "description": "Forbidden, banned, or CSRF refused"
+            "description": "Forbidden, banned, or CSRF refused",
+            "headers": {
+              "X-Session-Mismatch": {
+                "description": "Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session.",
+                "schema": {
+                  "enum": [
+                    "1"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
           },
           "500": {
             "description": "Infrastructure failure"
@@ -4174,6 +4394,15 @@
               "format": "uuid",
               "type": "string"
             }
+          },
+          {
+            "description": "Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access.",
+            "in": "header",
+            "name": "X-Session-Scope",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -4211,7 +4440,18 @@
             "description": "Missing or invalid session"
           },
           "403": {
-            "description": "Forbidden, banned, or CSRF refused"
+            "description": "Forbidden, banned, or CSRF refused",
+            "headers": {
+              "X-Session-Mismatch": {
+                "description": "Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session.",
+                "schema": {
+                  "enum": [
+                    "1"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
           },
           "500": {
             "description": "Infrastructure failure"
@@ -4241,6 +4481,15 @@
           {
             "in": "query",
             "name": "cursor",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "description": "Expected authenticated profile csrf_token, or guest for an anonymous read. A mismatch with the actual Cookie session returns 403 CSRF_FAILED and X-Session-Mismatch: 1 before data is read; rediscover user/profile. Omit only for legacy-client compatibility. This never grants authentication or admin access.",
+            "in": "header",
+            "name": "X-Session-Scope",
             "required": false,
             "schema": {
               "type": "string"
@@ -4282,7 +4531,18 @@
             "description": "Missing or invalid session"
           },
           "403": {
-            "description": "Forbidden, banned, or CSRF refused"
+            "description": "Forbidden, banned, or CSRF refused",
+            "headers": {
+              "X-Session-Mismatch": {
+                "description": "Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session.",
+                "schema": {
+                  "enum": [
+                    "1"
+                  ],
+                  "type": "string"
+                }
+              }
+            }
           },
           "500": {
             "description": "Infrastructure failure"

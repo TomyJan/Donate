@@ -7,6 +7,7 @@ import type { Language } from '../lib/i18n';
 import { translate } from '../lib/i18n';
 import { LEGAL_CONSENT_KEY, useLocalAcknowledgment } from '../lib/legal';
 import { paymentLoginReturnPath, paymentReturnTarget, rememberPayment } from '../lib/payment-return';
+import { isSessionQuery, sessionIdentity } from '../lib/session-scope';
 import type { Profile, Site } from '../lib/types';
 import { useSessionRenewal } from './useSessionRenewal';
 
@@ -88,9 +89,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   });
   const profile = useQuery({
     queryKey: ['profile'],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       try {
-        return await api<Profile>('user/profile');
+        return await api<Profile>('user/profile', undefined, signal);
       } catch (e) {
         if (e instanceof APIError && (e.status === 401 || e.code === 'ACCOUNT_BANNED')) return null;
         throw e;
@@ -99,11 +100,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
     retry: false,
   });
   const current = profile.data ?? null;
+  const revokePrivateQueries = useCallback(() => {
+    const predicate = (query: { queryKey: readonly unknown[] }) => isSessionQuery(query.queryKey);
+    void client.cancelQueries({ predicate });
+    client.removeQueries({ predicate });
+  }, [client]);
   useLayoutEffect(() => {
+    let observed = sessionIdentity(client.getQueryData<Profile | null>(['profile']));
     const syncCredentials = () => {
       const account = client.getQueryData<Profile | null>(['profile']);
       const info = client.getQueryData<Site>(['site']);
-      setCSRF(account?.csrf_token ?? info?.csrf_token ?? '');
+      const next = sessionIdentity(account);
+      setCSRF(account?.csrf_token ?? info?.csrf_token ?? '', !!account, next);
+      if (observed !== next) {
+        observed = next;
+        revokePrivateQueries();
+        setAccountOpen(false);
+      }
     };
     // Install before child query effects. Profile replacements must revoke old
     // credentials immediately, including the interval before React rerenders.
@@ -111,7 +124,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     return client.getQueryCache().subscribe((event) => {
       if (event.query.queryKey[0] === 'profile' || event.query.queryKey[0] === 'site') syncCredentials();
     });
-  }, [client]);
+  }, [client, revokePrivateQueries]);
   const refresh = useCallback(async () => {
     await client.invalidateQueries({ queryKey: ['profile'] });
     await client.invalidateQueries({ queryKey: ['site'] });
@@ -126,6 +139,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     void client.invalidateQueries({ queryKey: ['site'] });
   }, [client]);
   useEffect(() => {
+    const changed = () => {
+      revokePrivateQueries();
+      void client.invalidateQueries({ queryKey: ['profile'] });
+    };
+    window.addEventListener('session-changed', changed);
     const invalidate = (event: Event) => {
       clearSession();
       if ((event as CustomEvent).detail === 'ACCOUNT_BANNED') notify(t('banned'), true);
@@ -146,10 +164,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
     };
     window.addEventListener('admin-forbidden', revokeAdmin);
     return () => {
+      window.removeEventListener('session-changed', changed);
       window.removeEventListener('session-invalid', invalidate);
       window.removeEventListener('admin-forbidden', revokeAdmin);
     };
-  }, [clearSession, client, notify, t]);
+  }, [clearSession, client, notify, t, revokePrivateQueries]);
   useSessionRenewal(current, clearSession, report);
   const setLang = (v: Language) => {
     savePreference('donate-language', v);
@@ -207,7 +226,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
           staleTime: 60000,
         });
         if (!isCurrent()) return;
-        setCSRF(anonymous.csrf_token);
+        setCSRF(anonymous.csrf_token, false);
       }
       if (!isCurrent()) return;
       const v = await api<{ authorization_url: string }>(

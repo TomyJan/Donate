@@ -203,6 +203,9 @@ func (s *Server) csrfOK(w http.ResponseWriter, r *http.Request) bool {
 }
 func (s *Server) route(fn http.HandlerFunc, level int) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if !s.readScopeOK(w, r) {
+			return
+		}
 		if level > 0 && !s.need(w, r, level == 2) {
 			return
 		}

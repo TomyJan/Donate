@@ -14,6 +14,7 @@ import { Button, Empty, Menu } from '../components/ui';
 import { acceptAmountEdit, amountFen, yearAmount } from '../lib/amount';
 import { APIError, api, money, query } from '../lib/api';
 import { errorMessage } from '../lib/errors';
+import { sessionIdentity } from '../lib/session-scope';
 import type { Order, RecordItem, Records } from '../lib/types';
 import { HomeReceipt, ReceiptBody } from './HomeReceipt';
 import { HomeRecordIndex } from './HomeRecordIndex';
@@ -57,7 +58,7 @@ export function Home() {
   useEffect(() => {
     setBusy(false);
   }, [scope]);
-  const identity = profile ? `${profile.id}:${profile.csrf_token}` : 'guest';
+  const identity = sessionIdentity(profile);
   useEffect(() => {
     setDetail((value) => (value?.identity === identity ? value : null));
   }, [identity]);
@@ -68,7 +69,8 @@ export function Home() {
   const client = useQueryClient();
   const [composerEpoch, setComposerEpoch] = useState(0);
   const [delivered, setDelivered] = useState<{
-    owner: string;
+    owner: typeof scope;
+    identity: string;
     mine: boolean;
     item: RecordItem;
     pending: boolean;
@@ -90,9 +92,14 @@ export function Home() {
       }
     : null;
   const list = useInfiniteQuery({
-    queryKey: ['records', profile?.id ?? 'guest', mine],
-    queryFn: ({ pageParam }) =>
-      api<Records>(`order/list?${query({ only_mine: mine ? 'true' : '', cursor: pageParam })}`),
+    queryKey: ['records', profile?.id ?? 'guest', mine, identity],
+    queryFn: ({ pageParam, signal }) =>
+      api<Records>(
+        `order/list?${query({ only_mine: mine ? 'true' : '', cursor: pageParam })}`,
+        undefined,
+        signal,
+        () => (profile ? isCurrent() : !client.getQueryData(['profile'])),
+      ),
     initialPageParam: '',
     getNextPageParam: (last) => last.next_cursor || undefined,
     enabled: !app.loading,
@@ -102,9 +109,10 @@ export function Home() {
   const finishTransfer = () => {
     const order = payment.order;
     if (order && order.user_id === profile?.id) {
-      const queryKey = ['records', profile.id, mine] as const;
+      const queryKey = ['records', profile.id, mine, identity] as const;
       setDelivered({
-        owner: profile.id,
+        owner: scope,
+        identity,
         mine,
         pending: true,
         refreshVersion: client.getQueryState(queryKey)?.dataUpdateCount ?? 0,
@@ -142,10 +150,10 @@ export function Home() {
   // A snapshot only bridges filing and its first successful list refresh. Keep
   // the arrival identity stable so acknowledging the API does not remount the paper.
   useEffect(() => {
-    if (delivered?.pending && (delivered.owner !== profile?.id || delivered.mine !== mine)) {
+    if (delivered?.pending && (delivered.owner !== scope || delivered.mine !== mine)) {
       setDelivered({ ...delivered, pending: false });
     }
-  }, [delivered, profile?.id, mine]);
+  }, [delivered, scope, mine]);
   useEffect(
     () =>
       client.getQueryCache().subscribe((event) => {
@@ -156,14 +164,15 @@ export function Home() {
         if (queryKey[0] !== 'records' || state.fetchMeta?.fetchMore) return;
         setDelivered((previous) =>
           previous?.pending &&
-          previous.owner === queryKey[1] &&
+          previous.owner === scope &&
+          previous.identity === queryKey[3] &&
           previous.mine === queryKey[2] &&
           state.dataUpdateCount > previous.refreshVersion
             ? { ...previous, pending: false }
             : previous,
         );
       }),
-    [client],
+    [client, scope],
   );
   // A callback can arrive after the public API already includes this payment. Keep that
   // row out until the paper has landed, including the initial response and focus refetches.
@@ -171,7 +180,7 @@ export function Home() {
     payment.locked ? { ...page, items: page.items.filter((item) => item.id !== payment.id) } : page,
   );
   const received =
-    delivered && delivered.owner === profile?.id && delivered.mine === mine
+    delivered && delivered.owner === scope && delivered.mine === mine
       ? delivered.pending
         ? delivered.item
         : (fetchedPages.flatMap((page) => page.items).find((item) => item.id === delivered.item.id) ?? null)
@@ -492,7 +501,7 @@ export function Home() {
         </div>
         <HomeRecordIndex
           pages={pages}
-          scope={`${profile?.id ?? 'guest'}:${mine}`}
+          scope={`${identity}:${mine}`}
           mine={mine}
           selected={selected}
           reduced={!!reduced}
