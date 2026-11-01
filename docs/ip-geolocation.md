@@ -5,7 +5,7 @@
 | 配置 | 行为 |
 | --- | --- |
 | `GEO_MODE=online` | 默认值，使用内置在线查询与故障转移，无需下载数据或填写 API Key |
-| `GEO_MODE=local` | 优先 XDB，缺失时回退可选 MMDB；仅开启 `GEO_ONLINE_FALLBACK` 时允许在线核验与补充 |
+| `GEO_MODE=local` | 优先 XDB → MMDB；开关控制本地就绪后的在线核验，无健康本地库时仍临时在线 |
 | `GEO_MODE=disabled` | 不查询属地，仍记录下单 IP |
 
 ## 本地库怎么配

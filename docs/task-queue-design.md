@@ -1,69 +1,58 @@
-# 后台任务队列
+# 持久任务与管理
 
-沿用单实例 SQLite 队列，管理支付核验（payment）、属地查询（geo）和关单（close），不引入外部队列。现有租约、领取、退避、支付幂等与回调优先级不变。
+操作入口见[运行说明](operations.md#任务队列)。本页记录任务状态与恢复约束，完整字段见 [API](../api/openapi.json)，类型来源位于 `internal/admin/tasks.go` 等 Go DTO。
 
-## 管理界面
+## 类型与状态
 
-- 复用站点头部、后台导航、标题、日期选择、表格、分页、弹窗、确认浮层和消息。新增“任务”导航。
-- 当前状态：等待执行 ready、执行中 running、已完成 done、失败 failed。待执行中区分到期可执行、未来计划；租约过期任务标注等待恢复，不冒充仍在正常执行。
-- 状态统计反映当前队列；趋势时间范围只影响执行趋势，默认 7 天，支持已有时间选择器的所有范围。趋势零填充、限制点数，长范围自动分桶；所有事件序列为零时显示无任务事件及开始记录时间，旧快照不计入执行。
-- 列表支持状态、类型、来源、关键词筛选，关键词匹配任务 ID、订单 ID、商户订单号与昵称。日期、类型、目标、状态、次数、计划时间、更新时间尽量支持表头排序。下方复用分页及每页数量选择。
-- 详情展示任务和订单信息、来源、请求 ID、调度/租约时间、当前结果、已记录执行次数及按页加载的持久时间线。已记录次数仅累计升级后观察到的领取，与当前重试预算次数分开；不声称知道升级前完整次数。目标订单点击复用订单详情弹窗。日志包含任务与订单唯一标识，结果与来源使用中英可读映射；未知结果保留原值，错误信息需脱敏及限制长度。
-- 支持失败任务重试、待执行任务立即执行；执行中和已完成任务不重放。单项和批量操作都需紧凑确认，“重试所选”固定在搜索后，未选择时禁用；筛选随可用宽度收纳到“更多筛选”，主行保持单行，已有选择可在展开区直接取消，不改变当前筛选。返回逐项结果，不掩盖不适用或冲突。
-- 自动刷新仅任务页所需查询；页面隐藏、退出任务页、会话退出或失去权限时停止。刷新保留筛选、页码、滚动、选中和详情，不重挂载整页，不播重复入场动画。默认每 5 秒自动刷新，无手动刷新按钮、开关或底部刷新时间。
-- 响应式、深浅色、键盘操作和 reduced motion 沿用现有规范。正文少、布局紧凑，移动端无整页横向溢出。
+| 类型 | 目标 |
+| --- | --- |
+| `payment` | 支付核验 / 补单 |
+| `close` | 远端关单及后续确认 |
+| `geo` | 订单属地查询 / 手动刷新 |
+| `geoip_update` | 系统资源 xdb4、xdb6 或 mmdb，不关联订单 |
 
-## 持久化与安全
+| 状态 | 含义 |
+| --- | --- |
+| `ready` | 等待计划时间；未来任务或退避不代表积压 |
+| `running` | 持有执行租约；租约过期后可恢复领取 |
+| `done` | 已完成，不可重放 |
+| `failed` | 当前执行预算耗尽或失败，可按适用条件重试 |
 
-- 迁移只增加历史/遥测结构，不修改既有任务和订单结果。覆盖所有入队、领取、重新领取、重试调度、完成与失败路径，包括付款回调直接完成关联任务、批量关单及属地刷新。状态改变与历史记录在同一事务中，不因请求失败留下假日志。
-- 已有任务仅记升级时快照，明确历史日志开始时间；不臆造过去的次数、耗时或成功趋势。新增记录使用 UUID，不使用自增 ID。订单物理删除时按现有约定清除关联任务与历史。
-- 管理员重试经过会话、权限和 CSRF 校验；事务内复核管理员未封禁。输入 ID、类型、状态、日期、排序字段和数量严格校验。每批最多 100 个 ID。
-- 重试以原任务为单位保留历史，重置失败任务的本轮重试预算，不创建同一订单同类的重复活动任务，不夺取未过期租约。ready 任务仅提前调度；同一幂等键重复请求不能二次重置或重复执行。
-- 记录管理员审计。审计目标使用关联订单，确保现有可读目标和订单详情复用仍正确；操作标签增加 task.retry。不展示租约令牌、密钥、OAuth 凭证或原始支付响应。
-- 不增加暂停、删除任务、清空队列、强制完成支付等破坏性操作。
+空闲 worker 每秒尝试领取，普通任务租约 60 秒，属地库更新租约 3 分钟；到期订单每 30 秒扫描。具体任务退避按类型处理，代码入口为 `internal/jobs/queue.go`、`runner.go` 和 `ipdb.go`。运行中任务恢复必须验证租约，不夺取未到期的活动执行。
 
-## API 契约
+支付核验检查点为订单创建后 1 / 3 / 8 / 18 / 30 分钟、1 / 2 / 6 / 12 / 24 小时，选择尚未经过的下一点；通知、回跳或人工操作可提前唤醒。支付查询失败按 1 / 2 / 5 / 10 分钟退避并加 0–14 秒抖动，还受商户限流、熔断及上游退避约束，不保证到点即可出站请求。
 
-沿用 /api/v1、GET/POST、业务 200 包装和基础鉴权 40x。OpenAPI 由 Go DTO 生成，前端类型跟随生成。时间均为 RFC3339 UTC，趋势按 Asia/Shanghai 日期分桶。
+## 持久化与恢复
 
-- GET /admin/task/list：page（默认 1）、page_size（默认 20，最大 100）、status、kind、source、search、from/to（创建时间）、sort、direction。返回标准 Page<TaskItem>。
-- GET /admin/task/detail?id=...：返回 TaskDetail。
-- GET /admin/task/history?id=...&page=1&page_size=20：标准 Page<TaskEvent>，新到旧稳定排序。
-- GET /admin/task/overview?range=7d：也支持 today/yesterday/30d/90d/all/custom；custom 带 from/to。返回 TaskOverview。
-- POST /admin/task/retry：{ids: string[], idempotency_key: string}，返回 TaskRetryResult。
+- 入队、领取、租约恢复、重新调度、完成与失败记录持久事件；业务状态和相关任务历史在同一事务提交。
+- 旧任务仅从升级时快照开始录制，不补造过去的执行次数、耗时或成功趋势。`attempts` 为当前重试预算计数，`total_attempts` 为已记录领取次数。
+- 一个订单的同类活动任务去重。物理删除订单时清除关联任务和历史；系统库更新任务独立保留。
+- 管理员重试失败任务时重置本轮预算；提前执行 ready 任务仅调整调度。running、done 或与活动任务冲突的项目不重放，批量逐项返回结果。
+- 重试以原任务保留历史，经过权限、CSRF、事务内管理员复核和审计。同调用者的幂等键重放原结果，同键不同集合报冲突；每批最多 100 项。
+- 不提供暂停、删除队列、强制完成支付等操作；重试任务不等于强制到账。
 
-对接类型（字段名为固定接口，额外只可增可选字段）：
+## 趋势与界面
 
-```ts
-type TaskItem = {
-  id: string; kind: string; order_id: string; merchant_order_no: string; nickname: string;
-  status: string; attempts: number; total_attempts: number; source: string; result: string;
-  created_at: string; updated_at: string; run_at: string; lease_until?: string;
-  retryable: boolean;
-};
-type TaskDetail = TaskItem & {
-  actor_id?: string; actor_name?: string; request_id: string; recording_since: string;
-};
-type TaskEvent = {
-  id: string; event: string; status: string; attempt: number; source: string; result: string;
-  message: string; created_at: string; run_at?: string; duration_ms?: number;
-  actor_id?: string; actor_name?: string; request_id?: string;
-};
-// event: snapshot | created | started | recovered | rescheduled | retried | completed | failed
-type TaskOverview = {
-  total: number; counts: {ready: number; running: number; done: number; failed: number};
-  due: number; scheduled: number; stale_running: number; recording_since: string;
-  from: string; to: string;
-  trend: {date: string; created: number; started: number; completed: number; failed: number; retried: number}[];
-};
-type TaskRetryResult = {
-  queued: number; items: {id: string; result: string}[];
-};
-// result: queued | already_ready | running | done | active_conflict | not_found | not_applicable
-```
+状态统计反映当前队列，与趋势时间区间分离。趋势使用持久事件，按上海自然日分桶、零填充并限制最多 90 个桶，默认 7 天；没有事件时展示录制起点，不把旧任务快照算成执行。
 
-## 验证与交付
+任务列表支持关键词、类型、状态、来源、创建时间、排序和分页。库更新按资源显示目标，不伪造订单链接。详情包含当前结果及按页加载的执行时间线，不暴露租约令牌、下载凭据或原始渠道响应。
 
-先用失败测试证明历史遗漏、重复重试、非法输入或权限缺失，再实现。覆盖过期租约、回调竞态、重试幂等、状态筛选、稳定分页、空范围趋势、迁移快照和订单级联删除。浏览器覆盖真实管理员登录与队列读取、详情分页、单/批重试、自动刷新、错误恢复、320/390/768/桌面与深浅色。完成全套前后端检查、生成校验、生产构建、完整 E2E 与独立审查。
+页面可见时每 5 秒自动刷新，离开页面、隐藏或失去权限时停止；保留筛选、页码、选中和详情。重试操作紧凑确认，刷新不重挂载整页。任务详情可打开关联订单详情。
 
-仅在 master 本地分笔签名提交；不推送、不发版，不修改真实数据库或 .env。
+## API 入口
+
+以下路径均以 `/api/v1` 为前缀，管理员权限；写操作另需 CSRF：
+
+| 方法与路径 | 用途 |
+| --- | --- |
+| GET `/admin/task/list` | 列表、筛选与分页 |
+| GET `/admin/task/detail?id=...` | 当前任务详情 |
+| GET `/admin/task/history?id=...` | 新到旧的持久时间线 |
+| GET `/admin/task/overview?range=7d` | 状态统计与趋势；支持预设及自定义区间 |
+| POST `/admin/task/retry` | `ids` 与 `idempotency_key`，返回逐项结果 |
+
+字段、枚举和参数约束维护在 Go 类型与契约生成器中，不在此复制 TypeScript 定义。
+
+## 验证重点
+
+覆盖过期租约、通知并发、重试幂等、目标删除、权限变化、稳定分页、空趋势、升级快照、库更新失败和重启恢复。浏览器覆盖单项 / 批量恢复、自动刷新、详情分页、窄屏和减少动态效果；命令见[开发指南](development.md#验证)。

@@ -2,7 +2,7 @@
 
 ## OIDC
 
-配置 `OIDC_ISSUER`、`OIDC_CLIENT_ID` 和 `OIDC_CLIENT_SECRET`，提供方需支持授权码流程、PKCE S256 及 `openid profile`。
+配套填写 `OIDC_ISSUER` 与 `OIDC_CLIENT_ID`，`OIDC_CLIENT_SECRET` 按提供方要求填写，可为空。提供方需支持授权码流程、PKCE S256 及 `openid profile`。
 
 | 变量 | 默认值 | 用途 |
 | --- | --- | --- |
@@ -14,7 +14,7 @@
 
 修改 ID 后同步提供方的回调地址；名称、图标和 ID 的变化不影响既有账号。更换 issuer 则属于不同身份。
 
-IdP 应用入口可设为 `https://站点域名/api/v1/user/login?provider=<OIDC_ID>&return_to=/`：GET 请求会直接 302 到授权页，`return_to` 可选，仅接受本站路径。QQ 登录将 `provider` 改为 `qq`；绑定账号仍使用独立的 POST 接口。
+IdP 应用入口可设为 `https://站点域名/api/v1/user/login?provider=<OIDC_ID>&return_to=/`：浏览器 GET 导航直接 302 到授权页，不应以 fetch 调用。`return_to` 可省略，仅保留 `/`、`/admin` 或 `/?payment=returned&order=<订单UUID>`，其他值回到 `/`。QQ 登录将 `provider` 改为 `qq`；绑定账号仍使用独立的 POST + CSRF 接口。
 
 ## QQ
 
@@ -28,8 +28,12 @@ IdP 应用入口可设为 `https://站点域名/api/v1/user/login?provider=<OIDC
 
 普通用户不能解绑；管理员可在用户详情解绑，但必须保留至少一种登录方式。
 
+封禁会撤销已有会话，并阻止所有绑定身份登录。授权完成页显示“登录失败：您的账号已被封禁，如有疑问请联系站长。”，解禁后需重新登录。
+
+OIDC 头像使用提供方返回的地址。HTTP 地址先升级 HTTPS 并验证可读取的图片；失败不保存不安全地址，并保留已有头像。没有头像时以默认头像展示。诊断需保留重新登录的日志，不能仅凭页面请求日志判断上游字段。
+
 ## 条款与隐私
 
-用户协议位于 `/terms`，隐私政策位于 `/privacy`。登录前须主动勾选同意，本机保存选择；Cookie 提示的确认独立保存。
+用户协议位于 `/terms`，隐私政策位于 `/privacy`。站内登录弹窗要求主动勾选，本机保存选择；外部 IdP 直接登录入口不会经过该弹窗，这不是服务端存储的协议签署记录。Cookie 弹窗确认独立保存。
 
-上线前核对条款中的联系渠道、支付服务商和隐私披露。修改条款须同步中英文，并更新 `web/src/lib/legal.ts` 中的版本。
+上线前核对联系渠道、支付服务商和隐私披露。条款文案在 `web/src/lib/i18n.ts`，修改须同步中英文，并更新 `web/src/lib/legal.ts` 中的版本。

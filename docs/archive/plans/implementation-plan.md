@@ -1,6 +1,6 @@
 # Donate 实现计划
 
-> 面向执行者：按 executing-plans 连续完成；关键业务采用 test-driven-development，最终进行独立代码审查。用户已确认设计并授权独立推进，不另设任务间审批。
+> 历史计划：记录当时的设计与验证，不代表当前功能、配置、发布状态或执行授权。现行入口见[文档索引](../../README.md)。
 
 **目标：** 将定稿界面落为可发版的 Go 单程序，完成登录、支付、历史和管理。
 
@@ -8,7 +8,7 @@
 
 **技术栈：** 当前最新稳定 Go、Node、pnpm、React、TypeScript、Vite；chi、modernc SQLite、OIDC、标准密码库。版本经官方发布接口 / registry 核验后锁定，安装使用 pnpm。
 
-**规格：** [产品规则](requirements.md)、[后端设计](backend-design.md)、[支付](payment-integration.md)、[界面](design/README.md)、[属地](ip-geolocation.md)。
+**规格：** [产品规则](../../requirements.md)、[后端设计](../../backend-design.md)、[支付](../../payment-integration.md)、[界面](../../design/README.md)、[属地](../../ip-geolocation.md)。
 
 ## 全局约束
 
@@ -79,7 +79,7 @@
 
 ## 交付边界
 
-实现按后端、前端、CI / 运维三个签名提交组织，审查修复另行提交。未推送、部署、打 tag 或正式发版，也未导入旧站数据。真实 QQ / OIDC 应用、QQ 头像阈值校准、实际易支付商户与属地服务授权，仍按 [运维说明](operations.md) 在上线前联调；隔离测试不能替代这些验证。
+实现按后端、前端、CI / 运维三个签名提交组织，审查修复另行提交。未推送、部署、打 tag 或正式发版，也未导入旧站数据。真实 QQ / OIDC 应用、QQ 头像阈值校准、实际易支付商户与属地服务授权，仍按 [运维说明](../../operations.md) 在上线前联调；隔离测试不能替代这些验证。
 
 契约生成方向以实际 Go wire DTO 为源，减少隐私响应结构的独立副本；若未来改为设计优先契约，需要迁移生成方向。GitHub 托管工作流的远端运行结果须在配置仓库远端并推送后确认。
 

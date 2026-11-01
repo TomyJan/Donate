@@ -1,6 +1,6 @@
 # 任务队列管理实现计划
 
-> 使用 subagent-driven-development 实现；用户已要求自主完成，所有选择按现有项目和 docs/task-queue-design.md 决定，无需等待确认。
+> 历史计划：记录当时的设计与验证，不代表当前功能、配置、发布状态或执行授权。现行入口见[文档索引](../../README.md)。
 
 **目标：** 为现有持久队列补齐真实历史、管理接口和完整后台界面。
 **规格：** docs/task-queue-design.md。

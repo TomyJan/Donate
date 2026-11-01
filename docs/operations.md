@@ -2,9 +2,9 @@
 
 ## 启动
 
-下载 Linux amd64 二进制，将 `.env.example` 复制为当前目录的 `.env`。填写 `PUBLIC_URL`、`APP_SECRET`，按需配置登录和支付后运行 `./donate`。
+按 [README](../README.md#部署) 下载并校验 Linux amd64 二进制。首次执行会因缺少 `.env` 而生成 `.env.example` 并退出；复制为 `.env`，填写 `PUBLIC_URL`、`APP_SECRET` 和所需登录 / 支付配置，再运行 `./donate`。
 
-`PUBLIC_URL` 必须是无路径、查询、片段或凭据的站点地址。CSRF 比较单独使用浏览器规范 origin：域名大小写、Unicode / IDN、IPv6 和默认端口会规范化，非默认端口保留；配置原串仍用于已注册的 OAuth / 支付回调，不会被此比较改写。普通 IPv4 使用完整点分十进制，缩写、八进制、十六进制等非规范数字地址在启动时拒绝；HTTP 仅允许开发环境。
+`PUBLIC_URL` 填不带路径、查询、片段或凭据的站点地址，须与注册的 OAuth / 支付回调一致；生产环境使用 HTTPS。IPv4 使用完整点分十进制，不接受缩写或其他进制形式。
 
 `APP_SECRET` 使用 `openssl rand -base64 32` 生成，部署后保持不变。完整配置见 [`.env.example`](../.env.example)。
 
@@ -20,10 +20,9 @@
 
 登录配置与回调地址见[登录配置](legal-and-login.md)。
 
-易支付配置 `EPAY_URL`、`EPAY_PID`，默认 `EPAY_PROTOCOL=v2`，使用商户私钥和平台公钥；旧接口设为 `v1` 并配置 `EPAY_KEY`。密钥可通过对应的 `_FILE` 变量读取。
+易支付默认使用 V2，配置网关、商户 ID、商户私钥和平台公钥；V1 需显式选择。完整配置、商户切换限制和联调清单见[支付接入](payment-integration.md)。
 
 - 支付通知：`/api/v1/payment/notify`；浏览器回跳：`/api/v1/payment/return`。
-- 额外支付跳转域名填入 `EPAY_REDIRECT_HOSTS`，逗号分隔，不支持通配符。
 - 订单 30 分钟到期，24 小时内自动核验；管理员可在订单详情手动补单。
 
 上线前用实际商户验证支付宝、微信的支付通知、漏单补单及关单。
@@ -51,23 +50,9 @@ UMAMI_WEBSITE_ID=Umami 后台提供的网站 ID
 
 ## IP 属地
 
-默认 `GEO_MODE=online`，无需下载库或配置 API Key。本地推荐 ip2region 的 XDB，可选配 City MMDB 回退：
+默认 `GEO_MODE=online`，无需下载库或配置 API Key。本地模式优先 XDB，再回退 City MMDB；文件默认在 `data/ipdb/`。没有可用本地库时临时在线，配置下载地址并启用更新后，缺失 / 损坏库立即入队修复，不阻塞启动。
 
-```dotenv
-GEO_MODE=local
-GEO_XDB_IPV4=data/ipdb/ip2region_v4.xdb
-GEO_XDB_IPV6=data/ipdb/ip2region_v6.xdb
-GEO_DATABASE=data/ipdb/GeoLite2-City.mmdb
-GEO_ONLINE_FALLBACK=true
-```
-
-- 默认文件在 `data/ipdb/`；可填写其他路径，含空格时加引号。不使用的库路径应留空。
-- 按需填写 `GEO_XDB_IPV4_URL`、`GEO_XDB_IPV6_URL`、`GEO_DATABASE_URL`；`GEO_UPDATE_DAYS=7` 表示每 7 天更新。支持原始文件、gzip、tar.gz、zip，按内容识别，无需 URL 扩展名。MaxMind 选择 City MMDB 的 `suffix=tar.gz` 下载并提供认证，程序自动提取 `.mmdb`；[官方来源与配置示例](ip-geolocation.md#官方下载来源与示例)。验证后热重载，失败保留旧库；0 或空 URL 关闭对应下载。
-- 本地按对应协议 XDB → MMDB 选择；MMDB 可留空，XDB 可只配一种协议。`GEO_ONLINE_FALLBACK=true` 允许就绪后的在线补充和省级核验。没有可用本地库时临时在线运行；配置了下载地址的缺失或损坏库立即入队，验证后自动恢复本地策略，不阻塞启动。`false` 不禁止未就绪期间的在线降级或显式库下载。
-- 关闭查询设 `GEO_MODE=disabled`。前台最多展示省级，后台展示库里实际存在的字段；更新库不会重算历史订单。
-- 已有订单可在订单详情或批量操作中“刷新属地”，绕过缓存。失败、缺省份或分歧未解决时重试并保留原属地，后台可展开查看最近一次核验依据；不改变支付状态。换库或重启不会自动刷新旧订单。
-
-下载来源、服务商选择、格式限制及常见问题见 [IP 属地配置](ip-geolocation.md)。
+更新库不重算旧订单；管理员可单笔或批量“刷新属地”，失败保留旧快照。来源推荐、最小配置、MaxMind 认证与 `suffix=tar.gz`、下载格式及回退策略统一见 [IP 属地配置](ip-geolocation.md)。
 
 ## 任务队列
 
