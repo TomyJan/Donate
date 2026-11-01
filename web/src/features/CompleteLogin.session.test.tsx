@@ -10,20 +10,22 @@ afterEach(() => {
   cleanup();
   for (const client of clients.splice(0)) client.clear();
   vi.unstubAllGlobals();
+  localStorage.removeItem('donate-language');
   history.replaceState(null, '', '/');
 });
 function Account() {
   const { profile } = useApp();
   return <p>{profile?.nickname ?? 'guest'}</p>;
 }
-it.each(['error-callback', 'missing-flow', 'qq-complete'])(
+it.each(['error-callback', 'banned-callback-zh', 'banned-callback-en', 'missing-flow', 'qq-complete'])(
   'keeps the valid session when the authorization flow expires: %s',
   async (stage) => {
     history.replaceState(
       null,
       '',
-      `/auth/complete${stage === 'error-callback' ? '?error=authorization' : ''}`,
+      `/auth/complete${stage.startsWith('banned-callback') ? '?error=account_banned' : stage === 'error-callback' ? '?error=authorization' : ''}`,
     );
+    localStorage.setItem('donate-language', stage.endsWith('-en') ? 'en' : 'zh');
     const profile: Profile = {
       id: 'replacement-B',
       nickname: 'Replacement B',
@@ -75,6 +77,16 @@ it.each(['error-callback', 'missing-flow', 'qq-complete'])(
       await waitFor(() => expect(requested).toContain('/api/v1/user/login/status'));
     }
     await act(async () => {});
+    if (stage.startsWith('banned-callback')) {
+      expect(screen.getByRole('heading')).toHaveTextContent(
+        stage.endsWith('-en') ? 'Sign-in failed' : '登录失败',
+      );
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        stage.endsWith('-en')
+          ? 'Your account has been banned. Contact the site owner if you have questions.'
+          : '您的账号已被封禁，如有疑问请联系站长。',
+      );
+    }
     expect(screen.getByText('Replacement B')).toBeInTheDocument();
     expect(client.getQueryData(['profile'])).toEqual(profile);
     expect(client.getQueryData(['order-detail', false, 'B-private'])).toEqual({

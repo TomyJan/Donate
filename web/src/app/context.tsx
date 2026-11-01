@@ -219,18 +219,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
           }
         }
       }
-      if (!bind && !current) {
-        const anonymous = await client.fetchQuery({
-          queryKey: ['site'],
-          queryFn: ({ signal }) => api<Site>('site/info', undefined, signal),
-          staleTime: 60000,
-        });
-        if (!isCurrent()) return;
-        setCSRF(anonymous.csrf_token, false);
-      }
       if (!isCurrent()) return;
+      if (!bind) {
+        const query = new URLSearchParams({ provider, return_to: returnTo });
+        location.assign(`/api/v1/user/login?${query}`);
+        return;
+      }
       const v = await api<{ authorization_url: string }>(
-        bind ? 'user/identity/bind' : 'user/login',
+        'user/identity/bind',
         { provider, return_to: returnTo },
         undefined,
         isCurrent,

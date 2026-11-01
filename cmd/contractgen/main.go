@@ -251,6 +251,12 @@ func main() {
 		}
 		paths["/api/v1/"+r.path] = schema{r.method: operation}
 	}
+	paths["/api/v1/user/login"].(schema)["get"] = schema{
+		"operationId": "user_login_get", "summary": "Start sign-in with a browser navigation",
+		"description": "Navigate the top-level browser to this endpoint, including from an IdP application link. The server sets a browser-bound OAuth flow cookie and redirects to the enabled provider authorization URL. Do not fetch this endpoint to follow OAuth redirects. Login does not require a CSRF header; binding still requires POST and CSRF. The legacy POST login endpoint remains supported. Cross-site requests must be top-level document navigations.",
+		"parameters":  []any{parameter("query", "provider", true, schema{"type": "string", "description": "Enabled public provider ID from site/info.provider_details"}), parameter("query", "return_to", false, schema{"type": "string", "description": "Validated local return path; defaults to / and preserves supported payment return locators"})},
+		"responses":   schema{"302": schema{"description": "Redirect to the provider authorization URL with a browser-bound flow cookie", "headers": schema{"Location": schema{"schema": schema{"type": "string", "format": "uri"}}}}, "303": schema{"description": "Login start failed; redirect to /auth/complete?error=authorization. The fixed error code is presentation-only; upstream diagnostic details stay on the server.", "headers": schema{"Location": schema{"schema": schema{"type": "string"}}}}, "403": schema{"description": "Cross-site subresource or embedded navigation refused"}, "500": schema{"description": "Infrastructure failure"}},
+	}
 	textResponse := func(description, contentType string) schema {
 		return schema{"description": description, "content": schema{contentType: schema{"schema": schema{"type": "string"}}}}
 	}

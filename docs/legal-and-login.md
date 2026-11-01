@@ -14,6 +14,8 @@
 
 修改 ID 后同步提供方的回调地址；名称、图标和 ID 的变化不影响既有账号。更换 issuer 则属于不同身份。
 
+IdP 应用入口可设为 `https://站点域名/api/v1/user/login?provider=<OIDC_ID>&return_to=/`：GET 请求会直接 302 到授权页，`return_to` 可选，仅接受本站路径。QQ 登录将 `provider` 改为 `qq`；绑定账号仍使用独立的 POST 接口。
+
 ## QQ
 
 配置 `QQ_APP_ID`、`QQ_APP_SECRET`，回调为 `https://站点域名/api/v1/user/oauth/callback/qq`。首次登录或绑定须完成 QQ 号验证。

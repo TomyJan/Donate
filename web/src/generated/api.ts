@@ -483,7 +483,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Start sign-in with a browser navigation
+         * @description Navigate the top-level browser to this endpoint, including from an IdP application link. The server sets a browser-bound OAuth flow cookie and redirects to the enabled provider authorization URL. Do not fetch this endpoint to follow OAuth redirects. Login does not require a CSRF header; binding still requires POST and CSRF. The legacy POST login endpoint remains supported. Cross-site requests must be top-level document navigations.
+         */
+        get: operations["user_login_get"];
         put?: never;
         /** user/login */
         post: operations["user_login_post"];
@@ -2810,6 +2814,50 @@ export interface operations {
                 content?: never;
             };
             /** @description Forbidden, banned, or CSRF refused */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Infrastructure failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    user_login_get: {
+        parameters: {
+            query: {
+                provider: string;
+                return_to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Redirect to the provider authorization URL with a browser-bound flow cookie */
+            302: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Login start failed; redirect to /auth/complete?error=authorization. The fixed error code is presentation-only; upstream diagnostic details stay on the server. */
+            303: {
+                headers: {
+                    Location?: string;
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Cross-site subresource or embedded navigation refused */
             403: {
                 headers: {
                     [name: string]: unknown;

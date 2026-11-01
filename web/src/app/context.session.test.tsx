@@ -24,7 +24,24 @@ function SignIn() {
   );
 }
 const clients: QueryClient[] = [];
+let navigation: ReturnType<typeof vi.fn>;
 beforeEach(() => {
+  const originalLocation = location;
+  navigation = vi.fn((target: string) => {
+    if (target.startsWith('#')) originalLocation.assign(target);
+  });
+  vi.stubGlobal('location', {
+    get pathname() {
+      return originalLocation.pathname;
+    },
+    get search() {
+      return originalLocation.search;
+    },
+    get hash() {
+      return originalLocation.hash;
+    },
+    assign: navigation,
+  });
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-10-31T00:00:00Z'));
   onlineManager.setOnline(true);
@@ -115,11 +132,13 @@ it.each([
     await waitFor(() => expect(finishSite).toBeTypeOf('function'));
     await act(async () => finishSite?.(Response.json({ code: 'OK', data: anonymous })));
   }
-  await waitFor(() => expect(location.hash).toBe('#authorized'));
-  expect(loginHeaders).toEqual(['anonymous-csrf']);
+  await waitFor(() =>
+    expect(navigation).toHaveBeenCalledWith('/api/v1/user/login?provider=oidc&return_to=%2F'),
+  );
+  expect(loginHeaders).toEqual([]);
 });
 
-it('keeps a replacement session when an earlier anonymous sign-in is waiting for site data', async () => {
+it('keeps a replacement session when site data arrives after anonymous sign-in navigation', async () => {
   const expired: Profile = {
     id: 'expired-user',
     nickname: 'Expired user',
@@ -200,70 +219,64 @@ it('keeps a replacement session when an earlier anonymous sign-in is waiting for
   await waitFor(() => expect(location.hash).toBe('#bound'));
 });
 
-it.each(['initial', 'sign-in'])(
-  'aborts the old %s site request when invalidating the session',
-  async (source) => {
-    const site: Site = {
-      csrf_token: 'previous-csrf',
-      logo: '',
-      name: 'Synthetic site',
-      payment_enabled: true,
-      providers: ['oidc'],
-      version: { version: '0.0.4', tag: '', commit: 'synthetic', built_at: '' },
-    };
-    const client = new QueryClient({
-      defaultOptions: { queries: { retry: false, staleTime: Infinity, refetchOnWindowFocus: false } },
-    });
-    clients.push(client);
-    client.setQueryData(['profile'], null);
-    if (source === 'sign-in') client.setQueryData(['site'], site);
-    localStorage.setItem(LEGAL_CONSENT_KEY, LEGAL_VERSION);
-    let oldSignal: AbortSignal | undefined;
-    let finishOld: ((response: Response) => void) | undefined;
-    let sites = 0;
-    vi.stubGlobal('fetch', async (path: string, init?: RequestInit) => {
-      if (path.endsWith('site/info')) {
-        if (++sites === 1) {
-          oldSignal = init?.signal ?? undefined;
-          return new Promise<Response>((resolve, reject) => {
-            finishOld = resolve;
-            oldSignal?.addEventListener('abort', () => reject(oldSignal?.reason), { once: true });
-          });
-        }
-        return Response.json({ code: 'OK', data: { ...site, csrf_token: 'anonymous-csrf' } });
+it('aborts the old initial site request when invalidating the session', async () => {
+  const site: Site = {
+    csrf_token: 'previous-csrf',
+    logo: '',
+    name: 'Synthetic site',
+    payment_enabled: true,
+    providers: ['oidc'],
+    version: { version: '0.0.4', tag: '', commit: 'synthetic', built_at: '' },
+  };
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, staleTime: Infinity, refetchOnWindowFocus: false } },
+  });
+  clients.push(client);
+  client.setQueryData(['profile'], null);
+  localStorage.setItem(LEGAL_CONSENT_KEY, LEGAL_VERSION);
+  let oldSignal: AbortSignal | undefined;
+  let finishOld: ((response: Response) => void) | undefined;
+  let sites = 0;
+  vi.stubGlobal('fetch', async (path: string, init?: RequestInit) => {
+    if (path.endsWith('site/info')) {
+      if (++sites === 1) {
+        oldSignal = init?.signal ?? undefined;
+        return new Promise<Response>((resolve, reject) => {
+          finishOld = resolve;
+          oldSignal?.addEventListener('abort', () => reject(oldSignal?.reason), { once: true });
+        });
       }
-      if (path.endsWith('user/login')) {
-        const valid = new Headers(init?.headers).get('X-CSRF-Token') === 'anonymous-csrf';
-        return Response.json(
-          { code: valid ? 'OK' : 'CSRF_FAILED', data: valid ? { authorization_url: '#authorized' } : null },
-          { status: valid ? 200 : 403 },
-        );
-      }
-      throw new Error(`Unexpected synthetic request: ${path}`);
-    });
-    render(
-      <QueryClientProvider client={client}>
-        <AppProvider>
-          <SignIn />
-        </AppProvider>
-      </QueryClientProvider>,
+      return Response.json({ code: 'OK', data: { ...site, csrf_token: 'anonymous-csrf' } });
+    }
+    if (path.endsWith('user/login')) {
+      const valid = new Headers(init?.headers).get('X-CSRF-Token') === 'anonymous-csrf';
+      return Response.json(
+        { code: valid ? 'OK' : 'CSRF_FAILED', data: valid ? { authorization_url: '#authorized' } : null },
+        { status: valid ? 200 : 403 },
+      );
+    }
+    throw new Error(`Unexpected synthetic request: ${path}`);
+  });
+  render(
+    <QueryClientProvider client={client}>
+      <AppProvider>
+        <SignIn />
+      </AppProvider>
+    </QueryClientProvider>,
+  );
+  await waitFor(() => expect(finishOld).toBeTypeOf('function'));
+  try {
+    act(() => window.dispatchEvent(new Event('session-invalid')));
+    expect(oldSignal?.aborted).toBe(true);
+    await waitFor(() => expect(client.getQueryData<Site>(['site'])?.csrf_token).toBe('anonymous-csrf'));
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    await waitFor(() =>
+      expect(navigation).toHaveBeenCalledWith('/api/v1/user/login?provider=oidc&return_to=%2F'),
     );
-    if (source === 'sign-in') {
-      vi.setSystemTime(Date.now() + 61000);
-      fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-    }
-    await waitFor(() => expect(finishOld).toBeTypeOf('function'));
-    try {
-      act(() => window.dispatchEvent(new Event('session-invalid')));
-      expect(oldSignal?.aborted).toBe(true);
-      await waitFor(() => expect(client.getQueryData<Site>(['site'])?.csrf_token).toBe('anonymous-csrf'));
-      fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
-      await waitFor(() => expect(location.hash).toBe('#authorized'));
-    } finally {
-      await act(async () => finishOld?.(Response.json({ code: 'OK', data: site })));
-    }
-  },
-);
+  } finally {
+    await act(async () => finishOld?.(Response.json({ code: 'OK', data: site })));
+  }
+});
 
 it.each(
   ['guest', 'alice', 'bob'].flatMap((replacementID) =>

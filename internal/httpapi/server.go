@@ -156,6 +156,13 @@ func (s *Server) failure(w http.ResponseWriter, r *http.Request, e error) {
 		status = 500
 		s.Log.ErrorContext(r.Context(), fmt.Sprintf("请求 %s 无法完成，路由 %s", state(r).ID, chi.RouteContext(r.Context()).RoutePattern()), "request_id", state(r).ID, "stage", "http_handler", "reason", observability.ErrorReason(e))
 	}
+	if r.Method == http.MethodGet && r.URL.Path == "/api/v1/user/login" {
+		// This endpoint is a browser navigation. Keep the classified server
+		// diagnostic while presenting only a fixed, non-sensitive failure code.
+		state(r).Code, state(r).Status = code, http.StatusSeeOther
+		http.Redirect(w, r, "/auth/complete?error=authorization", http.StatusSeeOther)
+		return
+	}
 	s.respond(w, r, status, code, message, nil)
 }
 func decode(r *http.Request, v any) error {
@@ -235,6 +242,7 @@ func (s *Server) Handler() http.Handler {
 	})
 	mux.Route("/api/v1", func(m chi.Router) {
 		m.Get("/site/info", s.route(s.siteInfo, 0))
+		m.Get("/user/login", s.route(s.login, 0))
 		m.Post("/user/login", s.route(s.login, 0))
 		m.Get("/user/oauth/callback/{provider}", s.callback)
 		m.Get("/user/login/status", s.route(s.flowStatus, 0))

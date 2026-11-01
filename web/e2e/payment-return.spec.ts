@@ -813,10 +813,13 @@ test('retrying a failed OAuth authorization preserves the payment return destina
       },
     }),
   );
-  await page.route('**/api/v1/user/login', (route) => {
-    destinations.push(route.request().postDataJSON().return_to);
+  await page.route('**/api/v1/user/login?**', (route) => {
+    expect(route.request().method()).toBe('GET');
+    expect(route.request().isNavigationRequest()).toBe(true);
+    destinations.push(new URL(route.request().url()).searchParams.get('return_to') ?? '');
     return route.fulfill({
-      json: { code: 'OK', data: { authorization_url: '/auth/complete?error=authorization' } },
+      status: 302,
+      headers: { location: '/auth/complete?error=authorization' },
     });
   });
   await page.goto(`/?payment=returned&order=${orderID}`);

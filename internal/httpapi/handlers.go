@@ -12,6 +12,7 @@ import (
 	"github.com/TomyJan/Donate/internal/storage"
 	"github.com/go-chi/chi/v5"
 	"net/http"
+	"net/url"
 	"time"
 )
 
@@ -34,14 +35,34 @@ func (s *Server) siteInfo(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) begin(w http.ResponseWriter, r *http.Request, intent string) {
+	// Reject cross-site subresources before rate limiting so they always keep
+	// their 403 API response rather than redirecting to a browser error page.
+	if r.Method == http.MethodGet && r.Header.Get("Sec-Fetch-Site") == "cross-site" && (r.Header.Get("Sec-Fetch-Mode") != "navigate" || r.Header.Get("Sec-Fetch-Dest") != "document") {
+		s.respond(w, r, http.StatusForbidden, "CSRF_FAILED", "请求来源无效", nil)
+		return
+	}
 	if !s.limits.allow(s.clientIP(r)+":login", 15, time.Minute) {
 		s.failure(w, r, order.ErrBusy)
 		return
 	}
 	var in LoginInput
-	if e := decode(r, &in); e != nil {
-		s.failure(w, r, e)
-		return
+	if r.Method == http.MethodGet {
+		query, e := url.ParseQuery(r.URL.RawQuery)
+		if e != nil {
+			s.failure(w, r, auth.ErrInvalid)
+			return
+		}
+		values, e := payment.ParseValues(query)
+		if e != nil {
+			s.failure(w, r, auth.ErrInvalid)
+			return
+		}
+		in.Provider, in.ReturnTo = values["provider"], values["return_to"]
+	} else {
+		if e := decode(r, &in); e != nil {
+			s.failure(w, r, e)
+			return
+		}
 	}
 	v, e := s.Auth.BeginFlow(r.Context(), in.Provider, intent, state(r).Session, in.ReturnTo)
 	if e != nil {
@@ -50,6 +71,11 @@ func (s *Server) begin(w http.ResponseWriter, r *http.Request, intent string) {
 	}
 	s.setCookie(w, s.cookieName("flow"), v.Cookie, time.Now().Add(10*time.Minute))
 	s.setBrowserCookie(w, v.BrowserFamily, s.Auth.Now().Add(auth.IdleTTL))
+	if r.Method == http.MethodGet {
+		state(r).Status = http.StatusFound
+		http.Redirect(w, r, v.URL, http.StatusFound)
+		return
+	}
 	s.ok(w, r, v)
 }
 func (s *Server) login(w http.ResponseWriter, r *http.Request) { s.begin(w, r, "login") }
@@ -69,7 +95,12 @@ func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
 			state(r).Code = "LOGIN_PROVIDER_UNAVAILABLE"
 		}
 		state(r).Status = 303
-		http.Redirect(w, r, "/auth/complete?error=authorization", http.StatusSeeOther)
+		target := "/auth/complete?error=authorization"
+		if errors.Is(e, auth.ErrBanned) {
+			state(r).Code = "ACCOUNT_BANNED"
+			target = "/auth/complete?error=account_banned"
+		}
+		http.Redirect(w, r, target, http.StatusSeeOther)
 		return
 	}
 	s.finishFlow(w, r, result)

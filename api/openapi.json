@@ -5047,6 +5047,60 @@
       }
     },
     "/api/v1/user/login": {
+      "get": {
+        "description": "Navigate the top-level browser to this endpoint, including from an IdP application link. The server sets a browser-bound OAuth flow cookie and redirects to the enabled provider authorization URL. Do not fetch this endpoint to follow OAuth redirects. Login does not require a CSRF header; binding still requires POST and CSRF. The legacy POST login endpoint remains supported. Cross-site requests must be top-level document navigations.",
+        "operationId": "user_login_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "provider",
+            "required": true,
+            "schema": {
+              "description": "Enabled public provider ID from site/info.provider_details",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "return_to",
+            "required": false,
+            "schema": {
+              "description": "Validated local return path; defaults to / and preserves supported payment return locators",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "302": {
+            "description": "Redirect to the provider authorization URL with a browser-bound flow cookie",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "format": "uri",
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "303": {
+            "description": "Login start failed; redirect to /auth/complete?error=authorization. The fixed error code is presentation-only; upstream diagnostic details stay on the server.",
+            "headers": {
+              "Location": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Cross-site subresource or embedded navigation refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "summary": "Start sign-in with a browser navigation"
+      },
       "post": {
         "operationId": "user_login_post",
         "parameters": [

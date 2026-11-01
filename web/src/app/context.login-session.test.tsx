@@ -69,10 +69,17 @@ async function fixture(initial: Profile | null, pauseBeforePost = false, logout 
   let startedAt = 0;
   let startedDate = 0;
   const requests: string[] = [];
-  if (pauseBeforePost) history.replaceState(null, '', '/auth/complete');
+  if (pauseBeforePost || !logout) history.replaceState(null, '', '/auth/complete');
+  const currentLocation = location;
+  const navigation = vi.fn();
+  vi.stubGlobal('location', {
+    pathname: currentLocation.pathname,
+    search: currentLocation.search,
+    assign: navigation,
+  });
   vi.stubGlobal('fetch', (path: string, init?: RequestInit) => {
     requests.push(path);
-    if (path.endsWith(pauseBeforePost ? 'user/login/status' : logout ? 'user/logout' : 'user/login')) {
+    if (path.endsWith(logout ? 'user/logout' : 'user/login/status')) {
       signal = init?.signal;
       startedAt = performance.now();
       startedDate = Date.now();
@@ -122,13 +129,10 @@ async function fixture(initial: Profile | null, pauseBeforePost = false, logout 
   // Only the already-loaded page ages; no request is pending during this advance.
   vi.setSystemTime(Date.now() + 16000);
   fireEvent.click(screen.getByRole('button', { name: logout ? 'Log out' : 'Sign in' }));
-  await waitFor(() =>
-    expect(requests).toContain(
-      `/api/v1/${pauseBeforePost ? 'user/login/status' : logout ? 'user/logout' : 'user/login'}`,
-    ),
-  );
+  await waitFor(() => expect(requests).toContain(`/api/v1/${logout ? 'user/logout' : 'user/login/status'}`));
   return {
     client,
+    navigation,
     requests,
     finish: (response: Response) => finish(response),
     fail: (error: Error) => fail(error),
@@ -152,7 +156,7 @@ it.each(
     ['success', '401', '403', 'banned', 'network'].map((outcome) => ({ replacement, outcome })),
   ),
 )(
-  'ignores an old ordinary login $outcome after $replacement replacement',
+  'ignores an old login preflight $outcome after $replacement replacement',
   async ({ replacement, outcome }) => {
     const initial = replacement.startsWith('anonymous') ? null : alice;
     const f = await fixture(initial);
@@ -189,7 +193,7 @@ it.each(
               ),
         );
     });
-    expect(location.hash).toBe('');
+    expect(f.navigation).not.toHaveBeenCalled();
     expect(f.client.getQueryData(['profile'])).toEqual(expected);
     expect(f.client.getQueryData(['order-detail', false, 'current-private'])).toEqual({
       message: 'current-private',
@@ -212,15 +216,17 @@ it.each(['switch', 'same-id-new-csrf', 'aba'])(
     f.assertLiveRequest();
     await act(async () => f.finish(ok({ return_to: '/' })));
     expect(f.requests).not.toContain('/api/v1/user/login');
-    expect(location.hash).toBe('');
+    expect(f.navigation).not.toHaveBeenCalled();
   },
 );
 
 it.each([null, alice])('allows a current explicitly initiated normal login (%s)', async (initial) => {
   const f = await fixture(initial);
   f.assertLiveRequest();
-  await act(async () => f.finish(ok({ authorization_url: '#authorized' })));
-  await waitFor(() => expect(location.hash).toBe('#authorized'));
+  await act(async () => f.finish(ok({ return_to: '/' })));
+  await waitFor(() =>
+    expect(f.navigation).toHaveBeenCalledWith('/api/v1/user/login?provider=oidc&return_to=%2F'),
+  );
 });
 
 it.each(

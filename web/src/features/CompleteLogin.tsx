@@ -14,7 +14,10 @@ export function CompleteLogin() {
     queryFn: () => api<{ stage: string; provider: string; return_to: string }>('user/login/status'),
     retry: false,
   });
-  const failed = new URLSearchParams(location.search).has('error') || status.isError;
+  // The callback code is presentation-only: it must never invalidate or alter
+  // the current profile, which may belong to a different sign-in.
+  const callbackError = new URLSearchParams(location.search).get('error');
+  const failed = callbackError !== null || status.isError;
   const submit = async () => {
     setBusy(true);
     try {
@@ -29,7 +32,8 @@ export function CompleteLogin() {
   return (
     <main className="login-complete">
       <article className="d-dialog-frame">
-        <h1>{t(failed ? 'loginError' : 'qq')}</h1>
+        <h1>{t(failed ? (callbackError === 'account_banned' ? 'loginBanned' : 'loginError') : 'qq')}</h1>
+        {callbackError === 'account_banned' && <p role="alert">{t('loginBannedHint')}</p>}
         {failed ? (
           <Button onClick={() => setLoginOpen(true)}>{t('login')}</Button>
         ) : status.isLoading ? (

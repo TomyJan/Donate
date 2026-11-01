@@ -8,6 +8,10 @@ test('cancels a stale site response before it can replace the anonymous sign-in 
   baseURL,
 }) => {
   const origin = new URL(baseURL ?? '').origin;
+  const discovery = await (await page.request.get('/api/v1/site/info')).json();
+  const providerID = discovery.data.provider_details.find(
+    (provider: { kind: string }) => provider.kind === 'oidc',
+  ).id;
   const csrf = (token: string) =>
     createHmac('sha256', Buffer.alloc(32, 7)).update(`anonymous-csrf:${token}`).digest('base64url');
   const oldCookie = 'a'.repeat(43);
@@ -25,8 +29,8 @@ test('cancels a stale site response before it can replace the anonymous sign-in 
   const site = {
     logo: '',
     name: 'Synthetic site',
-    providers: ['oidc'],
-    provider_details: [{ id: 'oidc', kind: 'oidc', name: 'Synthetic OIDC', icon_url: '' }],
+    providers: [providerID],
+    provider_details: [{ id: providerID, kind: 'oidc', name: 'Synthetic OIDC', icon_url: '' }],
     payment_enabled: true,
     version: { version: '0.0.4', tag: '', commit: 'synthetic', built_at: '' },
   };
@@ -47,7 +51,9 @@ test('cancels a stale site response before it can replace the anonymous sign-in 
   await page.route('**/*', async (route) => {
     const url = new URL(route.request().url());
     if (url.origin !== origin) {
-      await route.abort();
+      // Real local fixture authorization runs on its own origin.
+      if (url.hostname === '127.0.0.1' || url.hostname === 'localhost') await route.continue();
+      else await route.abort();
       return;
     }
     if (!url.pathname.startsWith('/api/v1/')) {
@@ -77,17 +83,11 @@ test('cancels a stale site response before it can replace the anonymous sign-in 
       });
       return;
     }
-    if (url.pathname.endsWith('/user/login')) {
-      const headers = await route.request().allHeaders();
-      const token = /(?:^|; )donate_csrf_dev=([^;]+)/.exec(headers.cookie ?? '')?.[1] ?? '';
-      const valid = token === newCookie && headers['x-csrf-token'] === csrf(token);
-      await route.fulfill({
-        status: valid ? 200 : 403,
-        json: {
-          code: valid ? 'OK' : 'CSRF_FAILED',
-          data: valid ? { authorization_url: '/#authorized' } : null,
-        },
-      });
+    if (
+      url.pathname.endsWith('/user/login') ||
+      url.pathname === `/api/v1/user/oauth/callback/${providerID}`
+    ) {
+      await route.continue();
       return;
     }
     if (url.pathname.endsWith('/order/list')) {
@@ -109,10 +109,22 @@ test('cancels a stale site response before it can replace the anonymous sign-in 
       newCookie,
     );
     await page.getByRole('button', { name: '登录', exact: true }).click();
-    const response = page.waitForResponse((value) => value.url().endsWith('/api/v1/user/login'));
+    const response = page.waitForResponse((value) => new URL(value.url()).pathname === '/api/v1/user/login');
+    const callback = page.waitForResponse(
+      (value) => new URL(value.url()).pathname === `/api/v1/user/oauth/callback/${providerID}`,
+    );
     await page.getByRole('button', { name: 'Synthetic OIDC', exact: true }).click();
-    expect((await response).status()).toBe(200);
-    await expect(page).toHaveURL(/#authorized$/);
+    const login = await response;
+    expect(login.status()).toBe(302);
+    expect(login.request().method()).toBe('GET');
+    expect(login.request().isNavigationRequest()).toBe(true);
+    expect(new URL(login.url()).searchParams.get('provider')).toBe(providerID);
+    expect((await login.request().allHeaders())['x-csrf-token']).toBeUndefined();
+    expect((await callback).status()).toBe(303);
+    await expect(page).toHaveURL(`${origin}/`);
+    const current = await (await page.request.get('/api/v1/user/profile')).json();
+    expect(current.code).toBe('OK');
+    expect(current.data.nickname).toBe('Fixture Admin');
   } finally {
     releaseOld();
     await page.unrouteAll({ behavior: 'wait' });

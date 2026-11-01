@@ -496,6 +496,11 @@ export const words = {
   ],
   qqHint: ['确认 QQ 号后完成登录。', 'Confirm your QQ number to finish signing in.'],
   loginError: ['授权未完成，请重新登录。', 'Authorization failed. Please sign in again.'],
+  loginBanned: ['登录失败', 'Sign-in failed'],
+  loginBannedHint: [
+    '您的账号已被封禁，如有疑问请联系站长。',
+    'Your account has been banned. Contact the site owner if you have questions.',
+  ],
   notConfigured: ['暂未配置登录方式', 'Sign-in is not configured'],
   paymentDisabled: ['暂未配置支付渠道', 'Payment is not configured'],
   confirmed: ['已确认', 'Confirmed'],
