@@ -42,7 +42,11 @@ func TestOrderAndTaskSearchPreservesLiteralNicknameCase(t *testing.T) {
 					login := auth.New(s.Store, config.Config{}, s.Log)
 					var target order.Order
 					for i, nickname := range append([]string{tc.target}, tc.others...) {
-						owner, err := login.LoginIdentity(ctx, auth.Identity{Provider: "oidc", Issuer: "literal-search", Subject: fmt.Sprint(i), Nickname: nickname})
+						identityName := nickname
+						if !fallback {
+							identityName = fmt.Sprintf("Current identity %d", i)
+						}
+						owner, err := login.LoginIdentity(ctx, auth.Identity{Provider: "oidc", Issuer: "literal-search", Subject: fmt.Sprint(i), Nickname: identityName})
 						if err != nil {
 							t.Fatal(err)
 						}
@@ -50,20 +54,44 @@ func TestOrderAndTaskSearchPreservesLiteralNicknameCase(t *testing.T) {
 						if err != nil {
 							t.Fatal(err)
 						}
+						id, err := storage.ParseID(created.ID)
+						if err != nil {
+							t.Fatal(err)
+						}
+						if !fallback {
+							if _, err = s.Store.DB.ExecContext(ctx, "UPDATE orders SET donor_nickname=? WHERE id=?", nickname, id); err != nil {
+								t.Fatal(err)
+							}
+						}
+						var snapshot, identity string
+						if err = s.Store.DB.QueryRowContext(ctx, "SELECT o.donor_nickname,i.nickname FROM orders o JOIN users u ON u.id=o.user_id JOIN identities i ON i.id=u.public_identity_id WHERE o.id=?", id).Scan(&snapshot, &identity); err != nil {
+							t.Fatal(err)
+						}
+						if identity != identityName {
+							t.Fatalf("current identity premise: got=%q want=%q", identity, identityName)
+						}
 						if fallback {
-							id, err := storage.ParseID(created.ID)
-							if err != nil {
-								t.Fatal(err)
+							if snapshot != "" || identity != nickname {
+								t.Fatalf("identity fallback premise: snapshot=%q identity=%q want=%q", snapshot, identity, nickname)
 							}
-							if _, err = s.Store.DB.ExecContext(ctx, "UPDATE orders SET donor_nickname='' WHERE id=?", id); err != nil {
-								t.Fatal(err)
-							}
+						} else if snapshot != nickname || identity == snapshot {
+							t.Fatalf("frozen snapshot premise: snapshot=%q identity=%q want snapshot=%q and a different identity", snapshot, identity, nickname)
 						}
 						if i == 0 {
 							target = created
 						}
 					}
 					assertOrderAndTaskSearch(t, s, tc.search, target.ID)
+					if !fallback {
+						orders, err := s.OrdersList(ctx, Filter{Search: "Current identity 0", Size: 100})
+						if err != nil || orders.Total != 0 || len(orders.Items) != 0 {
+							t.Errorf("snapshot order search fell back to current identity: %+v err=%v", orders, err)
+						}
+						tasks, err := s.Tasks(ctx, TaskFilter{Search: "Current identity 0", Size: 100})
+						if err != nil || tasks.Total != 0 || len(tasks.Items) != 0 {
+							t.Errorf("snapshot task search fell back to current identity: %+v err=%v", tasks, err)
+						}
+					}
 				})
 			}
 		})
