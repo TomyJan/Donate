@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -124,14 +125,15 @@ func (s *Service) logAuthFailure(ctx context.Context, provider string, err error
 	d.logged = true
 }
 
-// The client is copied per operation. Capturing status at the transport boundary
+// The client is copied per operation. Capturing transport and body-read errors
 // avoids parsing library error strings, which may contain complete URLs/bodies.
 type upstreamTrace struct {
-	mu     sync.Mutex
-	client *http.Client
-	host   string
-	status int
-	err    error
+	mu         sync.Mutex
+	client     *http.Client
+	host       string
+	status     int
+	err        error
+	generation uint64
 }
 type tracingTransport struct {
 	base  http.RoundTripper
@@ -149,18 +151,53 @@ func tracedClient(client *http.Client) *upstreamTrace {
 	return t
 }
 func (t tracingTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	t.trace.mu.Lock()
+	t.trace.generation++
+	generation := t.trace.generation
+	t.trace.host, t.trace.err, t.trace.status = r.URL.Hostname(), nil, 0
+	t.trace.mu.Unlock()
 	response, err := t.base.RoundTrip(r)
 	t.trace.mu.Lock()
-	t.trace.host, t.trace.err, t.trace.status = r.URL.Hostname(), err, 0
-	if response != nil {
-		t.trace.status = response.StatusCode
+	if t.trace.generation == generation {
+		t.trace.err = err
+		if response != nil {
+			t.trace.status = response.StatusCode
+		}
 	}
 	t.trace.mu.Unlock()
+	if response != nil && response.Body != nil {
+		response.Body = &tracedResponseBody{ReadCloser: response.Body, trace: t.trace, ctx: r.Context(), generation: generation}
+	}
 	return response, err
 }
+
+type tracedResponseBody struct {
+	io.ReadCloser
+	trace      *upstreamTrace
+	ctx        context.Context
+	generation uint64
+}
+
+func (b *tracedResponseBody) Read(p []byte) (int, error) {
+	n, err := b.ReadCloser.Read(p)
+	if err != nil && err != io.EOF {
+		cause := err
+		if contextErr := b.ctx.Err(); contextErr != nil {
+			cause = contextErr
+		}
+		b.trace.mu.Lock()
+		if b.trace.generation == b.generation {
+			b.trace.err = cause
+		}
+		b.trace.mu.Unlock()
+	}
+	return n, err
+}
+
 func (t *upstreamTrace) reset() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.generation++
 	t.host, t.err, t.status = "", nil, 0
 }
 func (t *upstreamTrace) failure(public error, stage, fallback string, cause error) error {
