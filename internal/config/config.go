@@ -109,9 +109,8 @@ func load() (Config, error) {
 		c.UmamiScriptURL, c.UmamiWebsiteID = tracker.String(), id.String()
 		c.UmamiOrigin = tracker.Scheme + "://" + tracker.Host
 	}
-	u, err := url.Parse(c.PublicURL)
-	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" || (u.Scheme != "https" && !(c.Development && u.Scheme == "http")) {
-		return c, errors.New("PUBLIC_URL 必须为无路径、查询或凭据的 HTTPS 站点地址")
+	if _, err := c.PublicOrigin(); err != nil {
+		return c, err
 	}
 	c.OIDCid, c.OIDCname, c.OIDCiconURL = env("OIDC_ID", "oidc"), env("OIDC_NAME", "OIDC"), os.Getenv("OIDC_ICON_URL")
 	if !regexp.MustCompile(`^[a-z][a-z0-9_-]{0,31}$`).MatchString(c.OIDCid) || c.OIDCid == "qq" {

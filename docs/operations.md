@@ -4,6 +4,8 @@
 
 下载 Linux amd64 二进制，将 `.env.example` 复制为当前目录的 `.env`。填写 `PUBLIC_URL`、`APP_SECRET`，按需配置登录和支付后运行 `./donate`。
 
+`PUBLIC_URL` 必须是无路径、查询、片段或凭据的站点地址。CSRF 比较单独使用浏览器规范 origin：域名大小写、Unicode / IDN、IPv6 和默认端口会规范化，非默认端口保留；配置原串仍用于已注册的 OAuth / 支付回调，不会被此比较改写。普通 IPv4 使用完整点分十进制，缩写、八进制、十六进制等非规范数字地址在启动时拒绝；HTTP 仅允许开发环境。
+
 `APP_SECRET` 使用 `openssl rand -base64 32` 生成，部署后保持不变。完整配置见 [`.env.example`](../.env.example)。
 
 - `.env` 必须声明模板中每个键；可选值可留空，进程环境变量优先。缺文件、缺键、格式或读取权限错误时，写出最新 `.env.example` 后退出；不修改 `.env`，示例不含实际凭据。修改配置后重启。

@@ -183,7 +183,8 @@ func (s *Server) need(w http.ResponseWriter, r *http.Request, adminOnly bool) bo
 }
 func (s *Server) csrfOK(w http.ResponseWriter, r *http.Request) bool {
 	origin := r.Header.Get("Origin")
-	if origin != s.Config.PublicURL || r.Header.Get("Sec-Fetch-Site") == "cross-site" {
+	trustedOrigin, err := s.Config.PublicOrigin()
+	if err != nil || origin != trustedOrigin || r.Header.Get("Sec-Fetch-Site") == "cross-site" {
 		s.respond(w, r, 403, "CSRF_FAILED", "请求来源无效", nil)
 		return false
 	}
