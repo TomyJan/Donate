@@ -98,6 +98,10 @@ func startOIDCFixture(t *testing.T, fixture oidcFixture) (*Service, FlowStart) {
 	t.Cleanup(server.Close)
 	issuer = server.URL
 	s := testAuth(t)
+	// Provider fixtures must never fetch public avatar URLs from the network.
+	s.avatarHTTP = &http.Client{Transport: qqTransport(func(*http.Request) (*http.Response, error) {
+		return nil, errors.New("avatar unavailable in fixture")
+	})}
 	s.Config.OIDCissuer, s.Config.OIDCclientID, s.Config.OIDCsecret = issuer, "oidc-client", "oidc-secret"
 	s.Config.OIDCid, s.Config.PublicURL = "moeauth", "https://donate.test"
 	start, err := s.BeginFlow(context.Background(), "moeauth", "login", nil, "/")

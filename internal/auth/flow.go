@@ -395,7 +395,7 @@ func (s *Service) exchangeOIDC(ctx context.Context, code string, f flow) (Identi
 		}
 	}
 	// Prefer usable standard picture claims before the Casdoor avatar alias.
-	avatar, source, rejected := selectOIDCAvatar(
+	avatar, source, rejected := s.selectOIDCAvatar(ctx,
 		oidcAvatarClaim{source: "id_token.picture", value: claims.Picture},
 		oidcAvatarClaim{source: "userinfo.picture", value: additional.Picture},
 		claims.avatarClaim("id_token"), additional.avatarClaim("userinfo"),

@@ -69,11 +69,12 @@ type Profile struct {
 	ExpiresAt time.Time  `json:"expires_at"`
 }
 type Service struct {
-	Store  *storage.Store
-	Config config.Config
-	Log    *slog.Logger
-	Now    func() time.Time
-	HTTP   *http.Client
+	Store      *storage.Store
+	Config     config.Config
+	Log        *slog.Logger
+	Now        func() time.Time
+	HTTP       *http.Client
+	avatarHTTP *http.Client
 }
 
 func New(s *storage.Store, c config.Config, l *slog.Logger) *Service {

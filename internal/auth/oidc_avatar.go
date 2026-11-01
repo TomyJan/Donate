@@ -1,10 +1,13 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
+	"log/slog"
 	"net/netip"
 	"net/url"
 	"strings"
+	"time"
 
 	"golang.org/x/net/idna"
 )
@@ -27,8 +30,8 @@ func (p oidcProfileClaims) avatarClaim(source string) oidcAvatarClaim {
 	return oidcAvatarClaim{source + ".avatar", value, invalid}
 }
 
-// Do not resolve relative URLs or upgrade HTTP to HTTPS: either may point at a
-// different resource. Explicit local addresses are not suitable browser avatars.
+// Validate HTTPS URLs without fetching. HTTP candidates must separately pass an
+// HTTPS image probe; relative URLs and local hosts remain unsuitable avatars.
 func safeOIDCAvatar(raw string) (string, string) {
 	if raw == "" {
 		return "", ""
@@ -74,12 +77,46 @@ func safeOIDCAvatar(raw string) (string, string) {
 	return SafeAvatar(u.String()), ""
 }
 
-func selectOIDCAvatar(candidates ...oidcAvatarClaim) (avatar, source, rejected string) {
+func (s *Service) selectOIDCAvatar(ctx context.Context, candidates ...oidcAvatarClaim) (avatar, source, rejected string) {
+	ctx, cancel := context.WithTimeout(ctx, avatarProbeTimeout)
+	defer cancel()
+	client := s.avatarHTTP
+	checked := map[string]string{}
 	var reasons []string
 	for _, candidate := range candidates {
 		reason := "invalid_type"
 		if !candidate.invalid {
-			avatar, reason = safeOIDCAvatar(candidate.value)
+			raw := candidate.value
+			u, err := url.Parse(raw)
+			upgrade := err == nil && u.Scheme == "http"
+			if upgrade {
+				u.Scheme = "https"
+				raw = u.String()
+			}
+			avatar, reason = safeOIDCAvatar(raw)
+			if upgrade && avatar != "" {
+				var known bool
+				reason, known = checked[avatar]
+				if !known {
+					if client == nil {
+						client = newAvatarProbeClient()
+					}
+					started := time.Now()
+					var status int
+					reason, status = probeHTTPSAvatar(ctx, client, avatar)
+					checked[avatar] = reason
+					level, outcome := slog.LevelInfo, "accepted"
+					if reason != "" {
+						level, outcome = slog.LevelWarn, "rejected"
+					}
+					_, host := avatarDiagnostics(avatar)
+					s.logAuth(ctx, level, s.Config.OIDCProviderID(), "oidc_avatar_upgrade", outcome, started,
+						"avatar_source", candidate.source, "avatar_host", host, "reason", reason, "http_status", status)
+				}
+				if reason != "" {
+					avatar, reason = "", "https_upgrade_"+reason
+				}
+			}
 		}
 		if avatar != "" {
 			return avatar, candidate.source, strings.Join(reasons, ",")

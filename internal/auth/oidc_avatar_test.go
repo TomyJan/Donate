@@ -29,7 +29,7 @@ func TestOIDCAvatarCompatibility(t *testing.T) {
 		{"mismatched subject cannot supply alias", oidcFixture{claims: map[string]any{"name": "token-name"}, userInfo: `{"sub":"someone-else","avatar":"https://cdn.test/info.png"}`}, ""},
 		{"protocol-relative avatar remains rejected", oidcFixture{claims: map[string]any{"name": "token-name", "avatar": "//cdn.test/avatar.png"}, noUserInfo: true}, ""},
 		{"relative avatar remains rejected", oidcFixture{claims: map[string]any{"name": "token-name", "avatar": "/avatar.png"}, noUserInfo: true}, ""},
-		{"HTTP avatar remains rejected", oidcFixture{claims: map[string]any{"name": "token-name", "avatar": "http://cdn.test/avatar.png"}, noUserInfo: true}, ""},
+		{"unavailable HTTPS upgrade remains rejected", oidcFixture{claims: map[string]any{"name": "token-name", "avatar": "http://cdn.test/avatar.png"}, noUserInfo: true}, ""},
 		{"private IP alias remains rejected", oidcFixture{claims: map[string]any{"name": "token-name", "avatar": "https://127.0.0.1/avatar.png"}, noUserInfo: true}, ""},
 		{"short IPv4 alias remains rejected", oidcFixture{claims: map[string]any{"name": "token-name", "avatar": "https://127.1/avatar.png"}, noUserInfo: true}, ""},
 		{"IPv4-mapped private alias remains rejected", oidcFixture{claims: map[string]any{"name": "token-name", "avatar": "https://[::ffff:10.0.0.1]/avatar.png"}, noUserInfo: true}, ""},
