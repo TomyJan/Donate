@@ -197,6 +197,7 @@ export const words = {
   calendarNextMonth: ['下一月', 'Next month'],
   calendarYear: ['选择年份', 'Choose year'],
   calendarMonth: ['选择月份', 'Choose month'],
+  calendarSecond: ['秒', 'Second'],
   registeredAt: ['注册时间', 'Registered at'],
   donationAmount: ['捐赠金额', 'Donation amount'],
   boundAt: ['绑定时间', 'Linked at'],

@@ -344,3 +344,36 @@ test('public view offers actions on owned receipts and preserves the province', 
   await expect(receipt).toContainText('纸片 2');
   await expect(receipt.getByRole('button', { name: '订单详情', exact: true })).toHaveCount(0);
 });
+
+test('personal details show seconds while the donation index and paper keep minute precision', async ({
+  page,
+}) => {
+  await home(page);
+  await page.route('**/api/v1/order/detail?**', async (route) => {
+    await route.fulfill({
+      json: {
+        code: 'OK',
+        data: {
+          ...records[0],
+          user_id: 'home-test-user',
+          created_at: '2026-10-29T08:35:17Z',
+          paid_at: '2026-10-29T08:36:28Z',
+          expires_at: '2026-10-29T09:05:39Z',
+        },
+      },
+    });
+  });
+  await expect(page.locator('.r-featured:not(.r-leaving) time')).toHaveText('2026-10-29 16:35');
+  const indexTime = page.locator('.r-index-row').first().locator('time');
+  for (const width of [1280, 390]) {
+    await page.setViewportSize({ width, height: 1000 });
+    for (const time of await indexTime.all()) await expect(time).toHaveText('2026-10-29 16:35');
+    await page.getByRole('button', { name: '订单详情', exact: true }).click();
+    const detail = page.getByRole('dialog', { name: '订单详情', exact: true });
+    await expect(detail.getByText('2026-10-29 16:35:17', { exact: true })).toBeVisible();
+    await expect(detail.getByText('2026-10-29 16:36:28', { exact: true })).toBeVisible();
+    await expect(detail.getByText('2026-10-29 17:05:39', { exact: true })).toBeVisible();
+    await detail.getByRole('button', { name: '关闭', exact: true }).click();
+    await expect(detail).toBeHidden();
+  }
+});

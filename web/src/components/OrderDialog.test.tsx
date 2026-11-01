@@ -317,6 +317,24 @@ const order: Order & { province: string } = {
   province: '广东',
 };
 
+it.each([false, true])(
+  'shows order timestamps to the second in the admin=%s detail dialog',
+  async (admin) => {
+    vi.stubGlobal('fetch', async () =>
+      response({
+        ...order,
+        created_at: '2026-11-01T02:03:04Z',
+        paid_at: '2026-11-01T02:04:05Z',
+        expires_at: '2026-11-01T02:33:06Z',
+      }),
+    );
+    renderOrder(admin);
+    expect(await screen.findByText('2026-11-01 10:03:04')).toBeInTheDocument();
+    expect(screen.getByText('2026-11-01 10:04:05')).toBeInTheDocument();
+    expect(screen.getByText('2026-11-01 10:33:06')).toBeInTheDocument();
+  },
+);
+
 it.each([
   ['NOT_FOUND', 200, 'recordMissingError'],
   ['FORBIDDEN', 403, 'forbidden'],
@@ -418,7 +436,7 @@ it('copies a complete readable order summary using an explicit safe field list',
   };
   const text = orderCopyText(order, (key) => labels[key] ?? translate(key, 'zh-CN'));
   expect(text).toBe(
-    '捐赠 TomyJan donate.tomys.top 订单信息:\n账号: Admin (full-user-uuid)\n金额: ￥9.88\n付款方式: 支付宝\n订单 ID: order-uuid\n商户订单号: merchant-123\n平台流水: gateway-trade\n状态: 已支付\n创建时间: 2026-10-30 08:00\n支付时间: 2026-10-30 08:01\n留言:\n第一行留言\nSecond line\n  keep this indentation',
+    '捐赠 TomyJan donate.tomys.top 订单信息:\n账号: Admin (full-user-uuid)\n金额: ￥9.88\n付款方式: 支付宝\n订单 ID: order-uuid\n商户订单号: merchant-123\n平台流水: gateway-trade\n状态: 已支付\n创建时间: 2026-10-30 08:00:00\n支付时间: 2026-10-30 08:01:00\n留言:\n第一行留言\nSecond line\n  keep this indentation',
   );
   expect(text).not.toContain(order.ip);
   expect(text).not.toContain(order.api_trade_no);

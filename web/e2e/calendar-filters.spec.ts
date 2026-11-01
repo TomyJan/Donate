@@ -174,7 +174,7 @@ for (const theme of ['light', 'dark']) {
     await page.setViewportSize({ width: 320, height: 900 });
     await page.getByRole('button', { name: 'From', exact: true }).click();
     await elevated(page.locator('.date-time-pop'));
-    for (const label of ['Choose year', 'Choose month', 'Hour', 'Minute']) {
+    for (const label of ['Choose year', 'Choose month', 'Hour', 'Minute', 'Second']) {
       await page.getByRole('combobox', { name: label, exact: true }).click();
       await elevated(page.getByRole('listbox'));
       await page.keyboard.press('Escape');
@@ -222,6 +222,7 @@ test('calendar title controls share the arrow row and preserve Shanghai time thr
   for (const [label, value] of [
     ['Hour', '23'],
     ['Minute', '47'],
+    ['Second', '39'],
   ]) {
     await page.getByRole('combobox', { name: label, exact: true }).click();
     await page.getByRole('option', { name: value, exact: true }).click();
@@ -237,10 +238,10 @@ test('calendar title controls share the arrow row and preserve Shanghai time thr
   await expect(page.getByRole('option', { name: 'February', exact: true })).toBeFocused();
   await page.keyboard.press('Enter');
   await expect(page.getByRole('grid')).toHaveAttribute('aria-label', 'February 2025');
-  await expect(from).toContainText('1/31/2024 23:47');
+  await expect(from).toContainText('1/31/2024 23:47:39');
   await page.screenshot({ path: info.outputPath('calendar-320-dark.png'), animations: 'disabled' });
   await page.locator('[data-day="2025-02-28"] button').click();
-  await expect(from).toContainText('2/28/2025 23:47');
+  await expect(from).toContainText('2/28/2025 23:47:39');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.getByRole('button', { name: 'Confirm', exact: true }).click();
   for (const width of [1920, 1512, 1280, 1080, 900, 768, 680, 640, 390, 320]) {
@@ -262,5 +263,5 @@ test('calendar title controls share the arrow row and preserve Shanghai time thr
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   }
   await page.getByRole('button', { name: 'Apply', exact: true }).click();
-  await expect.poll(() => requests.at(-1)?.searchParams.get('from')).toBe('2025-02-28T15:47:00.000Z');
+  await expect.poll(() => requests.at(-1)?.searchParams.get('from')).toBe('2025-02-28T15:47:39.000Z');
 });

@@ -62,11 +62,11 @@ export function HomeRecordIndex({
               >
                 <span className="r-index-label">
                   {mine ? (
-                    <time>{dateTime(record.date)}</time>
+                    <time>{dateTime(record.date, 'minute')}</time>
                   ) : (
                     <>
                       <span>{record.nickname}</span>
-                      <time className="r-index-time">{dateTime(record.date)}</time>
+                      <time className="r-index-time">{dateTime(record.date, 'minute')}</time>
                     </>
                   )}
                   {mine && record.status !== 'paid' && (

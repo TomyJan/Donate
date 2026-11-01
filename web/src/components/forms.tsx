@@ -123,7 +123,7 @@ export function DateTimeField({
   const date = value ? new TZDate(value, calendarZone) : undefined;
   const [open, setOpen] = useState(false);
   const [month, setMonth] = useState<Date>(() => date ?? TZDate.tz(calendarZone));
-  const update = (day: Date | undefined, hour?: string, minute?: string) => {
+  const update = (day: Date | undefined, hour?: string, minute?: string, second?: string) => {
     if (!day) {
       onValue('');
       return;
@@ -134,6 +134,7 @@ export function DateTimeField({
       day.getDate(),
       Number(hour ?? date?.getHours() ?? 0),
       Number(minute ?? date?.getMinutes() ?? 0),
+      Number(second ?? date?.getSeconds() ?? 0),
       calendarZone,
     );
     onValue(new Date(next.getTime()).toISOString());
@@ -150,7 +151,7 @@ export function DateTimeField({
         <Button className="a-btn a-select" aria-label={label}>
           <span>
             {value
-              ? `${date?.toLocaleDateString(lang, { timeZone: calendarZone })} ${String(date?.getHours()).padStart(2, '0')}:${String(date?.getMinutes()).padStart(2, '0')}`
+              ? `${date?.toLocaleDateString(lang, { timeZone: calendarZone })} ${String(date?.getHours()).padStart(2, '0')}:${String(date?.getMinutes()).padStart(2, '0')}:${String(date?.getSeconds()).padStart(2, '0')}`
               : label}
           </span>
           <CalendarDays />
@@ -170,7 +171,7 @@ export function DateTimeField({
             locale={lang === 'en' ? enUS : zhCN}
             components={{ MonthCaption: CalendarCaption }}
           />
-          <div className="d-row">
+          <div className="d-row date-time-controls">
             <SelectField
               label="Hour"
               value={String(date?.getHours() ?? 0)}
@@ -182,6 +183,13 @@ export function DateTimeField({
               label="Minute"
               value={String(date?.getMinutes() ?? 0)}
               onValue={(m) => update(date ?? TZDate.tz(calendarZone), undefined, m)}
+              options={Array.from({ length: 60 }, (_, i) => [String(i), String(i).padStart(2, '0')])}
+            />
+            <span>:</span>
+            <SelectField
+              label={t('calendarSecond')}
+              value={String(date?.getSeconds() ?? 0)}
+              onValue={(s) => update(date ?? TZDate.tz(calendarZone), undefined, undefined, s)}
               options={Array.from({ length: 60 }, (_, i) => [String(i), String(i).padStart(2, '0')])}
             />
           </div>

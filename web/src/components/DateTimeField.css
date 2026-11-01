@@ -60,6 +60,15 @@
 .d-app .date-time-pop .d-row .a-select {
   min-width: 0;
 }
+.date-time-pop .date-time-controls {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 6px;
+}
+.d-app .date-time-pop .date-time-controls > .a-select {
+  width: 100%;
+  padding-inline: 8px;
+}
 .date-time-pop .rdp-month_grid {
   width: 100%;
   table-layout: fixed;

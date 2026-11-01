@@ -155,7 +155,7 @@ export async function downloadExport(id: string, isCurrent?: () => boolean) {
 export function money(fen: number) {
   return (fen / 100).toFixed(2);
 }
-export function dateTime(v?: string | null) {
+export function dateTime(v?: string | null, precision: 'minute' | 'second' = 'second') {
   if (!v) return '—';
   return new Intl.DateTimeFormat('zh-CN', {
     timeZone: 'Asia/Shanghai',
@@ -164,6 +164,7 @@ export function dateTime(v?: string | null) {
     day: '2-digit',
     hour: '2-digit',
     minute: '2-digit',
+    second: precision === 'second' ? '2-digit' : undefined,
     hour12: false,
   })
     .format(new Date(v))

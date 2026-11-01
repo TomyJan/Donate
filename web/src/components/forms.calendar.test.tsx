@@ -42,6 +42,24 @@ function pick(day: string) {
   fireEvent.click(button);
 }
 
+it('shows seconds in the selected timestamp and preserves them when changing the day', () => {
+  const changed = vi.fn();
+  render(<Example initial="2024-01-30T15:47:39Z" changed={changed} />);
+  expect(screen.getByRole('button', { name: 'From' })).toHaveTextContent('23:47:39');
+  fireEvent.click(screen.getByRole('button', { name: 'From' }));
+  pick('2024-01-31');
+  expect(changed).toHaveBeenLastCalledWith('2024-01-31T15:47:39.000Z');
+});
+
+it('allows second selection without changing the selected hour and minute', async () => {
+  const changed = vi.fn();
+  render(<Example initial="2024-01-31T15:47:39Z" changed={changed} />);
+  fireEvent.click(screen.getByRole('button', { name: 'From' }));
+  await choose('calendarSecond', '07');
+  expect(changed).toHaveBeenLastCalledWith('2024-01-31T15:47:07.000Z');
+  expect(screen.getByRole('button', { name: 'From' })).toHaveTextContent('23:47:07');
+});
+
 it('opens the selected Shanghai month instead of the current system month', () => {
   render(<Example initial="2024-01-31T15:47:00Z" changed={vi.fn()} />);
   fireEvent.click(screen.getByRole('button', { name: 'From' }));

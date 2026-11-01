@@ -120,7 +120,7 @@ export function ReceiptBody({ record, onDetail }: Pick<Props, 'record' | 'onDeta
       {record.message && <p className="r-note">{record.message}</p>}
       <div className="r-meta">
         <span className="r-province">{record.province || t('unknownRegion')}</span>
-        <time>{dateTime(record.date)}</time>
+        <time>{dateTime(record.date, 'minute')}</time>
       </div>
     </>
   );

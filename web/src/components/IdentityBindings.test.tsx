@@ -80,8 +80,8 @@ it('shows each linked time without offering an unlink action in a regular accoun
       }}
     />,
   );
-  expect(screen.getByText('2026-10-29 08:00')).toHaveAttribute('dateTime', bindings[0].bound_at);
-  expect(screen.getByText('2026-10-30 08:00')).toHaveAttribute('dateTime', bindings[1].bound_at);
+  expect(screen.getByText('2026-10-29 08:00:00')).toHaveAttribute('dateTime', bindings[0].bound_at);
+  expect(screen.getByText('2026-10-30 08:00:00')).toHaveAttribute('dateTime', bindings[1].bound_at);
   expect(screen.queryByRole('button', { name: /Unlink/ })).not.toBeInTheDocument();
 });
 
