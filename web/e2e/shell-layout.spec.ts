@@ -2,6 +2,9 @@ import type { Page } from '@playwright/test';
 import { expect, test } from '@playwright/test';
 import { LEGAL_VERSION } from '../src/lib/legal';
 
+// Playwright hides scrollbars by default, masking duplicate scroll-lock compensation.
+test.use({ launchOptions: { ignoreDefaultArgs: ['--hide-scrollbars'] } });
+
 async function prepareShell(page: Page, signedIn = false, admin = false) {
   await page.addInitScript((version) => {
     localStorage.setItem('donate:cookie-notice', version);
@@ -41,6 +44,49 @@ async function prepareShell(page: Page, signedIn = false, admin = false) {
     await route.fulfill({ json: { code: 'OK', message: '', request_id: 'shell-test', data } });
   });
 }
+
+test.describe('classic scrollbar layout', () => {
+  for (const path of ['/', '/terms', '/admin'])
+    test(`opening dialogs and menus preserves page width on ${path}`, async ({ page }) => {
+      await prepareShell(page);
+      await page.goto(path);
+      const content = path === '/' ? '.r-empty' : path === '/terms' ? '.legal-paper' : '.access-card';
+      await expect(page.locator(content)).toBeVisible();
+      await page.evaluate(() => document.fonts.ready);
+      for (const viewport of [
+        { width: 1280, height: 1200 },
+        { width: 1280, height: 720 },
+        { width: 390, height: 720 },
+      ]) {
+        await page.setViewportSize(viewport);
+        const bounds = () =>
+          page.evaluate(() =>
+            ['body', 'main', '.d-top', '.d-footer'].map((selector) => {
+              const element = document.querySelector(selector);
+              if (!element) throw new Error(`Missing layout element: ${selector}`);
+              const rect = element.getBoundingClientRect();
+              return { x: rect.x, width: rect.width };
+            }),
+          );
+        const before = await bounds();
+        await page.locator('.d-top').getByRole('button', { name: '登录', exact: true }).click();
+        await expect(page.getByRole('dialog', { name: '登录', exact: true })).toBeVisible();
+        await expect(page.locator('body')).toHaveAttribute('data-scroll-locked');
+        expect(await bounds()).toEqual(before);
+        await expect(page.locator('body')).toHaveCSS('overflow', 'hidden');
+        await page.getByRole('dialog').getByRole('button', { name: '关闭', exact: true }).click();
+        await expect(page.locator('body')).not.toHaveAttribute('data-scroll-locked');
+        expect(await bounds()).toEqual(before);
+        await page.getByRole('button', { name: '切换外观', exact: true }).click();
+        await expect(page.getByRole('menu')).toBeVisible();
+        await expect(page.locator('body')).toHaveAttribute('data-scroll-locked');
+        expect(await bounds()).toEqual(before);
+        await page.keyboard.press('Escape');
+        await expect(page.locator('body')).not.toHaveAttribute('data-scroll-locked');
+        expect(await bounds()).toEqual(before);
+      }
+    });
+});
 
 for (const state of [
   { name: 'guest home', path: '/', signedIn: false, admin: false, content: '.r-empty' },

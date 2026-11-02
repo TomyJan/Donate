@@ -6,6 +6,12 @@ html {
 body {
   margin: 0;
 }
+@supports (scrollbar-gutter: stable) {
+  /* The root gutter already reserves this space; Radix must not reserve it again. */
+  html body[data-scroll-locked] {
+    margin-right: 0 !important;
+  }
+}
 * {
   box-sizing: border-box;
 }
