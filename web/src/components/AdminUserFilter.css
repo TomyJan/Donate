@@ -2,6 +2,8 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 0 0 auto;
+  min-width: 0;
   width: 100%;
   margin-bottom: 8px;
   padding-left: 12px;
@@ -29,4 +31,17 @@
 }
 .d-app .admin-user-search input:focus-visible {
   outline: none;
+}
+.d-app .admin-user-options {
+  min-height: 0;
+}
+.d-app .admin-user-options .admin-user-option {
+  width: calc(100% - 8px);
+  margin: 3px 4px;
+}
+@media (pointer: coarse) {
+  .d-app .admin-user-search input {
+    min-height: 44px;
+    font-size: 16px;
+  }
 }

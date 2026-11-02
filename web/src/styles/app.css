@@ -66,13 +66,32 @@ button:disabled {
   margin-left: auto;
 }
 .d-app .d-pop {
+  --d-pop-enter-x: 0px;
+  --d-pop-enter-y: -5px;
   position: relative;
   min-width: 190px;
   max-width: calc(100vw - 24px);
   overflow-x: hidden;
-  max-height: var(--radix-dropdown-menu-content-available-height, 70vh);
-  transform-origin: var(--radix-dropdown-menu-content-transform-origin);
+  max-height: var(
+    --radix-popover-content-available-height,
+    var(--radix-dropdown-menu-content-available-height, 70vh)
+  );
+  transform-origin: var(
+    --radix-popover-content-transform-origin,
+    var(--radix-dropdown-menu-content-transform-origin, center)
+  );
   z-index: 120;
+}
+.d-app .d-pop[data-side="top"] {
+  --d-pop-enter-y: 5px;
+}
+.d-app .d-pop[data-side="left"] {
+  --d-pop-enter-x: 5px;
+  --d-pop-enter-y: 0px;
+}
+.d-app .d-pop[data-side="right"] {
+  --d-pop-enter-x: -5px;
+  --d-pop-enter-y: 0px;
 }
 .d-pop [role="separator"] {
   height: 1px;
@@ -606,7 +625,7 @@ button:disabled {
 @keyframes pop-in {
   from {
     opacity: 0;
-    translate: 0 -5px;
+    translate: var(--d-pop-enter-x) var(--d-pop-enter-y);
   }
   to {
     opacity: 1;
@@ -616,7 +635,7 @@ button:disabled {
 @keyframes pop-out {
   to {
     opacity: 0;
-    translate: 0 -4px;
+    translate: var(--d-pop-enter-x) var(--d-pop-enter-y);
   }
 }
 @keyframes dialog-in {

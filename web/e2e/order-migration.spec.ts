@@ -104,6 +104,23 @@ for (const width of [1280, 320]) {
     await detail.getByRole('button', { name: '迁移订单', exact: true }).click();
     const migration = page.locator('.order-migration');
     await migration.getByRole('combobox', { name: '目标用户', exact: true }).click();
+    const picker = page.locator('.admin-user-pop');
+    const search = picker.getByRole('textbox', { name: '搜索用户', exact: true });
+    await expect(search).toBeVisible();
+    const searchSize = await picker.locator('.admin-user-search').boundingBox();
+    expect(searchSize?.height).toBeGreaterThanOrEqual(40);
+    expect(searchSize?.height).toBeLessThanOrEqual(48);
+    expect(await picker.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+    const option = picker.getByRole('option', { name: new RegExp(target.nickname) });
+    const inset = await option.evaluate((el) => {
+      const rect = el.getBoundingClientRect();
+      const list = el.parentElement?.getBoundingClientRect();
+      if (!list) throw new Error('Missing user list');
+      return { left: rect.left - list.left, right: list.right - rect.right };
+    });
+    expect(inset.left).toBeGreaterThanOrEqual(4);
+    expect(inset.right).toBeGreaterThanOrEqual(4);
+    await page.screenshot({ path: info.outputPath(`migration-user-picker-${width}.png`) });
     await page.getByRole('option', { name: new RegExp(target.nickname) }).click();
     await expect(migration.locator('.order-migration-target')).toContainText(targetID);
     expect(requests).toEqual([]);
@@ -142,4 +159,74 @@ test('failed migration keeps the selected target available for an explicit retry
   await migration.getByRole('button', { name: '确认', exact: true }).click();
   await expect(detail.getByRole('button', { name: '迁移订单', exact: true })).toHaveCount(0);
   expect(requests).toHaveLength(2);
+});
+
+for (const side of ['top', 'bottom'] as const) {
+  test(`confirmation motion follows actual ${side} placement after collision detection`, async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 900 });
+    const { detail } = await setup(page);
+    // Put the real triggers near each viewport edge so Radix must choose opposite sides.
+    await page.addStyleTag({
+      content: `
+        .d-app .d-dialog { top: 12px; transform: translateX(-50%); height: calc(100vh - 24px); max-height: none; }
+        .d-app .detail-actions { position: absolute; left: 26px; right: 26px; top: ${side === 'bottom' ? '12px' : 'auto'}; bottom: ${side === 'top' ? '12px' : 'auto'}; }
+        .d-app .d-pop[data-state] { animation-duration: 10s; }
+      `,
+    });
+    for (const label of ['迁移订单', '删除订单']) {
+      await detail.getByRole('button', { name: label, exact: true }).click();
+      const popover = page.locator('.action-confirm');
+      await expect(popover).toHaveAttribute('data-side', side);
+      const motion = await popover.evaluate((el) => {
+        const animation = el
+          .getAnimations()
+          .find((item) => item instanceof CSSAnimation && item.animationName === 'pop-in');
+        if (!animation || !(animation.effect instanceof KeyframeEffect))
+          throw new Error('Missing enter animation');
+        animation.pause();
+        return animation.effect.getKeyframes()[0].translate;
+      });
+      expect(motion).toBe(side === 'top' ? '0px 5px' : '0px -5px');
+      await popover.getByRole('button', { name: '取消', exact: true }).click();
+      // Finish the deliberately slowed exit so the next trigger can receive pointer events.
+      await popover.evaluate((el) => {
+        for (const animation of el.getAnimations()) animation.finish();
+      });
+      await expect(popover).toHaveCount(0);
+    }
+  });
+}
+
+for (const width of [1280, 320]) {
+  test(`the shared order filter user picker stays compact at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    const { detail } = await setup(page);
+    await detail.getByRole('button', { name: '关闭', exact: true }).click();
+    const trigger = page.getByRole('combobox', { name: '用户筛选', exact: true });
+    if (!(await trigger.isVisible())) await page.locator('.a-filter-toggle').click();
+    await trigger.click();
+    const picker = page.locator('.admin-user-pop');
+    await expect(picker.getByRole('textbox', { name: '搜索用户', exact: true })).toBeVisible();
+    const size = await picker.locator('.admin-user-search').boundingBox();
+    expect(size?.height).toBeGreaterThanOrEqual(40);
+    expect(size?.height).toBeLessThanOrEqual(48);
+    expect(await picker.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+    await picker.getByRole('option', { name: new RegExp(target.nickname) }).click();
+    await expect(trigger).toContainText(target.nickname);
+  });
+}
+
+test.describe('touch user picker', () => {
+  test.use({ hasTouch: true, isMobile: true, viewport: { width: 390, height: 900 } });
+
+  test('search keeps a compact touch target and readable text', async ({ page }) => {
+    const { detail } = await setup(page);
+    await detail.getByRole('button', { name: '迁移订单', exact: true }).click();
+    await page.locator('.order-migration').getByRole('combobox').click();
+    const search = page.locator('.admin-user-search input');
+    await expect(search).toHaveCSS('font-size', '16px');
+    await expect(search).toHaveCSS('min-height', '44px');
+    const size = await page.locator('.admin-user-search').boundingBox();
+    expect(size?.height).toBeLessThanOrEqual(48);
+  });
 });

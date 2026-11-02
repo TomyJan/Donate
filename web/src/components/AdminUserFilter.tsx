@@ -72,7 +72,7 @@ export function AdminUserFilter({
       </Popover.Trigger>
       <Popover.Portal container={portal()}>
         <Popover.Content className="d-pop admin-user-pop" sideOffset={8} collisionPadding={12} align="end">
-          <label className="a-search admin-user-search">
+          <label className="admin-user-search">
             <Search />
             <input
               aria-label={t('filterUserSearch')}
