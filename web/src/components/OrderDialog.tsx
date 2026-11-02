@@ -330,10 +330,18 @@ export function OrderDialog({
                         isCurrent={isCurrent}
                         disabled={busy || !!detail.error || !profile?.admin}
                         onBusy={setMigrationBusy}
-                        onMigrated={async (userID) => {
+                        onMigrated={async (user) => {
                           if (!isCurrent()) return;
                           client.setQueryData<Order>(['order-detail', admin, id, identity], (current) =>
-                            current ? { ...current, user_id: userID } : current,
+                            current
+                              ? {
+                                  ...current,
+                                  user_id: user.id,
+                                  nickname: user.nickname,
+                                  avatar_url: user.avatar_url,
+                                  qq_number: undefined,
+                                }
+                              : current,
                           );
                           notify(t('migrationSuccess'));
                           await client.invalidateQueries();

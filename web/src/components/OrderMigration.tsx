@@ -22,7 +22,7 @@ export function OrderMigration({
   isCurrent: () => boolean;
   disabled: boolean;
   onBusy: (busy: boolean) => void;
-  onMigrated: (userID: string) => Promise<void>;
+  onMigrated: (user: User) => Promise<void>;
 }) {
   const { t } = useApp();
   const [open, setOpen] = useState(false);
@@ -77,7 +77,7 @@ export function OrderMigration({
         !['migrated', 'unchanged'].includes(result.result)
       )
         throw new Error('Invalid migration result');
-      await onMigrated(target.id);
+      await onMigrated(target);
     } catch (failure) {
       if (!active()) return;
       setError(failure);

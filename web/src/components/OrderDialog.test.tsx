@@ -722,6 +722,7 @@ const migrationUser: User = {
 function migrationServer(
   migrate: (body: unknown) => Promise<Response> = async () =>
     response({ id: order.id, user_id: migrationUser.id, result: 'migrated' }),
+  afterMigrationRead?: () => Promise<void>,
 ) {
   const requests: unknown[] = [];
   let owned = false;
@@ -737,13 +738,17 @@ function migrationServer(
     if (path.includes('/user/list?'))
       return response({ items: [migrationUser], total: 1, page: 1, page_size: 20 });
     if (path.includes('/user/detail?')) return response(migrationUser);
-    if (path.includes('/order/detail?'))
+    if (path.includes('/order/detail?')) {
+      if (owned) await afterMigrationRead?.();
       return response({
         ...order,
         protocol: 'legacy',
         user_id: owned ? migrationUser.id : '',
-        qq_number: '123456',
+        nickname: owned ? migrationUser.nickname : order.nickname,
+        avatar_url: owned ? migrationUser.avatar_url : order.avatar_url,
+        qq_number: owned ? undefined : '123456',
       });
+    }
     throw new Error(`Unexpected request: ${path}`);
   });
   return requests;
@@ -786,7 +791,7 @@ it.each(['migrated', 'unchanged'])(
     expect(document.querySelectorAll('.d-overlay')).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Review migration' }));
     expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
-    expect(screen.getByText(/Historical nickname, avatar and QQ/)).toBeVisible();
+    expect(screen.getByText(/current nickname, avatar and QQ/)).toBeVisible();
     expect(requests).toEqual([]);
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
     await waitFor(() => expect(requests).toEqual([{ id: 'order-uuid', user_id: migrationUser.id }]));
@@ -796,12 +801,38 @@ it.each(['migrated', 'unchanged'])(
     expect(
       view.client.getQueryData<Order>(['order-detail', true, 'order-uuid', 'alice:current-session'])
         ?.nickname,
-    ).toBe('Admin');
-    expect(screen.getByText('Admin')).toBeInTheDocument();
-    expect(screen.getByText('123456')).toBeInTheDocument();
+    ).toBe(migrationUser.nickname);
+    expect(screen.getByText(migrationUser.nickname)).toBeInTheDocument();
+    expect(screen.queryByText('123456')).not.toBeInTheDocument();
     expect(notify).toHaveBeenCalledOnce();
   },
 );
+
+it('clears imported QQ immediately after migration even while the detail refresh is pending', async () => {
+  let finish: (() => void) | undefined;
+  const gate = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  migrationServer(undefined, () => gate);
+  const view = renderOrder(true);
+  await selectMigrationUser();
+  expect(screen.getByText('123456')).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button', { name: 'Review migration' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+  await waitFor(() => expect(notify).toHaveBeenCalledOnce());
+  const detail = view.client.getQueryData<Order>([
+    'order-detail',
+    true,
+    'order-uuid',
+    'alice:current-session',
+  ]);
+  expect(detail?.nickname).toBe(migrationUser.nickname);
+  expect(detail?.qq_number).toBeUndefined();
+  expect(screen.queryByText('123456')).not.toBeInTheDocument();
+  await act(async () => {
+    finish?.();
+  });
+});
 
 it('keeps a failed migration retryable without submitting again until reconfirmed', async () => {
   let failed = true;

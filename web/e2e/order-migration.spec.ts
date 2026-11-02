@@ -79,7 +79,7 @@ async function setup(page: Page, failFirst = false) {
         await route.fulfill({ status: 503, json: { code: 'INTERNAL_ERROR', message: 'private upstream' } });
         return;
       }
-      order = { ...order, user_id: targetID };
+      order = { ...order, user_id: targetID, nickname: target.nickname, avatar_url: target.avatar_url };
       data = { id: order.id, user_id: targetID, result: 'migrated' };
     }
     await route.fulfill({ json: { code: 'OK', message: '', request_id: 'migration-test', data } });
@@ -137,7 +137,8 @@ for (const width of [1280, 320]) {
     await migration.getByRole('button', { name: '确认', exact: true }).click();
     await expect(detail.getByRole('button', { name: '迁移订单', exact: true })).toHaveCount(0);
     await expect(detail).toContainText(targetID);
-    await expect(detail).toContainText(original.nickname);
+    await expect(detail).toContainText(target.nickname);
+    await expect(detail).not.toContainText(original.nickname);
     await expect(detail).toContainText(original.message);
     expect(requests).toEqual([{ id: original.id, user_id: targetID }]);
   });

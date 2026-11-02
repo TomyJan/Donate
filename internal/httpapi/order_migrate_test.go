@@ -117,6 +117,10 @@ func TestOrderMigrateGrantsRecipientDetailAccessWithoutAdminFields(t *testing.T)
 			t.Fatalf("administrator fixture is missing %s: %+v", key, full)
 		}
 	}
+	memberID, _ := storage.ParseID(member.Session.UserID)
+	if _, err := s.Orders.Store.DB.Exec("UPDATE identities SET nickname='现有用户',avatar_url='https://example.test/current.png' WHERE user_id=?", memberID); err != nil {
+		t.Fatal(err)
+	}
 	body := fmt.Sprintf(`{"id":%q,"user_id":%q}`, id.String(), member.Session.UserID)
 	w := identityRequest(s, h, &actor, "/api/v1/admin/order/migrate", body, s.Config.PublicURL, actor.Session.CSRF)
 	var migrated struct {
@@ -129,7 +133,7 @@ func TestOrderMigrateGrantsRecipientDetailAccessWithoutAdminFields(t *testing.T)
 		t.Fatalf("migration HTTP %d %s: %v", w.Code, w.Body, err)
 	}
 	owned := detail(member, userPath, http.StatusOK, "OK")
-	if owned["id"] != id.String() || owned["user_id"] != member.Session.UserID || owned["ip"] != "192.0.2.42" || owned["nickname"] != "原始捐赠者" || owned["amount_fen"] != float64(888) || owned["province"] != "原始省份" {
+	if owned["id"] != id.String() || owned["user_id"] != member.Session.UserID || owned["ip"] != "192.0.2.42" || owned["nickname"] != "现有用户" || owned["avatar_url"] != "https://example.test/current.png" || owned["amount_fen"] != float64(888) || owned["province"] != "原始省份" {
 		t.Fatalf("recipient detail lost historical fields or ownership: %+v", owned)
 	}
 	for _, key := range []string{"qq_number", "location", "location_check", "jobs", "reconciliations"} {

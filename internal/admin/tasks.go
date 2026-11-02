@@ -161,7 +161,7 @@ func taskWhere(f TaskFilter) (string, []any, error) {
 		q := strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(f.Search)
 		lowerq := strings.ToLower(q)
 		hexq := strings.ReplaceAll(lowerq, "-", "")
-		where += " AND (lower(hex(j.id)) LIKE ? ESCAPE '\\' OR lower(hex(j.order_id)) LIKE ? ESCAPE '\\' OR lower(o.merchant_order_no) LIKE ? ESCAPE '\\' OR lower(COALESCE(NULLIF(trim(o.donor_nickname),''),i.nickname,'')) LIKE ? ESCAPE '\\' OR lower(j.resource) LIKE ? ESCAPE '\\')"
+		where += " AND (lower(hex(j.id)) LIKE ? ESCAPE '\\' OR lower(hex(j.order_id)) LIKE ? ESCAPE '\\' OR lower(o.merchant_order_no) LIKE ? ESCAPE '\\' OR lower(COALESCE(CASE WHEN o.user_id IS NULL OR o.protocol!='legacy' THEN NULLIF(trim(o.donor_nickname),'') END,i.nickname,'')) LIKE ? ESCAPE '\\' OR lower(j.resource) LIKE ? ESCAPE '\\')"
 		args = append(args, "%"+hexq+"%", "%"+hexq+"%", "%"+lowerq+"%", "%"+q+"%", "%"+lowerq+"%")
 	}
 	return where, args, nil
@@ -174,9 +174,9 @@ func taskSecond(at time.Time) int64 {
 	return v
 }
 
-// Ownership changes do not replace a legacy order's original donor identity.
-const taskJoins = " FROM jobs j LEFT JOIN orders o ON o.id=j.order_id LEFT JOIN users u ON u.id=o.user_id AND o.protocol!='legacy' LEFT JOIN identities i ON i.id=u.public_identity_id LEFT JOIN users actor ON actor.id=j.actor_id LEFT JOIN identities ai ON ai.id=actor.public_identity_id "
-const taskColumns = "j.id,j.kind,j.resource,j.order_id,COALESCE(o.merchant_order_no,''),CASE WHEN o.id IS NULL THEN '' ELSE COALESCE(NULLIF(trim(o.donor_nickname),''),i.nickname,'捐赠者') END AS nickname,j.status,j.attempts,j.total_attempts,j.source,j.last_result,j.created_at,j.updated_at,j.run_at,j.lease_until,j.actor_id,COALESCE(ai.nickname,''),j.request_id,j.recording_since,COALESCE(o.status,'')"
+// Task labels follow the order owner's current public identity after migration.
+const taskJoins = " FROM jobs j LEFT JOIN orders o ON o.id=j.order_id LEFT JOIN users u ON u.id=o.user_id LEFT JOIN identities i ON i.id=u.public_identity_id LEFT JOIN users actor ON actor.id=j.actor_id LEFT JOIN identities ai ON ai.id=actor.public_identity_id "
+const taskColumns = "j.id,j.kind,j.resource,j.order_id,COALESCE(o.merchant_order_no,''),CASE WHEN o.id IS NULL THEN '' ELSE COALESCE(CASE WHEN o.user_id IS NULL OR o.protocol!='legacy' THEN NULLIF(trim(o.donor_nickname),'') END,i.nickname,'捐赠者') END AS nickname,j.status,j.attempts,j.total_attempts,j.source,j.last_result,j.created_at,j.updated_at,j.run_at,j.lease_until,j.actor_id,COALESCE(ai.nickname,''),j.request_id,j.recording_since,COALESCE(o.status,'')"
 
 func scanTask(row interface{ Scan(...any) error }) (TaskDetail, error) {
 	var out TaskDetail

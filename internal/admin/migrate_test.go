@@ -80,7 +80,7 @@ func migrationRow(t *testing.T, db *sql.DB, query string, args ...any) map[strin
 	return out
 }
 
-// Assigning a donor profile, modifying payment/location data, omitting the
+// Rewriting historical snapshots, modifying payment/location data, omitting the
 // version increment, or auditing a replay must all fail this integration test.
 func TestMigrateLegacyOrderPreservesHistoryAndUpdatesOwnershipViews(t *testing.T) {
 	s, _, actor, target, _, id := migrationFixture(t)
@@ -124,11 +124,11 @@ func TestMigrateLegacyOrderPreservesHistoryAndUpdatesOwnershipViews(t *testing.T
 		t.Fatalf("migration audit count %d actor %s target %s/%s result %s", count, storage.IDString(auditActor), targetType, storage.IDString(auditOrder), result)
 	}
 	mine, err := s.Orders.List(ctx, target, true, "")
-	if err != nil || len(mine.Items) != 1 || mine.Items[0].ID != id || !mine.Items[0].IsMine || mine.Items[0].Nickname != "历史昵称" || mine.Items[0].Province != "原始省份" || mine.Items[0].Message != "original message" {
+	if err != nil || len(mine.Items) != 1 || mine.Items[0].ID != id || !mine.Items[0].IsMine || mine.Items[0].Nickname != "target" || mine.Items[0].Province != "原始省份" || mine.Items[0].Message != "original message" {
 		t.Fatalf("mine: %+v %v", mine, err)
 	}
 	public, err := s.Orders.List(ctx, "", false, "")
-	if err != nil || len(public.Items) != 1 || public.Items[0].Nickname != "历史昵称" || public.Items[0].AvatarURL != "https://example.test/original.png" || public.Items[0].Message != "" {
+	if err != nil || len(public.Items) != 1 || public.Items[0].Nickname != "target" || public.Items[0].AvatarURL != "" || public.Items[0].Message != "" {
 		t.Fatalf("public: %+v %v", public, err)
 	}
 	user, err := s.User(ctx, target)
@@ -323,7 +323,7 @@ func TestMigrateLegacyOrderLogsBusinessRejectionWithControlledReason(t *testing.
 	}
 }
 
-func TestMigrateLegacyOrderDoesNotFillMissingSnapshotsFromRecipient(t *testing.T) {
+func TestMigrateLegacyOrderUsesLiveRecipientIdentityAcrossViews(t *testing.T) {
 	for _, tc := range []struct{ name, nickname, display string }{
 		{"empty snapshots", "", "捐赠者"},
 		{"whitespace nickname", "\t　\r\n", "捐赠者"},
@@ -371,20 +371,32 @@ func TestMigrateLegacyOrderDoesNotFillMissingSnapshotsFromRecipient(t *testing.T
 				wantAudit = []string{named.String(), id}
 				wantAuditNickname, wantAuditLabel = "Original history", "Original history · ¥8.88"
 			}
+			recipientName, recipientAvatar := "Recipient Z", "https://example.test/recipient.png"
 			checkViews := func(stage string) {
 				t.Helper()
+				owned := stage != "before"
+				wantNickname, wantAvatar := tc.display, ""
+				if owned {
+					wantNickname, wantAvatar = recipientName, recipientAvatar
+					wantSorted = []string{named.String(), id, native.ID}
+					if id > native.ID {
+						wantSorted[1], wantSorted[2] = wantSorted[2], wantSorted[1]
+					}
+					wantAudit = []string{named.String(), id}
+					wantAuditNickname, wantAuditLabel = recipientName, recipientName+" · ¥8.88"
+				}
 				public, err := s.Orders.List(ctx, "", false, "")
 				if err != nil {
 					t.Fatal(err)
 				}
 				for _, item := range public.Items {
-					if item.ID == id && (item.Nickname != tc.display || item.AvatarURL != "") {
+					if item.ID == id && (item.Nickname != wantNickname || item.AvatarURL != wantAvatar) {
 						t.Errorf("%s public adopted recipient: %+v", stage, item)
 					}
 				}
 				for _, full := range []bool{false, true} {
 					detail, err := s.Detail(ctx, id, full)
-					if err != nil || detail.Nickname != tc.display || detail.AvatarURL != "" {
+					if err != nil || detail.Nickname != wantNickname || detail.AvatarURL != wantAvatar {
 						t.Errorf("%s detail full=%v: %+v %v", stage, full, detail, err)
 					}
 				}
@@ -395,18 +407,22 @@ func TestMigrateLegacyOrderDoesNotFillMissingSnapshotsFromRecipient(t *testing.T
 				var sorted []string
 				for _, item := range page.Items {
 					sorted = append(sorted, item.ID)
-					if item.ID == id && (item.Nickname != tc.display || item.AvatarURL != "") {
+					if item.ID == id && (item.Nickname != wantNickname || item.AvatarURL != wantAvatar) {
 						t.Errorf("%s admin adopted recipient: %+v", stage, item)
 					}
-					if item.ID == native.ID && (item.Nickname != "Recipient Z" || item.AvatarURL != "https://example.test/recipient.png") {
+					if item.ID == native.ID && (item.Nickname != recipientName || item.AvatarURL != recipientAvatar) {
 						t.Errorf("%s native profile changed: %+v", stage, item)
 					}
 				}
 				if !reflect.DeepEqual(sorted, wantSorted) {
 					t.Errorf("%s nickname sort=%v, want %v", stage, sorted, wantSorted)
 				}
-				search, err := s.OrdersList(ctx, Filter{Search: "Recipient Z", Size: 10})
-				if err != nil || search.Total != 1 || len(search.Items) != 1 || search.Items[0].ID != native.ID {
+				search, err := s.OrdersList(ctx, Filter{Search: recipientName, Size: 10})
+				wantTotal := 1
+				if owned {
+					wantTotal = 2
+				}
+				if err != nil || search.Total != wantTotal || len(search.Items) != wantTotal {
 					t.Errorf("%s legacy matched recipient nickname: %+v %v", stage, search, err)
 				}
 				audit, err := s.Audit(ctx, Filter{Action: "order.snapshot", Sort: "target", Direction: "asc", Size: 10})
@@ -428,17 +444,24 @@ func TestMigrateLegacyOrderDoesNotFillMissingSnapshotsFromRecipient(t *testing.T
 				if wantTask == "" {
 					wantTask = "捐赠者"
 				}
+				if owned {
+					wantTask = recipientName
+				}
 				if err != nil || task.Nickname != wantTask {
 					t.Errorf("%s task adopted recipient: %+v %v", stage, task, err)
 				}
-				tasks, err := s.Tasks(ctx, TaskFilter{Search: "Recipient Z", Size: 10})
+				tasks, err := s.Tasks(ctx, TaskFilter{Search: recipientName, Size: 10})
 				if err != nil {
 					t.Fatal(err)
 				}
+				found := false
 				for _, item := range tasks.Items {
 					if item.OrderID == id {
-						t.Errorf("%s historical task matched recipient nickname: %+v", stage, item)
+						found = true
 					}
+				}
+				if found != owned {
+					t.Errorf("%s task recipient search found=%v", stage, found)
 				}
 			}
 			checkViews("before")
@@ -446,10 +469,46 @@ func TestMigrateLegacyOrderDoesNotFillMissingSnapshotsFromRecipient(t *testing.T
 				t.Fatal(err)
 			}
 			checkViews("after")
+			recipientName, recipientAvatar = "Recipient updated", "https://example.test/updated.png"
+			if _, err := s.Store.DB.Exec("UPDATE identities SET nickname=?,avatar_url=? WHERE user_id=?", recipientName, recipientAvatar, uid); err != nil {
+				t.Fatal(err)
+			}
+			checkViews("profile updated")
+			recipientAvatar = ""
+			if _, err := s.Store.DB.Exec("UPDATE identities SET avatar_url='' WHERE user_id=?", uid); err != nil {
+				t.Fatal(err)
+			}
+			checkViews("avatar removed")
 			stored, err := s.Orders.Get(ctx, id)
 			if err != nil || stored.DonorNickname != tc.nickname || stored.DonorAvatarURL != "" {
 				t.Fatalf("raw snapshots rewritten: %+v %v", stored, err)
 			}
 		})
+	}
+}
+
+func TestMigratedOrderUsesCurrentQQAndNeverReusesImportedQQ(t *testing.T) {
+	s, a, actor, _, _, id := migrationFixture(t)
+	ctx := context.Background()
+	recipient, err := a.LoginIdentity(ctx, auth.Identity{Provider: "qq", Issuer: "migration", Subject: "qq-recipient", Nickname: "QQ recipient", QQNumber: "87654321"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.MigrateLegacyOrder(ctx, actor, id, recipient.Session.UserID); err != nil {
+		t.Fatal(err)
+	}
+	uid, _ := storage.ParseID(recipient.Session.UserID)
+	for _, number := range []string{"87654321", "99887766", ""} {
+		if _, err = s.Store.DB.Exec("UPDATE identities SET qq_number=? WHERE user_id=? AND provider='qq'", number, uid); err != nil {
+			t.Fatal(err)
+		}
+		full, err := s.Detail(ctx, id, true)
+		if err != nil || full.QQNumber != number {
+			t.Fatalf("current QQ: %q want %q, %v", full.QQNumber, number, err)
+		}
+		owned, err := s.Detail(ctx, id, false)
+		if err != nil || owned.QQNumber != "" {
+			t.Fatalf("ordinary detail exposed QQ: %+v %v", owned, err)
+		}
 	}
 }

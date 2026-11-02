@@ -9,8 +9,8 @@ export const words = {
     'Migrate this historical order to the following user?',
   ],
   migrationHint: [
-    '仅将此历史订单归属到所选的现有用户，订单状态不变。历史昵称、头像和 QQ 保持不变。',
-    'Assign this historical order to the selected existing user without changing its status. Historical nickname, avatar and QQ remain unchanged.',
+    '迁移后使用该用户当前的昵称、头像和 QQ，订单状态不变。',
+    'Use this user’s current nickname, avatar and QQ after migration. The order status stays unchanged.',
   ],
   migrationSuccess: ['订单已迁移', 'Order migrated'],
   orderMigrationNotAllowedError: [
