@@ -495,6 +495,41 @@ export const words = {
     'Verifying payment. Check Only mine for the result.',
   ],
   qqHint: ['确认 QQ 号后完成登录。', 'Confirm your QQ number to finish signing in.'],
+  qqBindHint: ['确认 QQ 号后完成绑定。', 'Confirm your QQ number to finish linking.'],
+  qqNumberInvalidError: ['QQ 号格式不正确，请检查后重试。', 'Check the QQ number format and try again.'],
+  qqVerificationError: [
+    'QQ 号验证未通过，请确认号码后重试。',
+    'Could not verify this QQ number. Check it and try again.',
+  ],
+  qqVerificationUnavailableError: [
+    'QQ 号验证服务暂不可用，请稍后重试。',
+    'QQ verification is temporarily unavailable. Please try again shortly.',
+  ],
+  flowInvalidError: [
+    '授权流程已失效，请重新授权。',
+    'This authorization is no longer valid. Please start again.',
+  ],
+  authAttemptsError: [
+    '验证次数已用尽，请重新授权。',
+    'Verification attempts are exhausted. Please start authorization again.',
+  ],
+  authSessionChangedError: [
+    '登录状态已变化，请从当前账号重新发起授权。',
+    'Your session has changed. Start authorization again from your current account.',
+  ],
+  loginCancelledError: [
+    '已取消授权，可重新选择登录方式。',
+    'Authorization was cancelled. You can choose a sign-in method again.',
+  ],
+  loginConfigurationError: [
+    '登录配置异常，请联系站长或选择其他方式。',
+    'The sign-in setup needs attention. Contact the site owner or choose another method.',
+  ],
+  loginVerificationError: [
+    '授权验证未通过，请重新授权或选择其他方式。',
+    'Authorization could not be verified. Start again or choose another method.',
+  ],
+  loginAgain: ['重新登录', 'Sign in again'],
   loginError: ['授权未完成，请重新登录。', 'Authorization failed. Please sign in again.'],
   loginBanned: ['登录失败', 'Sign-in failed'],
   loginBannedHint: [
@@ -521,8 +556,11 @@ export const words = {
   amountRule: ['请输入有效金额', 'Enter a valid amount'],
   dateRule: ['开始时间必须早于结束时间', 'Start must be earlier than end'],
   confirmBind: ['确认绑定', 'Confirm linking'],
-  bindHint: ['绑定后不提供解绑。', 'Linked accounts cannot be unlinked.'],
-  flowExpired: ['授权已过期，请重新登录。', 'Authorization expired. Please sign in again.'],
+  bindHint: [
+    '绑定后不支持解绑，如有疑问请联系站长。',
+    'Linked accounts cannot be unlinked. Contact the site owner if you have questions.',
+  ],
+  flowExpired: ['授权已过期，请重新授权。', 'Authorization expired. Please start again.'],
   sessionExpired: ['登录状态已失效，请重新登录。', 'Your session expired. Please sign in again.'],
   error: ['操作未完成', 'Action failed'],
   yes: ['是', 'Yes'],

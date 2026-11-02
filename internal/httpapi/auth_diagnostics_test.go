@@ -100,7 +100,7 @@ func TestOAuthFailureLogsCorrelateHTTPAndAuthWithoutSecrets(t *testing.T) {
 		if e["stage"] == "flow_read" && e["reason"] == "invalid_cookie" && e["request_id"] == id && strings.Contains(e["msg"].(string), id) {
 			foundAuth = true
 		}
-		if e["route"] == "/api/v1/user/oauth/callback/{provider}" && e["request_id"] == id && e["code"] == "AUTHORIZATION_FAILED" {
+		if e["route"] == "/api/v1/user/oauth/callback/{provider}" && e["request_id"] == id && e["code"] == "AUTH_FLOW_INVALID" {
 			foundHTTP = true
 		}
 	}

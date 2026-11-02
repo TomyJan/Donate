@@ -164,6 +164,7 @@ func (s *Service) avatar(ctx context.Context, raw string) (image.Image, error) {
 	return im, nil
 }
 func (s *Service) checkQQAvatar(ctx context.Context, oauthAvatar, number string) error {
+	started := time.Now()
 	a, e := s.avatar(ctx, oauthAvatar)
 	if e != nil {
 		return e
@@ -172,6 +173,7 @@ func (s *Service) checkQQAvatar(ctx context.Context, oauthAvatar, number string)
 	if e != nil {
 		return e
 	}
+	aSize, bSize := a.Bounds().Size(), b.Bounds().Size()
 	a, b = imaging.Resize(a, 64, 64, imaging.Linear), imaging.Resize(b, 64, 64, imaging.Linear)
 	var distance float64
 	for y := 0; y < 64; y++ {
@@ -181,7 +183,16 @@ func (s *Service) checkQQAvatar(ctx context.Context, oauthAvatar, number string)
 			distance += math.Abs(float64(ar)-float64(br)) + math.Abs(float64(ag)-float64(bg)) + math.Abs(float64(ab)-float64(bb))
 		}
 	}
-	if distance/(64*64*3*65535) > .05 {
+	distance /= 64 * 64 * 3 * 65535
+	const threshold = .05
+	matched := distance <= threshold
+	// Dimensions and the comparison score explain image variants without
+	// exposing either avatar URL, its provider key, or the submitted QQ number.
+	s.logAuth(ctx, slog.LevelInfo, "qq", "qq_avatar_compare", "compared", started,
+		"oauth_avatar_width", aSize.X, "oauth_avatar_height", aSize.Y,
+		"number_avatar_width", bSize.X, "number_avatar_height", bSize.Y,
+		"image_distance", distance, "image_threshold", threshold, "image_match", matched)
+	if !matched {
 		return authFailure(ErrInvalid, "qq_avatar_compare", "image_mismatch")
 	}
 	return nil

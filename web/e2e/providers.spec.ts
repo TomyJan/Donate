@@ -1,5 +1,49 @@
 import { expect, test } from '@playwright/test';
 
+test('OAuth failure notices explain the next step without showing provider details', async ({ page }) => {
+  for (const [code, notice] of [
+    ['flow_expired', '授权已过期'],
+    ['rate_limited', '操作太频繁'],
+  ]) {
+    await page.goto(`/auth/complete?error=${code}`);
+    await expect(page.locator('.login-complete [role="alert"]')).toContainText(notice);
+    await expect(page.locator('.login-complete')).not.toContainText('头像');
+    await page.locator('.login-complete button').click();
+    await expect(page.getByRole('dialog', { name: '登录', exact: true })).toBeVisible();
+  }
+});
+
+test('QQ number verification can retry in place and distinguishes binding from sign-in', async ({ page }) => {
+  await page.route('**/api/v1/user/login/status', (route) =>
+    route.fulfill({
+      json: { code: 'OK', data: { stage: 'qq_number', provider: 'qq', intent: 'bind', return_to: '/' } },
+    }),
+  );
+  let attempts = 0;
+  await page.route('**/api/v1/user/login/qq/complete', (route) => {
+    attempts += 1;
+    return route.fulfill({
+      json: {
+        code: attempts === 1 ? 'QQ_VERIFICATION_FAILED' : 'AUTH_ATTEMPTS_EXCEEDED',
+        message: 'private-upstream-detail',
+      },
+    });
+  });
+  await page.goto('/auth/complete');
+  await expect(page.locator('.login-complete')).toContainText('确认 QQ 号后完成绑定。');
+  const number = page.getByRole('textbox', { name: 'QQ 号', exact: true });
+  await number.fill('12345678');
+  await page.locator('.d-qq-submit').click();
+  await expect(page.getByRole('alert')).toContainText('QQ 号验证未通过');
+  await expect(number).toHaveValue('12345678');
+  await expect(page.locator('.login-complete')).not.toContainText('private-upstream-detail');
+  await expect(page.locator('.login-complete')).not.toContainText('头像');
+  await page.locator('.d-qq-submit').click();
+  await expect(page.getByRole('alert')).toContainText('验证次数已用尽');
+  await expect(number).toHaveCount(0);
+  expect(attempts).toBe(2);
+});
+
 test('custom OIDC metadata labels sign-in and navigates using its public ID', async ({ page }) => {
   const site = await (await page.request.get('/api/v1/site/info')).json();
   const providerID = site.data.provider_details.find(

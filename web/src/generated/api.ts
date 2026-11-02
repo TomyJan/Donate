@@ -701,6 +701,7 @@ export interface components {
             message: string;
         };
         FlowStatus: {
+            intent: string;
             provider: string;
             return_to: string;
             stage: string;
@@ -2849,7 +2850,7 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Login start failed; redirect to /auth/complete?error=authorization. The fixed error code is presentation-only; upstream diagnostic details stay on the server. */
+            /** @description Login start failed; redirect to /auth/complete with a fixed allowlisted error category, such as provider_unavailable, configuration or rate_limited. Presentation only; upstream diagnostic details stay on the server. */
             303: {
                 headers: {
                     Location?: string;

@@ -156,11 +156,26 @@ func (s *Server) failure(w http.ResponseWriter, r *http.Request, e error) {
 		status = 500
 		s.Log.ErrorContext(r.Context(), fmt.Sprintf("请求 %s 无法完成，路由 %s", state(r).ID, chi.RouteContext(r.Context()).RoutePattern()), "request_id", state(r).ID, "stage", "http_handler", "reason", observability.ErrorReason(e))
 	}
+	publicCode, publicMessage, callback := auth.UserError(e)
+	if publicCode != "" {
+		code, message = publicCode, publicMessage
+		// An expired OAuth flow is independent of any existing signed-in
+		// account. Do not turn it into a session-invalidating HTTP 401.
+		if publicCode != "ACCOUNT_BANNED" {
+			status = http.StatusOK
+		}
+	}
 	if r.Method == http.MethodGet && r.URL.Path == "/api/v1/user/login" {
 		// This endpoint is a browser navigation. Keep the classified server
 		// diagnostic while presenting only a fixed, non-sensitive failure code.
 		state(r).Code, state(r).Status = code, http.StatusSeeOther
-		http.Redirect(w, r, "/auth/complete?error=authorization", http.StatusSeeOther)
+		if callback == "" {
+			callback = "authorization"
+			if code == "RATE_LIMITED" {
+				callback = "rate_limited"
+			}
+		}
+		http.Redirect(w, r, "/auth/complete?error="+callback, http.StatusSeeOther)
 		return
 	}
 	s.respond(w, r, status, code, message, nil)

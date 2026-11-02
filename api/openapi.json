@@ -199,6 +199,9 @@
       },
       "FlowStatus": {
         "properties": {
+          "intent": {
+            "type": "string"
+          },
           "provider": {
             "type": "string"
           },
@@ -210,6 +213,7 @@
           }
         },
         "required": [
+          "intent",
           "provider",
           "return_to",
           "stage"
@@ -5083,7 +5087,7 @@
             }
           },
           "303": {
-            "description": "Login start failed; redirect to /auth/complete?error=authorization. The fixed error code is presentation-only; upstream diagnostic details stay on the server.",
+            "description": "Login start failed; redirect to /auth/complete with a fixed allowlisted error category, such as provider_unavailable, configuration or rate_limited. Presentation only; upstream diagnostic details stay on the server.",
             "headers": {
               "Location": {
                 "schema": {

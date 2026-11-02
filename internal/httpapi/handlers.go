@@ -81,25 +81,27 @@ func (s *Server) begin(w http.ResponseWriter, r *http.Request, intent string) {
 func (s *Server) login(w http.ResponseWriter, r *http.Request) { s.begin(w, r, "login") }
 func (s *Server) bind(w http.ResponseWriter, r *http.Request)  { s.begin(w, r, "bind") }
 func (s *Server) callback(w http.ResponseWriter, r *http.Request) {
-	v, e := payment.ParseValues(r.URL.Query())
+	query, e := url.ParseQuery(r.URL.RawQuery)
+	v := map[string]string{}
+	if e == nil {
+		v, e = payment.ParseValues(query)
+	}
 	if e != nil {
 		s.Log.WarnContext(r.Context(), fmt.Sprintf("授权回调请求 %s 的参数校验失败", state(r).ID), "request_id", state(r).ID, "stage", "callback_query", "reason", "invalid_query")
-		s.respond(w, r, 200, "VALIDATION_FAILED", "授权回调参数无效", nil)
+		state(r).Code, state(r).Status = "AUTH_FLOW_INVALID", http.StatusSeeOther
+		http.Redirect(w, r, "/auth/complete?error=flow_invalid", http.StatusSeeOther)
 		return
 	}
-	result, e := s.Auth.Callback(r.Context(), chi.URLParam(r, "provider"), v["state"], v["code"], cookie(r, s.cookieName("flow")), state(r).Session)
+	result, e := s.Auth.CallbackResponse(r.Context(), chi.URLParam(r, "provider"), v["state"], v["code"], v["error"], cookie(r, s.cookieName("flow")), state(r).Session)
 	if e != nil {
 		s.logAuthBoundary(r, e)
-		state(r).Code = "AUTHORIZATION_FAILED"
-		if errors.Is(e, auth.ErrUpstream) {
-			state(r).Code = "LOGIN_PROVIDER_UNAVAILABLE"
+		code, _, callback := auth.UserError(e)
+		if code == "" {
+			code, callback = "AUTHORIZATION_FAILED", "authorization"
 		}
+		state(r).Code = code
 		state(r).Status = 303
-		target := "/auth/complete?error=authorization"
-		if errors.Is(e, auth.ErrBanned) {
-			state(r).Code = "ACCOUNT_BANNED"
-			target = "/auth/complete?error=account_banned"
-		}
+		target := "/auth/complete?error=" + callback
 		http.Redirect(w, r, target, http.StatusSeeOther)
 		return
 	}

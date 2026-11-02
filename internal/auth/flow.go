@@ -51,6 +51,7 @@ type FlowStatus struct {
 	Stage    string `json:"stage"`
 	Provider string `json:"provider"`
 	ReturnTo string `json:"return_to"`
+	Intent   string `json:"intent"`
 }
 type FlowResult struct {
 	Credentials *Credentials
@@ -152,7 +153,7 @@ func (s *Service) BeginFlow(ctx context.Context, provider, intent string, sessio
 		authURL = c.AuthCodeURL(state, oidc.Nonce(nonce), oauth2.S256ChallengeOption(payload.Verifier))
 	} else {
 		if s.Config.QQappID == "" {
-			return FlowStart{}, ErrInvalid
+			return FlowStart{}, authFailure(ErrInvalid, "flow_start", "provider_disabled")
 		}
 		u, _ := url.Parse("https://graph.qq.com/oauth2.0/authorize")
 		q := url.Values{"response_type": {"code"}, "client_id": {s.Config.QQappID}, "redirect_uri": {s.Config.PublicURL + "/api/v1/user/oauth/callback/qq"}, "state": {state}, "scope": {"get_user_info"}}
@@ -256,10 +257,16 @@ func (s *Service) claimFlow(ctx context.Context, state, cookie string) (flow, er
 }
 func (s *Service) FlowStatus(ctx context.Context, cookie string) (FlowStatus, error) {
 	f, e := s.readFlow(ctx, nil, cookie)
-	return FlowStatus{f.Stage, f.Provider, f.Secret.ReturnTo}, e
+	return FlowStatus{Stage: f.Stage, Provider: f.Provider, ReturnTo: f.Secret.ReturnTo, Intent: f.Intent}, e
 }
 
 func (s *Service) Callback(ctx context.Context, provider, state, code, cookie string, current *Session) (result FlowResult, err error) {
+	return s.CallbackResponse(ctx, provider, state, code, "", cookie, current)
+}
+
+// CallbackResponse handles provider rejection only after validating the bound
+// flow and state; an arbitrary query string cannot consume another flow.
+func (s *Service) CallbackResponse(ctx context.Context, provider, state, code, providerError, cookie string, current *Session) (result FlowResult, err error) {
 	started := time.Now()
 	ctx = withFlowDiagnostic(ctx, cookie)
 	defer func() {
@@ -290,11 +297,18 @@ func (s *Service) Callback(ctx context.Context, provider, state, code, cookie st
 	if f.Provider != provider {
 		return FlowResult{}, authFailure(ErrInvalid, "callback_validate", "provider_mismatch")
 	}
-	if code == "" {
-		return FlowResult{}, authFailure(ErrInvalid, "callback_validate", "authorization_code_missing")
-	}
 	if f.Intent == "bind" && (current == nil || current.ID != f.SessionID) {
 		return FlowResult{}, authFailure(ErrUnauthorized, "callback_validate", "binding_session_mismatch")
+	}
+	if providerError != "" {
+		reason := "authorization_rejected"
+		if providerError == "access_denied" {
+			reason = "authorization_cancelled"
+		}
+		return FlowResult{}, authFailure(ErrInvalid, "callback_validate", reason)
+	}
+	if code == "" {
+		return FlowResult{}, authFailure(ErrInvalid, "callback_validate", "authorization_code_missing")
 	}
 	var p Identity
 	if provider == s.Config.OIDCProviderID() {

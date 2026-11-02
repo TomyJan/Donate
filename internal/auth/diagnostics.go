@@ -13,6 +13,7 @@ import (
 
 	"github.com/TomyJan/Donate/internal/observability"
 	"github.com/TomyJan/Donate/internal/storage"
+	"golang.org/x/oauth2"
 )
 
 type diagnosticContextKey struct{}
@@ -213,6 +214,15 @@ func (t *upstreamTrace) failure(public error, stage, fallback string, cause erro
 		cause = t.err
 	}
 	if cause != nil {
+		var rejected *oauth2.RetrieveError
+		if errors.As(cause, &rejected) {
+			switch rejected.ErrorCode {
+			case "invalid_client", "unauthorized_client":
+				return &diagnosticError{public: public, stage: stage, reason: "client_rejected", host: t.host, status: t.status}
+			case "invalid_grant":
+				return &diagnosticError{public: ErrUnauthorized, stage: stage, reason: "token_rejected", host: t.host, status: t.status}
+			}
+		}
 		if classified := observability.ErrorReason(cause); classified != "internal_error" {
 			reason = classified
 		}

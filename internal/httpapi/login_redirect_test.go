@@ -94,7 +94,7 @@ func TestLoginGETNavigationFailuresUseSafeErrorPageAndKeepDiagnostics(t *testing
 			var logs bytes.Buffer
 			s.Log = slog.New(slog.NewJSONHandler(&logs, nil))
 			a.Log = s.Log
-			path, wantCode := "/api/v1/user/login?provider=qq", "VALIDATION_FAILED"
+			path, wantCode, wantError := "/api/v1/user/login?provider=qq", "LOGIN_CONFIGURATION_ERROR", "configuration"
 			switch scenario {
 			case "provider unavailable":
 				provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -103,19 +103,22 @@ func TestLoginGETNavigationFailuresUseSafeErrorPageAndKeepDiagnostics(t *testing
 				t.Cleanup(provider.Close)
 				a.Config.OIDCissuer, a.Config.OIDCclientID = provider.URL, "client"
 				path, wantCode = "/api/v1/user/login?provider=oidc", "LOGIN_PROVIDER_UNAVAILABLE"
+				wantError = "provider_unavailable"
 			case "rate limited":
 				wantCode = "RATE_LIMITED"
+				wantError = "rate_limited"
 				for range 15 {
 					s.limits.allow("203.0.113.17:login", 15, time.Minute)
 				}
 			case "invalid query":
 				path = "/api/v1/user/login?provider=qq&return_to=%ZZ"
+				wantCode, wantError = "VALIDATION_FAILED", "authorization"
 			}
 			r := httptest.NewRequest(http.MethodGet, path, nil)
 			r.RemoteAddr = "203.0.113.17:1234"
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, r)
-			if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/auth/complete?error=authorization" || !strings.HasPrefix(w.Header().Get("Content-Type"), "text/html") {
+			if w.Code != http.StatusSeeOther || w.Header().Get("Location") != "/auth/complete?error="+wantError || !strings.HasPrefix(w.Header().Get("Content-Type"), "text/html") {
 				t.Fatalf("browser left on raw API error: %d %s %s", w.Code, w.Header(), w.Body)
 			}
 			if strings.Contains(w.Header().Get("Location")+w.Body.String()+logs.String(), "private-") {
@@ -179,7 +182,7 @@ func TestLoginPOSTAndBindingKeepJSONBeginErrors(t *testing.T) {
 			r.AddCookie(&http.Cookie{Name: s.sessionCookieName(current.Session.ID), Value: current.Token})
 			w := httptest.NewRecorder()
 			h.ServeHTTP(w, r)
-			if w.Code != http.StatusOK || w.Header().Get("Location") != "" || !strings.Contains(w.Body.String(), "VALIDATION_FAILED") || !strings.HasPrefix(w.Header().Get("Content-Type"), "application/json") {
+			if w.Code != http.StatusOK || w.Header().Get("Location") != "" || !strings.Contains(w.Body.String(), "LOGIN_CONFIGURATION_ERROR") || !strings.HasPrefix(w.Header().Get("Content-Type"), "application/json") {
 				t.Fatalf("POST error contract changed: %d %s %s", w.Code, w.Header(), w.Body)
 			}
 		})
