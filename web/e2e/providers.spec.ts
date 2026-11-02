@@ -34,17 +34,26 @@ test('QQ number verification can retry in place and distinguishes binding from s
   const number = page.getByRole('textbox', { name: 'QQ 号', exact: true });
   await number.fill('12345678');
   await page.locator('.d-qq-submit').click();
-  await expect(page.getByRole('alert')).toContainText('QQ 号验证未通过');
+  await expect(page.locator('.toast-stack')).toContainText('QQ 号验证未通过');
+  await expect(page.locator('.login-complete [role="alert"]')).toHaveCount(0);
   await expect(number).toHaveValue('12345678');
   await expect(page.locator('.login-complete')).not.toContainText('private-upstream-detail');
   await expect(page.locator('.login-complete')).not.toContainText('头像');
   await page.locator('.d-qq-submit').click();
-  await expect(page.getByRole('alert')).toContainText('验证次数已用尽');
+  await expect(page.locator('.toast-stack')).toContainText('验证次数已用尽');
+  await expect(page.locator('.login-complete [role="alert"]')).toHaveCount(0);
   await expect(number).toHaveCount(0);
   expect(attempts).toBe(2);
 });
 
 test('custom OIDC metadata labels sign-in and navigates using its public ID', async ({ page }) => {
+  const qqLogo = 'https://static-res.qq.com/static-res/imqq/qq-logo.png';
+  await page.route(qqLogo, (route) =>
+    route.fulfill({
+      contentType: 'image/svg+xml',
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24"/>',
+    }),
+  );
   const site = await (await page.request.get('/api/v1/site/info')).json();
   const providerID = site.data.provider_details.find(
     (provider: { kind: string }) => provider.kind === 'oidc',
@@ -68,6 +77,10 @@ test('custom OIDC metadata labels sign-in and navigates using its public ID', as
   await page.goto('/');
   await page.getByRole('button', { name: '登录', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '登录', exact: true });
+  await expect(dialog.getByRole('button', { name: 'QQ', exact: true }).locator('img')).toHaveAttribute(
+    'src',
+    qqLogo,
+  );
   const provider = dialog.getByRole('button', { name: '我的通行证', exact: true });
   await expect(provider).toBeDisabled();
   await expect(provider.locator('img')).toHaveAttribute('src', 'https://identity.test/icon.svg');

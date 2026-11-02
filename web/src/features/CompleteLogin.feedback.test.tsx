@@ -14,11 +14,18 @@ afterEach(() => {
   history.replaceState(null, '', '/');
 });
 function LoginState() {
-  const { loginOpen, accountOpen } = useApp();
+  const { loginOpen, accountOpen, toasts } = useApp();
   return (
     <>
       <output>{loginOpen ? 'login-open' : 'login-closed'}</output>
       <output>{accountOpen ? 'account-open' : 'account-closed'}</output>
+      <div data-testid="toast-host">
+        {toasts.map((toast) => (
+          <p key={toast.id} role="alert">
+            {toast.text}
+          </p>
+        ))}
+      </div>
     </>
   );
 }
@@ -89,6 +96,8 @@ it.each(['QQ_NUMBER_INVALID', 'QQ_VERIFICATION_FAILED', 'QQ_VERIFICATION_UNAVAIL
     fireEvent.change(input, { target: { value: '12345' } });
     fireEvent.submit(input.closest('form') as HTMLFormElement);
     expect(await screen.findByRole('alert')).not.toHaveTextContent(/secret|avatar|picture/i);
+    expect(screen.getByTestId('toast-host')).toContainElement(screen.getByRole('alert'));
+    expect(document.querySelector('.login-complete [role="alert"]')).toBeNull();
     expect(input).toHaveValue('12345');
     await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled());
     fireEvent.submit(input.closest('form') as HTMLFormElement);
@@ -103,6 +112,8 @@ it.each(['AUTH_FLOW_EXPIRED', 'AUTH_FLOW_INVALID', 'AUTH_ATTEMPTS_EXCEEDED', 'AU
     fireEvent.change(input, { target: { value: '12345' } });
     fireEvent.submit(input.closest('form') as HTMLFormElement);
     await screen.findByRole('alert');
+    expect(screen.getByTestId('toast-host')).toContainElement(screen.getByRole('alert'));
+    expect(document.querySelector('.login-complete [role="alert"]')).toBeNull();
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Sign in again' }));
     expect(screen.getByText('login-open')).toBeInTheDocument();

@@ -31,7 +31,7 @@ const restartCodes = new Set([
   'ACCOUNT_BANNED',
 ]);
 export function CompleteLogin() {
-  const { t, setLoginOpen, setAccountOpen } = useApp();
+  const { t, setLoginOpen, setAccountOpen, report } = useApp();
   const [number, setNumber] = useState(''),
     [busy, setBusy] = useState(false);
   const [submissionError, setSubmissionError] = useState<unknown>(null);
@@ -67,6 +67,7 @@ export function CompleteLogin() {
       location.replace(result.return_to);
     } catch (e) {
       setSubmissionError(e);
+      report(e);
     } finally {
       setBusy(false);
     }
@@ -75,7 +76,7 @@ export function CompleteLogin() {
     <main className="login-complete">
       <article className="d-dialog-frame">
         <h1>{t(failed ? 'loginBanned' : 'qq')}</h1>
-        {error != null && (
+        {error != null && submissionError == null && (
           <p role="alert">{code === 'ACCOUNT_BANNED' ? t('loginBannedHint') : errorMessage(error, t)}</p>
         )}
         {failed ? (
