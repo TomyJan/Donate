@@ -123,6 +123,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/order/migrate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * admin/order/migrate
+         * @description Administrator and CSRF required. Assigns an unowned legacy order to an existing user (including banned users without changing their status), preserving all original donor, payment and location data. The same target is idempotent; a different owner or a non-legacy order returns ORDER_MIGRATION_NOT_ALLOWED. Missing order/user returns NOT_FOUND, malformed IDs return VALIDATION_FAILED, all using HTTP 200. Permission, ownership update and order.migrate audit are transactional.
+         */
+        post: operations["admin_order_migrate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/order/reconcile": {
         parameters: {
             query?: never;
@@ -768,6 +788,20 @@ export interface components {
             label: string;
             /** Format: int64 */
             paid_fen: number;
+        };
+        MigrateOrderInput: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            user_id: string;
+        };
+        MigrationResult: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            result: "migrated" | "unchanged";
+            /** Format: uuid */
+            user_id: string;
         };
         Operation: {
             action: string;
@@ -1726,6 +1760,58 @@ export interface operations {
                 headers: {
                     /** @description Present only when the expected read session differs from the actual Cookie session. Revalidate profile without clearing a newer observed session. */
                     "X-Session-Mismatch"?: "1";
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Infrastructure failure */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    admin_order_migrate_post: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": string;
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MigrateOrderInput"];
+            };
+        };
+        responses: {
+            /** @description Business response; inspect code. Basic authentication failures use 401/403. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        code: string;
+                        data: components["schemas"]["MigrationResult"];
+                        message: string;
+                        request_id: string;
+                    };
+                };
+            };
+            /** @description Missing or invalid session */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Forbidden, banned, or CSRF refused */
+            403: {
+                headers: {
                     [name: string]: unknown;
                 };
                 content?: never;

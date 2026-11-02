@@ -24,6 +24,7 @@ func (s *Service) logMutationFailure(stage, action, actor string, targets map[st
 		{auth.ErrUnauthorized, "unauthorized"}, {auth.ErrBanned, "banned"}, {auth.ErrInvalid, "invalid"},
 		{order.ErrNotFound, "not_found"}, {order.ErrConflict, "idempotency_conflict"},
 		{order.ErrBusy, "busy"}, {ErrSelfBan, "self_ban"}, {ErrLastIdentity, "last_identity"},
+		{ErrOrderMigrationNotAllowed, "order_migration_not_allowed"},
 	} {
 		if errors.Is(err, item.err) {
 			reason, level = item.reason, slog.LevelWarn

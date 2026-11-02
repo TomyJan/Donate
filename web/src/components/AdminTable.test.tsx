@@ -77,3 +77,25 @@ it('distinguishes a successful unlink audit result from an account that was neve
   expect(document.querySelector('td[data-field=result]')).toHaveTextContent('Unlinked');
   expect(document.querySelector('td[data-field=result]')).not.toHaveTextContent('Not linked');
 });
+
+it.each([
+  ['migrated_to:93fc0fd2-942c-49ea-9df2-c043cf88dd3e', 'Migrated to 93fc0fd2-942c-49ea-9df2-c043cf88dd3e'],
+  ['migrated_to:secret upstream payload', 'Action failed'],
+] as const)('renders a migration audit result safely (%s)', (result, expected) => {
+  const audit: Audit = {
+    id: 'audit-migration',
+    created_at: '2026-10-30T00:00:00Z',
+    action: 'order.migrate',
+    actor: 'Admin',
+    actor_id: 'admin',
+    result,
+    target: 'Historical donor',
+    target_exists: true,
+    target_id: 'order',
+    target_type: 'order',
+  };
+  render(<AdminTable {...options} kind="audit" rows={[audit]} onSort={() => {}} />);
+  expect(document.querySelector('td[data-field=action]')).toHaveTextContent('Order migrated');
+  expect(document.querySelector('td[data-field=result]')).toHaveTextContent(expected);
+  expect(document.querySelector('td[data-field=result]')).not.toHaveTextContent('secret upstream payload');
+});

@@ -174,7 +174,8 @@ func taskSecond(at time.Time) int64 {
 	return v
 }
 
-const taskJoins = " FROM jobs j LEFT JOIN orders o ON o.id=j.order_id LEFT JOIN users u ON u.id=o.user_id LEFT JOIN identities i ON i.id=u.public_identity_id LEFT JOIN users actor ON actor.id=j.actor_id LEFT JOIN identities ai ON ai.id=actor.public_identity_id "
+// Ownership changes do not replace a legacy order's original donor identity.
+const taskJoins = " FROM jobs j LEFT JOIN orders o ON o.id=j.order_id LEFT JOIN users u ON u.id=o.user_id AND o.protocol!='legacy' LEFT JOIN identities i ON i.id=u.public_identity_id LEFT JOIN users actor ON actor.id=j.actor_id LEFT JOIN identities ai ON ai.id=actor.public_identity_id "
 const taskColumns = "j.id,j.kind,j.resource,j.order_id,COALESCE(o.merchant_order_no,''),CASE WHEN o.id IS NULL THEN '' ELSE COALESCE(NULLIF(trim(o.donor_nickname),''),i.nickname,'捐赠者') END AS nickname,j.status,j.attempts,j.total_attempts,j.source,j.last_result,j.created_at,j.updated_at,j.run_at,j.lease_until,j.actor_id,COALESCE(ai.nickname,''),j.request_id,j.recording_since,COALESCE(o.status,'')"
 
 func scanTask(row interface{ Scan(...any) error }) (TaskDetail, error) {

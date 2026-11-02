@@ -17,6 +17,7 @@ const messages: Record<string, string> = {
   IDENTITY_CONFLICT: 'identityConflictError',
   IDEMPOTENCY_CONFLICT: 'changedRequestError',
   ORDER_NOT_PAYABLE: 'orderNotPayableError',
+  ORDER_MIGRATION_NOT_ALLOWED: 'orderMigrationNotAllowedError',
   ORDER_ALREADY_PAID: 'alreadyPaidError',
   PAYMENT_MISMATCH: 'paymentVerificationError',
   PAYMENT_VERIFY_FAILED: 'paymentVerificationError',

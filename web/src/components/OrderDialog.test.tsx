@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { translate } from '../lib/i18n';
-import type { Order, Profile } from '../lib/types';
+import type { Order, Profile, User } from '../lib/types';
 import { OrderDialog, orderCopyText } from './OrderDialog';
 
 const { report, notify, session } = vi.hoisted(() => ({
@@ -706,3 +706,219 @@ it('does not add false visibility flags or an empty status group', async () => {
     }),
   ).not.toBeInTheDocument();
 });
+
+const migrationUser: User = {
+  id: '93fc0fd2-942c-49ea-9df2-c043cf88dd3e',
+  nickname: 'Existing donor',
+  avatar_url: '',
+  status: 'banned',
+  admin: false,
+  created_at: '2026-10-01T00:00:00Z',
+  bindings: [],
+  order_count: 0,
+  paid_fen: 0,
+};
+
+function migrationServer(
+  migrate: (body: unknown) => Promise<Response> = async () =>
+    response({ id: order.id, user_id: migrationUser.id, result: 'migrated' }),
+) {
+  const requests: unknown[] = [];
+  let owned = false;
+  vi.stubGlobal('fetch', async (input: string, init?: RequestInit) => {
+    const path = String(input);
+    if (path.endsWith('/order/migrate')) {
+      const body = JSON.parse(String(init?.body));
+      requests.push(body);
+      const result = await migrate(body);
+      if (result.ok) owned = true;
+      return result;
+    }
+    if (path.includes('/user/list?'))
+      return response({ items: [migrationUser], total: 1, page: 1, page_size: 20 });
+    if (path.includes('/user/detail?')) return response(migrationUser);
+    if (path.includes('/order/detail?'))
+      return response({
+        ...order,
+        protocol: 'legacy',
+        user_id: owned ? migrationUser.id : '',
+        qq_number: '123456',
+      });
+    throw new Error(`Unexpected request: ${path}`);
+  });
+  return requests;
+}
+
+async function selectMigrationUser() {
+  fireEvent.click(await screen.findByRole('button', { name: 'Migrate order' }));
+  expect(screen.getByRole('button', { name: 'Review migration' })).toBeDisabled();
+  fireEvent.click(screen.getByRole('combobox', { name: 'Target user' }));
+  expect(screen.queryByRole('option', { name: 'All users' })).not.toBeInTheDocument();
+  fireEvent.click(await screen.findByRole('option', { name: /Existing donor/ }));
+  expect(document.querySelector('.order-migration-target')).toHaveTextContent(migrationUser.nickname);
+  expect(document.querySelector('.order-migration-target')).toHaveTextContent(migrationUser.id);
+}
+
+it.each([
+  [true, 'legacy', '', true],
+  [true, 'legacy', 'owner', false],
+  [true, 'v2', '', false],
+  [false, 'legacy', '', false],
+] as const)(
+  'offers migration only for an unowned legacy admin order (%s, %s, %s)',
+  async (admin, protocol, userID, eligible) => {
+    vi.stubGlobal('fetch', async () => response({ ...order, protocol, user_id: userID }));
+    renderOrder(admin);
+    await screen.findByText('Admin');
+    expect(!!screen.queryByRole('button', { name: 'Migrate order' })).toBe(eligible);
+  },
+);
+
+it.each(['migrated', 'unchanged'])(
+  'requires a selected existing user and explicit confirmation, then refreshes ownership (%s)',
+  async (result) => {
+    const requests = migrationServer(async () =>
+      response({ id: order.id, user_id: migrationUser.id, result }),
+    );
+    const view = renderOrder(true);
+    await selectMigrationUser();
+    expect(requests).toEqual([]);
+    expect(document.querySelectorAll('.d-overlay')).toHaveLength(1);
+    fireEvent.click(screen.getByRole('button', { name: 'Review migration' }));
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.getByText(/Historical nickname, avatar and QQ/)).toBeVisible();
+    expect(requests).toEqual([]);
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    await waitFor(() => expect(requests).toEqual([{ id: 'order-uuid', user_id: migrationUser.id }]));
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Migrate order' })).not.toBeInTheDocument(),
+    );
+    expect(
+      view.client.getQueryData<Order>(['order-detail', true, 'order-uuid', 'alice:current-session'])
+        ?.nickname,
+    ).toBe('Admin');
+    expect(screen.getByText('Admin')).toBeInTheDocument();
+    expect(screen.getByText('123456')).toBeInTheDocument();
+    expect(notify).toHaveBeenCalledOnce();
+  },
+);
+
+it('keeps a failed migration retryable without submitting again until reconfirmed', async () => {
+  let failed = true;
+  const requests = migrationServer(async () =>
+    failed
+      ? Response.json(
+          { code: 'ORDER_MIGRATION_NOT_ALLOWED', message: 'private upstream payload' },
+          { status: 409 },
+        )
+      : response({ id: order.id, user_id: migrationUser.id, result: 'unchanged' }),
+  );
+  renderOrder(true);
+  await selectMigrationUser();
+  fireEvent.click(screen.getByRole('button', { name: 'Review migration' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'Only unassigned historical orders can be migrated. Refresh the order and try again.',
+  );
+  expect(screen.queryByText(/private upstream/)).not.toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument();
+  expect(requests).toHaveLength(1);
+  failed = false;
+  fireEvent.click(screen.getByRole('button', { name: 'Review migration' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+  await waitFor(() =>
+    expect(screen.queryByRole('button', { name: 'Migrate order' })).not.toBeInTheDocument(),
+  );
+  expect(requests).toHaveLength(2);
+});
+
+it.each(['credentials', 'admin', 'reopen', 'unmount'] as const)(
+  'ignores pending migration success after %s changes',
+  async (boundary) => {
+    let finish: ((value: Response) => void) | undefined;
+    migrationServer(
+      async () =>
+        new Promise<Response>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const view = renderOrder(true);
+    await selectMigrationUser();
+    fireEvent.click(screen.getByRole('button', { name: 'Review migration' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    await waitFor(() => expect(finish).toBeTypeOf('function'));
+    if (boundary === 'unmount') view.unmount();
+    else if (boundary === 'reopen') {
+      rerenderOrder(view, null);
+      rerenderOrder(view);
+    } else {
+      session.profile = {
+        id: 'alice',
+        csrf_token: boundary === 'credentials' ? 'replacement' : 'current-session',
+        admin: boundary !== 'admin',
+      };
+      rerenderOrder(view);
+    }
+    expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument();
+    const invalidate = vi.spyOn(view.client, 'invalidateQueries');
+    const setData = vi.spyOn(view.client, 'setQueryData');
+    await act(async () => {
+      finish?.(response({ id: order.id, user_id: migrationUser.id, result: 'migrated' }));
+    });
+    expect(notify).not.toHaveBeenCalled();
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(setData).not.toHaveBeenCalled();
+  },
+);
+
+it('revokes migration confirmation on detail refresh failure', async () => {
+  const requests = migrationServer();
+  const view = renderOrder(true);
+  await selectMigrationUser();
+  fireEvent.click(screen.getByRole('button', { name: 'Review migration' }));
+  vi.stubGlobal('fetch', async () => new Response('unavailable', { status: 503 }));
+  await act(async () => {
+    await view.client.invalidateQueries({ queryKey: ['order-detail'] });
+  });
+  await screen.findByText(translate('serverBusyError', 'en'));
+  expect(screen.queryByRole('button', { name: 'Confirm' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Migrate order' })).toBeDisabled();
+  expect(requests).toEqual([]);
+});
+
+it.each([401, 403])(
+  'does not apply an old migration HTTP %s denial to replacement credentials',
+  async (status) => {
+    let finish: ((value: Response) => void) | undefined;
+    migrationServer(
+      async () =>
+        new Promise<Response>((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const view = renderOrder(true);
+    await selectMigrationUser();
+    fireEvent.click(screen.getByRole('button', { name: 'Review migration' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }));
+    await waitFor(() => expect(finish).toBeTypeOf('function'));
+    session.profile = { id: 'bob', csrf_token: 'replacement', admin: true };
+    rerenderOrder(view);
+    const invalid = vi.fn(),
+      forbidden = vi.fn();
+    window.addEventListener('session-invalid', invalid);
+    window.addEventListener('admin-forbidden', forbidden);
+    try {
+      await act(async () => {
+        finish?.(Response.json({ code: status === 401 ? 'UNAUTHORIZED' : 'FORBIDDEN' }, { status }));
+      });
+      expect(invalid).not.toHaveBeenCalled();
+      expect(forbidden).not.toHaveBeenCalled();
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      expect(notify).not.toHaveBeenCalled();
+      expect(report).not.toHaveBeenCalled();
+    } finally {
+      window.removeEventListener('session-invalid', invalid);
+      window.removeEventListener('admin-forbidden', forbidden);
+    }
+  },
+);

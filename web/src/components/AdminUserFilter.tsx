@@ -8,8 +8,21 @@ import { api, query } from '../lib/api';
 import type { Page, User } from '../lib/types';
 import { RequestError } from './RequestError';
 import { Button, Empty, portal } from './ui';
+import './AdminUserFilter.css';
 
-export function AdminUserFilter({ value, onValue }: { value: string; onValue: (id: string) => void }) {
+export function AdminUserFilter({
+  value,
+  onValue,
+  label = 'filterUser',
+  emptyLabel = 'allUsers',
+  allowEmpty = true,
+}: {
+  value: string;
+  onValue: (id: string, user?: User) => void;
+  label?: string;
+  emptyLabel?: string;
+  allowEmpty?: boolean;
+}) {
   const { t, profile } = useApp();
   const { scopeKey, isCurrent } = useRequestScope('admin-user-filter', true);
   const client = useQueryClient();
@@ -40,7 +53,7 @@ export function AdminUserFilter({ value, onValue }: { value: string; onValue: (i
   const choose = (user?: User) => {
     if (!isCurrent()) return;
     if (user) client.setQueryData(['admin-user', user.id, scopeKey], user);
-    onValue(user?.id ?? '');
+    onValue(user?.id ?? '', user);
     setOpen(false);
   };
   return (
@@ -49,11 +62,11 @@ export function AdminUserFilter({ value, onValue }: { value: string; onValue: (i
         <Button
           className="a-select a-user-filter"
           role="combobox"
-          aria-label={t('filterUser')}
+          aria-label={t(label)}
           aria-expanded={open}
           aria-controls={listId}
         >
-          <span>{value ? selected.data?.nickname || value.slice(0, 8) : t('allUsers')}</span>
+          <span>{value ? selected.data?.nickname || value.slice(0, 8) : t(emptyLabel)}</span>
           <ChevronDown />
         </Button>
       </Popover.Trigger>
@@ -71,20 +84,22 @@ export function AdminUserFilter({ value, onValue }: { value: string; onValue: (i
           <div
             id={listId}
             role="listbox"
-            aria-label={t('filterUser')}
+            aria-label={t(label)}
             className="admin-user-options"
             aria-busy={users.isFetching}
           >
-            <Button
-              role="option"
-              aria-selected={!value}
-              data-selected={!value || undefined}
-              className="d-option admin-user-option"
-              onClick={() => choose()}
-            >
-              <span>{t('allUsers')}</span>
-              {!value && <Check />}
-            </Button>
+            {allowEmpty && (
+              <Button
+                role="option"
+                aria-selected={!value}
+                data-selected={!value || undefined}
+                className="d-option admin-user-option"
+                onClick={() => choose()}
+              >
+                <span>{t(emptyLabel)}</span>
+                {!value && <Check />}
+              </Button>
+            )}
             {users.data?.items.map((user) => (
               <Button
                 key={user.id}

@@ -94,6 +94,8 @@ export function AdminTable({
       ];
     }
     const a = row as Audit;
+    const migrationTarget =
+      /^migrated_to:([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i.exec(a.result)?.[1];
     return [
       cell('actor', 'actor', a.actor === 'system' ? t('systemActor') : a.actor),
       cell('action', 'action', t(`audit_${a.action.replaceAll('.', '_')}`)),
@@ -131,7 +133,11 @@ export function AdminTable({
       cell(
         'result',
         'result',
-        t(a.result === 'created' ? 'createdResult' : a.result === 'unbound' ? 'unboundResult' : a.result),
+        a.action === 'order.migrate'
+          ? migrationTarget
+            ? t('migratedToResult').replace('{id}', migrationTarget)
+            : t('error')
+          : t(a.result === 'created' ? 'createdResult' : a.result === 'unbound' ? 'unboundResult' : a.result),
       ),
     ];
   }

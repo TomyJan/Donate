@@ -14,6 +14,7 @@ it.each([
   ['LOGIN_CANCELLED', 'loginCancelledError'],
   ['LOGIN_CONFIGURATION_ERROR', 'loginConfigurationError'],
   ['LOGIN_VERIFICATION_FAILED', 'loginVerificationError'],
+  ['ORDER_MIGRATION_NOT_ALLOWED', 'orderMigrationNotAllowedError'],
 ])('classifies %s without exposing upstream details', (code, key) => {
   for (const lang of ['zh-CN', 'en'] as const) {
     const message = errorMessage(new APIError(code, 'secret upstream payload', 400), (k) =>

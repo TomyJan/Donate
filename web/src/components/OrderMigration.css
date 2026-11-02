@@ -1,0 +1,23 @@
+.d-app .order-migration.action-confirm.d-pop {
+  display: grid;
+  gap: 12px;
+  width: min(360px, calc(100vw - 24px));
+}
+.order-migration-hint {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.order-migration .a-user-filter {
+  width: 100%;
+}
+.order-migration-target {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.order-migration-target code {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}

@@ -1,4 +1,24 @@
 export const words = {
+  migrateOrder: ['迁移订单', 'Migrate order'],
+  migrationTarget: ['目标用户', 'Target user'],
+  migrationSelectUser: ['选择用户', 'Select user'],
+  migrationReview: ['检查迁移', 'Review migration'],
+  migrationBack: ['返回选择', 'Back to selection'],
+  migrationConfirmPrompt: [
+    '确认将此历史订单迁移至以下用户？',
+    'Migrate this historical order to the following user?',
+  ],
+  migrationHint: [
+    '仅将此历史订单归属到所选的现有用户，订单状态不变。历史昵称、头像和 QQ 保持不变。',
+    'Assign this historical order to the selected existing user without changing its status. Historical nickname, avatar and QQ remain unchanged.',
+  ],
+  migrationSuccess: ['订单已迁移', 'Order migrated'],
+  orderMigrationNotAllowedError: [
+    '仅可迁移未归属用户的历史订单，请刷新订单后重试。',
+    'Only unassigned historical orders can be migrated. Refresh the order and try again.',
+  ],
+  audit_order_migrate: ['迁移订单', 'Order migrated'],
+  migratedToResult: ['迁移至 {id}', 'Migrated to {id}'],
   tasks: ['任务', 'Tasks'],
   taskSource: ['来源', 'Source'],
   taskCreatedAt: ['创建时间', 'Created at'],

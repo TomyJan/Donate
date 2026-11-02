@@ -12,6 +12,7 @@ import { AdminLoading } from './AdminLoading';
 import { CopyButton } from './CopyButton';
 import { DialogActions } from './DialogActions';
 import { LocationCheck } from './LocationCheck';
+import { OrderMigration } from './OrderMigration';
 import { RequestError } from './RequestError';
 import { Avatar, Button, Modal } from './ui';
 import './OrderDialog.css';
@@ -73,11 +74,13 @@ export function OrderDialog({
   const identity = profile ? `${profile.id}:${profile.csrf_token}` : 'guest';
   const client = useQueryClient();
   const [busy, setBusy] = useState(false),
+    [migrationBusy, setMigrationBusy] = useState(false),
     [pollUntil, setPollUntil] = useState(0);
   const { scopeKey, scope, isCurrent } = useRequestScope(id ? JSON.stringify([id, admin]) : null, admin);
   // biome-ignore lint/correctness/useExhaustiveDependencies: A new scope revokes pending mutation state, including reopening the same order.
   useEffect(() => {
     setBusy(false);
+    setMigrationBusy(false);
     setPollUntil(0);
   }, [scope]);
   const detail = useQuery({
@@ -107,7 +110,7 @@ export function OrderDialog({
   }, [unavailable, client, admin, id, identity]);
   const o = unavailable ? undefined : detail.data;
   // Background polling does not revoke confirmations; failed refreshes still do.
-  const actionsDisabled = busy || !!detail.error;
+  const actionsDisabled = busy || migrationBusy || !!detail.error;
   const canContinue = !!o && o.status === 'pending' && new Date(o.expires_at).getTime() > Date.now();
   const reconciliations = o?.reconciliations ?? [];
   const manualJobIDs = new Set(reconciliations.map((request) => request.job_id));
@@ -320,6 +323,23 @@ export function OrderDialog({
                   <>
                     <CopyButton key={o.id} text={o.id} label={t('copy')} />
                     {confirmAction('export', t('export'), <Download />)}
+                    {o.protocol === 'legacy' && !o.user_id && (
+                      <OrderMigration
+                        id={o.id}
+                        scope={scope}
+                        isCurrent={isCurrent}
+                        disabled={busy || !!detail.error || !profile?.admin}
+                        onBusy={setMigrationBusy}
+                        onMigrated={async (userID) => {
+                          if (!isCurrent()) return;
+                          client.setQueryData<Order>(['order-detail', admin, id, identity], (current) =>
+                            current ? { ...current, user_id: userID } : current,
+                          );
+                          notify(t('migrationSuccess'));
+                          await client.invalidateQueries();
+                        }}
+                      />
+                    )}
                     <Button
                       disabled={actionsDisabled || o.protocol === 'legacy'}
                       onClick={() =>

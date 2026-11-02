@@ -152,6 +152,8 @@ func (s *Server) failure(w http.ResponseWriter, r *http.Request, e error) {
 		code, message = "SELF_BAN_FORBIDDEN", e.Error()
 	case errors.Is(e, admin.ErrLastIdentity):
 		code, message = "LAST_IDENTITY_FORBIDDEN", e.Error()
+	case errors.Is(e, admin.ErrOrderMigrationNotAllowed):
+		code, message = "ORDER_MIGRATION_NOT_ALLOWED", "只能迁移尚未关联用户的历史订单"
 	default:
 		status = 500
 		s.Log.ErrorContext(r.Context(), fmt.Sprintf("请求 %s 无法完成，路由 %s", state(r).ID, chi.RouteContext(r.Context()).RoutePattern()), "request_id", state(r).ID, "stage", "http_handler", "reason", observability.ErrorReason(e))
@@ -278,6 +280,7 @@ func (s *Server) Handler() http.Handler {
 		m.Post("/admin/order/action/preview", s.route(s.preview, 2))
 		m.Post("/admin/order/action/execute", s.route(s.execute, 2))
 		m.Post("/admin/order/reconcile", s.route(s.reconcile, 2))
+		m.Post("/admin/order/migrate", s.route(s.migrateOrder, 2))
 		m.Get("/admin/operation/detail", s.route(s.operation, 2))
 		m.Post("/admin/order/export", s.route(s.export, 2))
 		m.Get("/admin/user/list", s.route(s.users, 2))

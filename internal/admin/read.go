@@ -57,13 +57,15 @@ type OrderRow struct {
 }
 
 func (s *Service) OrdersList(ctx context.Context, f Filter) (Page[OrderRow], error) {
+	// Account identity joins exclude legacy orders throughout these reads: their
+	// original donor snapshots, including missing values, survive ownership changes.
 	page, size := f.pagination()
 	out := Page[OrderRow]{Items: []OrderRow{}, Page: page, Size: size}
 	where, args, e := orderWhere(f)
 	if e != nil {
 		return out, e
 	}
-	if e = s.Store.DB.QueryRowContext(ctx, "SELECT count(*) FROM orders o LEFT JOIN users u ON u.id=o.user_id LEFT JOIN identities i ON i.id=u.public_identity_id WHERE "+where, args...).Scan(&out.Total); e != nil {
+	if e = s.Store.DB.QueryRowContext(ctx, "SELECT count(*) FROM orders o LEFT JOIN users u ON u.id=o.user_id AND o.protocol!='legacy' LEFT JOIN identities i ON i.id=u.public_identity_id WHERE "+where, args...).Scan(&out.Total); e != nil {
 		return out, e
 	}
 	allowed := map[string]string{"id": "o.id", "created_at": "o.created_at", "nickname": "COALESCE(NULLIF(trim(o.donor_nickname, ' '||char(9)||char(10)||char(13)||char(12288)),''),i.nickname)", "amount_fen": "o.amount_fen", "channel": "o.channel", "message": "o.message", "status": "o.status", "hidden_order": "o.hidden_order", "hidden_message": "o.hidden_message", "paid_at": "o.paid_at"}
@@ -76,7 +78,7 @@ func (s *Service) OrdersList(ctx context.Context, f Filter) (Page[OrderRow], err
 		dir = " ASC"
 	}
 	// Read IDs first and close rows before looking up orders: SQLite uses one bounded connection.
-	rows, e := s.Store.DB.QueryContext(ctx, "SELECT o.id,COALESCE(NULLIF(trim(o.donor_nickname, ' '||char(9)||char(10)||char(13)||char(12288)),''),i.nickname,'捐赠者'),COALESCE(NULLIF(o.donor_avatar_url,''),i.avatar_url,'') FROM orders o LEFT JOIN users u ON u.id=o.user_id LEFT JOIN identities i ON i.id=u.public_identity_id WHERE "+where+" ORDER BY "+col+dir+",o.id"+dir+" LIMIT ? OFFSET ?", append(args, size, (page-1)*size)...)
+	rows, e := s.Store.DB.QueryContext(ctx, "SELECT o.id,COALESCE(NULLIF(trim(o.donor_nickname, ' '||char(9)||char(10)||char(13)||char(12288)),''),i.nickname,'捐赠者'),COALESCE(NULLIF(o.donor_avatar_url,''),i.avatar_url,'') FROM orders o LEFT JOIN users u ON u.id=o.user_id AND o.protocol!='legacy' LEFT JOIN identities i ON i.id=u.public_identity_id WHERE "+where+" ORDER BY "+col+dir+",o.id"+dir+" LIMIT ? OFFSET ?", append(args, size, (page-1)*size)...)
 	if e != nil {
 		return out, e
 	}
@@ -232,7 +234,7 @@ func (s *Service) Detail(ctx context.Context, id string, full bool) (Detail, err
 	}
 	d := Detail{Order: o, Nickname: o.DonorNickname, AvatarURL: o.DonorAvatarURL}
 	oid, _ := storage.ParseID(id)
-	e = s.Store.DB.QueryRowContext(ctx, "SELECT COALESCE(NULLIF(trim(o.donor_nickname, ' '||char(9)||char(10)||char(13)||char(12288)),''),i.nickname,'捐赠者'),COALESCE(NULLIF(o.donor_avatar_url,''),i.avatar_url,'') FROM orders o LEFT JOIN users u ON u.id=o.user_id LEFT JOIN identities i ON i.id=u.public_identity_id WHERE o.id=?", oid).Scan(&d.Nickname, &d.AvatarURL)
+	e = s.Store.DB.QueryRowContext(ctx, "SELECT COALESCE(NULLIF(trim(o.donor_nickname, ' '||char(9)||char(10)||char(13)||char(12288)),''),i.nickname,'捐赠者'),COALESCE(NULLIF(o.donor_avatar_url,''),i.avatar_url,'') FROM orders o LEFT JOIN users u ON u.id=o.user_id AND o.protocol!='legacy' LEFT JOIN identities i ON i.id=u.public_identity_id WHERE o.id=?", oid).Scan(&d.Nickname, &d.AvatarURL)
 	if e != nil && !errors.Is(e, sql.ErrNoRows) {
 		return d, e
 	}
@@ -577,7 +579,7 @@ func (s *Service) Audit(ctx context.Context, f Filter) (Page[Audit], error) {
 	if f.Direction == "asc" {
 		dir = " ASC"
 	}
-	rows, e := s.Store.DB.QueryContext(ctx, "SELECT a.id,a.actor_id,COALESCE(NULLIF(i.nickname,''),'system'),a.action,a.target_type,a.target_id,CASE WHEN a.target_type='order' THEN o.id IS NOT NULL WHEN a.target_type='user' THEN tu.id IS NOT NULL WHEN a.target_type='task' THEN j.id IS NOT NULL ELSE 0 END,CASE WHEN a.target_type='order' THEN COALESCE(NULLIF(trim(o.donor_nickname, ' '||char(9)||char(10)||char(13)||char(12288)),''),oi.nickname,'') ELSE COALESCE(ti.nickname,'') END,COALESCE(j.resource,''),o.amount_fen,a.result,a.created_at FROM audit_events a LEFT JOIN users u ON u.id=a.actor_id LEFT JOIN identities i ON i.id=u.public_identity_id LEFT JOIN orders o ON a.target_type='order' AND o.id=a.target_id LEFT JOIN users ou ON ou.id=o.user_id LEFT JOIN identities oi ON oi.id=ou.public_identity_id LEFT JOIN jobs j ON a.target_type='task' AND j.id=a.target_id LEFT JOIN users tu ON a.target_type='user' AND tu.id=a.target_id LEFT JOIN identities ti ON ti.id=tu.public_identity_id WHERE "+where+" ORDER BY "+col+dir+",a.id"+dir+" LIMIT ? OFFSET ?", append(args, size, (page-1)*size)...)
+	rows, e := s.Store.DB.QueryContext(ctx, "SELECT a.id,a.actor_id,COALESCE(NULLIF(i.nickname,''),'system'),a.action,a.target_type,a.target_id,CASE WHEN a.target_type='order' THEN o.id IS NOT NULL WHEN a.target_type='user' THEN tu.id IS NOT NULL WHEN a.target_type='task' THEN j.id IS NOT NULL ELSE 0 END,CASE WHEN a.target_type='order' THEN COALESCE(NULLIF(trim(o.donor_nickname, ' '||char(9)||char(10)||char(13)||char(12288)),''),oi.nickname,'') ELSE COALESCE(ti.nickname,'') END,COALESCE(j.resource,''),o.amount_fen,a.result,a.created_at FROM audit_events a LEFT JOIN users u ON u.id=a.actor_id LEFT JOIN identities i ON i.id=u.public_identity_id LEFT JOIN orders o ON a.target_type='order' AND o.id=a.target_id LEFT JOIN users ou ON ou.id=o.user_id AND o.protocol!='legacy' LEFT JOIN identities oi ON oi.id=ou.public_identity_id LEFT JOIN jobs j ON a.target_type='task' AND j.id=a.target_id LEFT JOIN users tu ON a.target_type='user' AND tu.id=a.target_id LEFT JOIN identities ti ON ti.id=tu.public_identity_id WHERE "+where+" ORDER BY "+col+dir+",a.id"+dir+" LIMIT ? OFFSET ?", append(args, size, (page-1)*size)...)
 	if e != nil {
 		return out, e
 	}

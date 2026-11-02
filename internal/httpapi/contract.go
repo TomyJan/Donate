@@ -17,6 +17,11 @@ type CreateOrderInput struct {
 type IDInput struct {
 	ID string `json:"id"`
 }
+
+type MigrateOrderInput struct {
+	ID     string `json:"id"`
+	UserID string `json:"user_id"`
+}
 type UnbindIdentityInput struct {
 	ID         string `json:"id"`
 	IdentityID string `json:"identity_id"`

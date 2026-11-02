@@ -432,6 +432,48 @@
         ],
         "type": "object"
       },
+      "MigrateOrderInput": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "user_id"
+        ],
+        "type": "object"
+      },
+      "MigrationResult": {
+        "properties": {
+          "id": {
+            "format": "uuid",
+            "type": "string"
+          },
+          "result": {
+            "enum": [
+              "migrated",
+              "unchanged"
+            ],
+            "type": "string"
+          },
+          "user_id": {
+            "format": "uuid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "result",
+          "user_id"
+        ],
+        "type": "object"
+      },
       "Operation": {
         "properties": {
           "action": {
@@ -3117,6 +3159,79 @@
           }
         ],
         "summary": "admin/order/list"
+      }
+    },
+    "/api/v1/admin/order/migrate": {
+      "post": {
+        "description": "Administrator and CSRF required. Assigns an unowned legacy order to an existing user (including banned users without changing their status), preserving all original donor, payment and location data. The same target is idempotent; a different owner or a non-legacy order returns ORDER_MIGRATION_NOT_ALLOWED. Missing order/user returns NOT_FOUND, malformed IDs return VALIDATION_FAILED, all using HTTP 200. Permission, ownership update and order.migrate audit are transactional.",
+        "operationId": "admin_order_migrate_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "X-CSRF-Token",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MigrateOrderInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/MigrationResult"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code",
+                    "message",
+                    "data",
+                    "request_id"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Business response; inspect code. Basic authentication failures use 401/403."
+          },
+          "401": {
+            "description": "Missing or invalid session"
+          },
+          "403": {
+            "description": "Forbidden, banned, or CSRF refused"
+          },
+          "500": {
+            "description": "Infrastructure failure"
+          }
+        },
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "summary": "admin/order/migrate"
       }
     },
     "/api/v1/admin/order/reconcile": {

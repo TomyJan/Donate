@@ -88,6 +88,12 @@ func main() {
 	for name, t := range types {
 		schemas[name] = describe(t)
 	}
+	schemas["MigrationResult"] = describe(reflect.TypeFor[admin.MigrationResult]())
+	migrationProps := schemas["MigrationResult"].(schema)["properties"].(map[string]any)
+	for _, field := range []string{"id", "user_id"} {
+		migrationProps[field].(schema)["format"] = "uuid"
+	}
+	migrationProps["result"].(schema)["enum"] = []string{"migrated", "unchanged"}
 	identityProps := schemas["Identity"].(schema)["properties"].(map[string]any)
 	identityProps["id"].(schema)["format"] = "uuid"
 	identityProps["bound_at"].(schema)["description"] = "Original binding instant from identities.created_at; signing in again does not change it."
@@ -128,6 +134,10 @@ func main() {
 		schemas[name] = describe(t)
 	}
 	schemas["TaskRetryInput"] = describe(reflect.TypeFor[httpapi.TaskRetryInput]())
+	schemas["MigrateOrderInput"] = describe(reflect.TypeFor[httpapi.MigrateOrderInput]())
+	for _, field := range []string{"id", "user_id"} {
+		schemas["MigrateOrderInput"].(schema)["properties"].(map[string]any)[field].(schema)["format"] = "uuid"
+	}
 	previewProps := schemas["PreviewInput"].(schema)["properties"].(map[string]any)
 	previewProps["action"].(schema)["enum"] = []string{"close", "hide_order", "show_order", "hide_message", "show_message", "delete", "export", "refresh_location"}
 	previewProps["action"].(schema)["description"] = "refresh_location queues a forced geo lookup after confirmation, including legacy orders. Success replaces the saved location, failure preserves it; payment state is unchanged. Missing targets return not_found, disabled geo mode returns disabled without queuing. Active refresh tasks are reused."
@@ -147,6 +157,10 @@ func main() {
 		method, path, result string
 		auth                 bool
 	}{{"get", "admin/task/list", "TaskPage", true}, {"get", "admin/task/detail", "TaskDetail", true}, {"get", "admin/task/history", "TaskEventPage", true}, {"get", "admin/task/overview", "TaskOverview", true}, {"post", "admin/task/retry", "TaskRetryResult", true}}...)
+	routes = append(routes, struct {
+		method, path, result string
+		auth                 bool
+	}{"post", "admin/order/migrate", "MigrationResult", true})
 	for _, r := range routes {
 		data := schema{}
 		if r.result != "" {
@@ -164,6 +178,7 @@ func main() {
 		bodies := map[string]string{"user/login": "LoginInput", "user/identity/bind": "LoginInput", "user/login/qq/complete": "QQInput", "order/create": "CreateOrderInput", "order/payment/start": "IDInput", "admin/order/action/preview": "PreviewInput", "admin/order/action/execute": "OperationInput", "admin/order/reconcile": "ReconcileInput", "admin/user/ban": "IDInput", "admin/user/unban": "IDInput"}
 		bodies["admin/user/identity/unbind"] = "UnbindIdentityInput"
 		bodies["admin/task/retry"] = "TaskRetryInput"
+		bodies["admin/order/migrate"] = "MigrateOrderInput"
 		if body := bodies[r.path]; r.method == "post" && body != "" {
 			operation["requestBody"] = schema{"required": true, "content": schema{"application/json": schema{"schema": ref(body)}}}
 		}
@@ -216,6 +231,9 @@ func main() {
 		}
 		if r.path == "admin/order/reconcile" {
 			response["content"].(schema)["application/json"].(schema)["schema"].(schema)["properties"].(schema)["data"] = schema{"type": "object", "required": []string{"job_id"}, "properties": schema{"job_id": schema{"type": "string", "format": "uuid"}}}
+		}
+		if r.path == "admin/order/migrate" {
+			operation["description"] = "Administrator and CSRF required. Assigns an unowned legacy order to an existing user (including banned users without changing their status), preserving all original donor, payment and location data. The same target is idempotent; a different owner or a non-legacy order returns ORDER_MIGRATION_NOT_ALLOWED. Missing order/user returns NOT_FOUND, malformed IDs return VALIDATION_FAILED, all using HTTP 200. Permission, ownership update and order.migrate audit are transactional."
 		}
 		if r.path == "admin/user/identity/unbind" {
 			operation["description"] = "Administrator only. Removes the matched user's OAuth identity atomically, invalidates all credentials using it and cancels the user's outstanding binding flows. At least one login method must remain. Business failures LAST_IDENTITY_FORBIDDEN, NOT_FOUND and VALIDATION_FAILED use HTTP 200; inspect code. Success clears the cookie if the current session used the removed identity."
