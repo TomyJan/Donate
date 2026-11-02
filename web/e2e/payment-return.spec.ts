@@ -937,7 +937,7 @@ test('retrying a failed OAuth authorization preserves the payment return destina
   await dialog.getByRole('checkbox').check();
   await dialog.getByRole('button', { name: 'OIDC', exact: true }).click();
   await expect(page).toHaveURL('/auth/complete?error=authorization');
-  await page.locator('main').getByRole('button', { name: '登录', exact: true }).click();
+  await page.locator('main').getByRole('button', { name: '重新登录', exact: true }).click();
   await dialog.getByRole('button', { name: 'OIDC', exact: true }).click();
   await expect.poll(() => destinations.length).toBe(2);
   expect(destinations).toEqual([
