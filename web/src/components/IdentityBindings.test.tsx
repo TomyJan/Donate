@@ -36,6 +36,18 @@ afterEach(() => {
   state.report.mockClear();
 });
 
+it('uses a neutral silhouette when unbound and the identity avatar when bound', () => {
+  const view = render(<IdentityBindings bindings={[]} />);
+  const qq = screen.getByText('QQ').closest('.d-bind');
+  expect(qq?.querySelector('.d-avatar svg')).toBeInTheDocument();
+  expect(qq?.querySelector('.d-avatar')).toHaveTextContent('');
+  expect(qq?.querySelector('.d-avatar img')).toBeNull();
+  view.rerender(
+    <IdentityBindings bindings={[{ ...bindings[0], avatar_url: 'https://qlogo.cn/donor.png' }]} />,
+  );
+  expect(qq?.querySelector('.d-avatar img')).toHaveAttribute('src', 'https://qlogo.cn/donor.png');
+});
+
 it('uses custom OIDC presentation while matching stored kinds and submitting the public binding ID', () => {
   state.site = {
     name: 'Donate',

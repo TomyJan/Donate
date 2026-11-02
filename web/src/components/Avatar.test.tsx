@@ -3,6 +3,23 @@ import { afterEach, expect, it } from 'vitest';
 import { Avatar } from './ui';
 
 afterEach(cleanup);
+it.each(['Alice', '', ' '])(
+  'shows a neutral silhouette instead of initials for %j without an image',
+  (name) => {
+    const view = render(<Avatar name={name} />);
+    expect(view.container.querySelector('.d-avatar svg')).toBeInTheDocument();
+    expect(view.container.querySelector('.d-avatar')).toHaveTextContent('');
+    expect(view.container.querySelector('img')).toBeNull();
+  },
+);
+
+it('falls back to the same silhouette when an avatar image fails', () => {
+  const view = render(<Avatar name="Alice" src="https://example.com/unavailable.png" />);
+  fireEvent.error(view.container.querySelector('img') as HTMLImageElement);
+  expect(view.container.querySelector('.d-avatar svg')).toBeInTheDocument();
+  expect(view.container.querySelector('.d-avatar')).toHaveTextContent('');
+});
+
 it('loads a new identity avatar after the previous image failed', () => {
   const view = render(<Avatar name="A" src="https://example.com/old.png" />);
   const old = view.container.querySelector('img');

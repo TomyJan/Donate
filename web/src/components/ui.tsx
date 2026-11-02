@@ -1,7 +1,7 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import * as Dropdown from '@radix-ui/react-dropdown-menu';
 import * as Select from '@radix-ui/react-select';
-import { ArrowLeft, ArrowRight, Check, ChevronDown, X } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, ChevronDown, UserRound, X } from 'lucide-react';
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { useApp } from '../app/context';
@@ -11,7 +11,7 @@ export const portal = () => document.querySelector<HTMLElement>('.d-app');
 export function Button({ className = '', ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
   return <button type="button" className={`d-btn d-control ${className}`} {...props} />;
 }
-export function Avatar({ name = '', src }: { name?: string; src?: string }) {
+export function Avatar({ src }: { name?: string; src?: string }) {
   const [failed, setFailed] = useState<string>();
   useEffect(() => {
     setFailed((previous) => (previous === src ? previous : undefined));
@@ -21,7 +21,7 @@ export function Avatar({ name = '', src }: { name?: string; src?: string }) {
       {src && failed !== src ? (
         <img src={src} alt="" referrerPolicy="no-referrer" onError={() => setFailed(src)} />
       ) : (
-        name.slice(0, 1) || '·'
+        <UserRound className="d-avatar-placeholder" aria-hidden="true" />
       )}
     </span>
   );

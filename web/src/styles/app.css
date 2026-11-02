@@ -43,6 +43,9 @@ button:disabled {
 .d-app .d-avatar {
   overflow: hidden;
 }
+.d-app .d-avatar .d-avatar-placeholder {
+  color: var(--d-muted);
+}
 .d-avatar img {
   width: 100%;
   height: 100%;

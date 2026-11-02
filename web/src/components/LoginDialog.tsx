@@ -21,7 +21,13 @@ export function LoginDialog() {
             disabled={!app.legalAccepted}
             onClick={() => void app.login(provider.id)}
           >
-            <ProviderIcon provider={provider} />
+            <ProviderIcon
+              provider={
+                provider.kind === 'qq'
+                  ? { ...provider, icon_url: 'https://static-res.qq.com/static-res/imqq/qq-logo.png' }
+                  : provider
+              }
+            />
             <span className="provider-name">{provider.name}</span>
           </Button>
         ))}

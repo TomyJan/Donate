@@ -4,7 +4,6 @@ import { dateTime } from '../lib/api';
 import { providerForKind } from '../lib/providers';
 import type { Profile } from '../lib/types';
 import { ActionConfirm } from './ActionConfirm';
-import { ProviderIcon } from './ProviderIcon';
 import { Avatar, Button } from './ui';
 import './IdentityBindings.css';
 export function IdentityBindings({
@@ -45,13 +44,7 @@ export function IdentityBindings({
         const identity = bindings.find((binding) => binding.provider === provider);
         return (
           <div className="d-bind" key={provider}>
-            {identity ? (
-              <Avatar name={identity.nickname} src={identity.avatar_url} />
-            ) : (
-              <span className="d-avatar">
-                <ProviderIcon provider={configured} />
-              </span>
-            )}
+            <Avatar src={identity?.avatar_url} />
             <div className="d-bind-info">
               <p>{configured.name}</p>
               {identity && <span className="d-secondary">{identity.nickname}</span>}
