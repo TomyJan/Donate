@@ -160,7 +160,7 @@ func (t tracingTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	response, err := t.base.RoundTrip(r)
 	t.trace.mu.Lock()
 	if t.trace.generation == generation {
-		t.trace.err = err
+		t.trace.err = requestCause(r.Context(), err)
 		if response != nil {
 			t.trace.status = response.StatusCode
 		}
@@ -182,10 +182,7 @@ type tracedResponseBody struct {
 func (b *tracedResponseBody) Read(p []byte) (int, error) {
 	n, err := b.ReadCloser.Read(p)
 	if err != nil && err != io.EOF {
-		cause := err
-		if contextErr := b.ctx.Err(); contextErr != nil {
-			cause = contextErr
-		}
+		cause := requestCause(b.ctx, err)
 		b.trace.mu.Lock()
 		if b.trace.generation == b.generation {
 			b.trace.err = cause
@@ -193,6 +190,21 @@ func (b *tracedResponseBody) Read(p []byte) (int, error) {
 		b.trace.mu.Unlock()
 	}
 	return n, err
+}
+
+func requestCause(ctx context.Context, err error) error {
+	if err == nil {
+		return nil
+	}
+	if contextErr := ctx.Err(); contextErr != nil {
+		return contextErr
+	}
+	// Client.Timeout can cancel the transport through Request.Cancel before
+	// the context timer runs. Its deadline is already authoritative in that gap.
+	if deadline, ok := ctx.Deadline(); ok && !time.Now().Before(deadline) {
+		return context.DeadlineExceeded
+	}
+	return err
 }
 
 func (t *upstreamTrace) reset() {

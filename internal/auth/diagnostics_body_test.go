@@ -48,15 +48,18 @@ func TestOIDCDiscoveryBodyTimeoutDiagnostic(t *testing.T) {
 
 func TestUpstreamBodyReadDiagnosticsPreserveReadSemantics(t *testing.T) {
 	for _, tc := range []struct {
-		name, reason string
-		err          error
-		cancel       bool
+		name, reason    string
+		err             error
+		cancel          bool
+		deadlinePending bool
 	}{
-		{"normal EOF", "invalid_discovery", io.EOF, false},
-		{"truncated body", "truncated_io", io.ErrUnexpectedEOF, false},
-		{"deadline", "timeout", context.DeadlineExceeded, false},
-		{"canceled read", "canceled", context.Canceled, false},
-		{"request canceled", "canceled", errors.New("private-read-error"), true},
+		{"normal EOF", "invalid_discovery", io.EOF, false, false},
+		{"truncated body", "truncated_io", io.ErrUnexpectedEOF, false, false},
+		{"deadline", "timeout", context.DeadlineExceeded, false, false},
+		{"canceled read", "canceled", context.Canceled, false, false},
+		{"request canceled", "canceled", errors.New("private-read-error"), true, false},
+		{"deadline callback pending", "timeout", errors.New("private-read-error"), false, true},
+		{"EOF before deadline callback", "invalid_discovery", io.EOF, false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			client := &http.Client{Transport: qqTransport(func(r *http.Request) (*http.Response, error) {
@@ -65,7 +68,11 @@ func TestUpstreamBodyReadDiagnosticsPreserveReadSemantics(t *testing.T) {
 			trace := tracedClient(client)
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			request, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://issuer.test/private-path?secret=private-token", nil)
+			var requestContext context.Context = ctx
+			if tc.deadlinePending {
+				requestContext = pendingDeadlineContext{Context: ctx, deadline: time.Now().Add(-time.Second)}
+			}
+			request, _ := http.NewRequestWithContext(requestContext, http.MethodGet, "https://issuer.test/private-path?secret=private-token", nil)
 			response, err := trace.client.Do(request)
 			if err != nil {
 				t.Fatal(err)
@@ -95,6 +102,33 @@ func TestUpstreamBodyReadDiagnosticsPreserveReadSemantics(t *testing.T) {
 				t.Fatal("read diagnostic exposes raw error or URL")
 			}
 		})
+	}
+}
+
+// Models Client.Timeout canceling the transport before the context's timer
+// callback runs. Deadline has elapsed while Err and Done are still unchanged.
+type pendingDeadlineContext struct {
+	context.Context
+	deadline time.Time
+}
+
+func (c pendingDeadlineContext) Deadline() (time.Time, bool) { return c.deadline, true }
+
+func TestUpstreamTransportTimeoutBeforeContextCallback(t *testing.T) {
+	readError := errors.New("private-transport-error")
+	trace := tracedClient(&http.Client{Transport: qqTransport(func(r *http.Request) (*http.Response, error) {
+		return nil, readError
+	})})
+	ctx := pendingDeadlineContext{Context: context.Background(), deadline: time.Now().Add(-time.Second)}
+	request, _ := http.NewRequestWithContext(ctx, http.MethodGet, "https://issuer.test/private-path?secret=private-token", nil)
+	_, err := trace.client.Do(request)
+	if !errors.Is(err, readError) {
+		t.Fatalf("transport error changed: %v", err)
+	}
+	failure := trace.failure(ErrUpstream, "oidc_discovery", "invalid_discovery", errors.New("private-library-error"))
+	var diagnostic *diagnosticError
+	if !errors.As(failure, &diagnostic) || diagnostic.reason != "timeout" || diagnostic.host != "issuer.test" {
+		t.Fatalf("deadline callback race misclassified: %v", failure)
 	}
 }
 
